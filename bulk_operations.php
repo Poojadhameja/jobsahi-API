@@ -1,0 +1,47 @@
+<?php
+// bulk_operations.php - Bulk operations for users
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, PUT, DELETE');
+header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Access-Control-Allow-Methods, Authorization, X-Requested-With');
+
+$data = json_decode(file_get_contents('php://input'), true);
+$operation = $data['operation']; // 'verify', 'unverify', 'delete'
+$user_ids = $data['user_ids']; // Array of user IDs
+
+if (empty($user_ids) || !is_array($user_ids)) {
+    echo json_encode(array("message" => "User IDs array is required", "status" => false));
+    exit;
+}
+
+include "config.php";
+
+$user_ids_str = implode(',', array_map('intval', $user_ids));
+$success_count = 0;
+
+switch ($operation) {
+    case 'verify':
+        $sql = "UPDATE users SET is_verified = 1 WHERE id IN ({$user_ids_str})";
+        break;
+    case 'unverify':
+        $sql = "UPDATE users SET is_verified = 0 WHERE id IN ({$user_ids_str})";
+        break;
+    case 'delete':
+        $sql = "DELETE FROM users WHERE id IN ({$user_ids_str})";
+        break;
+    default:
+        echo json_encode(array("message" => "Invalid operation", "status" => false));
+        exit;
+}
+
+if (mysqli_query($conn, $sql)) {
+    $affected_rows = mysqli_affected_rows($conn);
+    echo json_encode(array(
+        "message" => "Bulk operation completed successfully", 
+        "affected_rows" => $affected_rows,
+        "status" => true
+    ));
+} else {
+    echo json_encode(array("message" => "Bulk operation failed", "status" => false));
+}
+?>
