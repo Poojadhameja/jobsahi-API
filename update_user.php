@@ -113,8 +113,8 @@ if ($id <= 0) {
     exit;
 }
 
-// Check if user exists
-$check_sql = "SELECT id FROM users WHERE id = ";
+// Check if user exists - FIXED: Added missing placeholder
+$check_sql = "SELECT id FROM users WHERE id = ?";
 if ($check_stmt = mysqli_prepare($conn, $check_sql)) {
     mysqli_stmt_bind_param($check_stmt, "i", $id);
     mysqli_stmt_execute($check_stmt);
