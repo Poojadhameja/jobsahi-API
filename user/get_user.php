@@ -4,8 +4,8 @@ header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
-require_once 'jwt_helper.php';
-require_once 'auth_middleware.php';
+require_once '../auth/jwt_helper.php';
+require_once '../auth/auth_middleware.php';
 
 // Authenticate user
 $current_user = authenticateJWT();
@@ -30,7 +30,7 @@ if ($current_user['role'] !== 'admin' && $current_user['user_id'] != $user_id) {
     exit;
 }
 
-include "config.php";
+include "../config.php";
 
 $sql = "SELECT id, name, email, role, phone_number, is_verified FROM users WHERE id = ?";
 if ($stmt = mysqli_prepare($conn, $sql)) {

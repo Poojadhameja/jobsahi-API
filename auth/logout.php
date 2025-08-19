@@ -5,8 +5,8 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
-require_once 'jwt_helper.php';
-require_once 'auth_middleware.php';
+require_once '../auth/jwt_helper.php';
+require_once '../auth/auth_middleware.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);

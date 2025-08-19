@@ -9,7 +9,7 @@ $data = json_decode(file_get_contents('php://input'), true);
 $user_id = $data['uid'];
 $is_verified = $data['is_verified']; // 1 for verified, 0 for unverified
 
-include "config.php";
+include "../config.php";
 
 // Check if user exists
 $check_sql = "SELECT id FROM users WHERE id = {$user_id}";

@@ -36,6 +36,7 @@ $password = trim($data['password']);
 $phone_number = trim($data['phone_number']);
 $role = isset($data['role']) ? trim($data['role']) : 'student'; // Default role
 $is_verified = isset($data['uverified']) ? (int)$data['uverified'] : 1;
+$status_text = isset($data['ustatus']) ? (int)$data['ustatus'] : 1;
 // Validate email format
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     echo json_encode(array("message" => "Invalid email format", "status" => false));
@@ -48,7 +49,7 @@ if (strlen($password) < 6) {
     exit;
 }
 
-include "config.php";
+include "../config.php";
 
 // Check if user already exists
 $check_sql = "SELECT id FROM users WHERE email = ?";
@@ -70,11 +71,11 @@ if ($check_stmt = mysqli_prepare($conn, $check_sql)) {
 $hashed_password = password_hash($password, PASSWORD_DEFAULT);
 
 // Insert new user with hashed password
-$sql = "INSERT INTO users (name, email, password, phone_number, role, is_verified) 
-        VALUES (?, ?, ?, ?, ?, 0)";
+$sql = "INSERT INTO users (name, email, password, phone_number, role, is_verified,status) 
+        VALUES (?, ?, ?, ?, ?, 0,0)";
 
 if ($stmt = mysqli_prepare($conn, $sql)) {
-    mysqli_stmt_bind_param($stmt, "sssss", $name, $email, $hashed_password, $phone_number, $role);
+    mysqli_stmt_bind_param($stmt, "sssss", $name, $email, $hashed_password, $phone_number, $role,$is_verified,$status_text);
     
     if (mysqli_stmt_execute($stmt)) {
         $user_id = mysqli_insert_id($conn);
