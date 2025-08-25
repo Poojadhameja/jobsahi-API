@@ -7,7 +7,7 @@ header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-W
 
 // Include config first to define constants
 require_once '../config.php';
-require_once '../auth/jwt_helper.php';
+require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'PUT' && $_SERVER['REQUEST_METHOD'] !== 'POST') {

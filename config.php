@@ -1,6 +1,6 @@
 <?php
 // config.php - Database Configuration and JWT Settings
-$conn = mysqli_connect("127.0.0.1:3307", "root", "", "jobsahi_data");
+$conn = mysqli_connect("127.0.0.1:3307", "root", "", "jobsahi_database");
 if (!$conn) {
     die("Connection failed: " . mysqli_connect_error());
 }

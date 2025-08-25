@@ -5,7 +5,7 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Access-Control-Allow-Methods, Authorization, X-Requested-With');
 
-require_once '../auth/jwt_helper.php';
+require_once '../jwt_token/jwt_helper.php';
 
 // Check if request method is POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

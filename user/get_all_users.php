@@ -4,7 +4,7 @@ header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
-require_once '../auth/jwt_helper.php';
+require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 // Authenticate and check for admin role
