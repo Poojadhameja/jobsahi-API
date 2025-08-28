@@ -4,13 +4,11 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 require '../vendor/autoload.php';
 
-// SOLUTION 1: Use PHPMailer instead of mail() function (RECOMMENDED)
 function sendPasswordResetOTP($email, $name, $otp) {
     // Use PHPMailer instead of basic mail() function
     return sendPasswordResetOTPWithPHPMailer($email, $name, $otp);
 }
 
-// SOLUTION 2: Configure php.ini for XAMPP (Alternative method)
 function sendPasswordResetOTPWithLocalSMTP($email, $name, $otp) {
     // Configure SMTP settings programmatically
     ini_set("SMTP", "smtp.gmail.com");
@@ -42,7 +40,6 @@ function sendPasswordResetOTPWithLocalSMTP($email, $name, $otp) {
     return mail($email, $subject, $message, $headers);
 }
 
-// SOLUTION 3: Improved PHPMailer function with better error handling
 function sendPasswordResetOTPWithPHPMailer($toEmail, $toName, $otp) {
     $mail = new PHPMailer(true);
     try {
@@ -127,34 +124,6 @@ function sendPasswordResetOTPWithPHPMailer($toEmail, $toName, $otp) {
     }
 }
 
-// SOLUTION 4: Using different email providers
-// function sendPasswordResetOTPWithOutlook($toEmail, $toName, $otp) {
-//     $mail = new PHPMailer(true);
-//     try {
-//         // Outlook/Hotmail SMTP configuration
-//         $mail->isSMTP();
-//         $mail->Host = 'smtp.live.com'; // or smtp-mail.outlook.com
-//         $mail->SMTPAuth = true;
-//         $mail->Username = 'your-outlook@outlook.com'; // Your Outlook email
-//         $mail->Password = 'your-outlook-password'; // Your Outlook password
-//         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-//         $mail->Port = 587;
-        
-//         // Rest of the configuration remains the same...
-//         $mail->setFrom('your-outlook@outlook.com', 'JobSahi Support');
-//         $mail->addAddress($toEmail, $toName);
-//         $mail->isHTML(true);
-//         $mail->Subject = "Password Reset OTP";
-//         // ... (same email body as above)
-        
-//         return $mail->send();
-//     } catch (Exception $e) {
-//         error_log("Outlook Mailer Error: " . $e->getMessage());
-//         return false;
-//     }
-// }
-
-// SOLUTION 5: Enhanced error handling and debugging
 function sendPasswordResetOTPWithDebug($toEmail, $toName, $otp, $debug = false) {
     $mail = new PHPMailer(true);
     
