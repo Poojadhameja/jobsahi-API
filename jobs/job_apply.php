@@ -72,8 +72,8 @@ if (mysqli_num_rows($job_result) === 0) {
 $job = mysqli_fetch_assoc($job_result);
 mysqli_stmt_close($check_stmt);
 
-// Check if job is open (customize allowed statuses)
-$allowed_statuses = ['active', 'open']; // define which statuses allow applications
+// Check if job is open
+$allowed_statuses = ['active', 'open'];
 if (!in_array(strtolower($job['status']), $allowed_statuses)) {
     echo json_encode(["message" => "This job is no longer accepting applications", "status" => false]);
     exit;
@@ -118,14 +118,17 @@ if (!$insert_stmt) {
     exit;
 }
 
-// Handle optional resume_link
-$resume_link = isset($input['resume_link']) ? $input['resume_link'] : null;
+// Handle optional resume_link (empty string instead of NULL)
+$resume_link = isset($input['resume_link']) && !empty($input['resume_link']) ? $input['resume_link'] : "";
 
-mysqli_stmt_bind_param($insert_stmt, "iis",
+// ✅ FIX: 4 placeholders, so 4 variables bound
+mysqli_stmt_bind_param(
+    $insert_stmt,
+    "iiss",
     $job_id,
     $input['student_id'],
     $input['cover_letter'],
-    // $resume_link
+    $resume_link
 );
 
 if (mysqli_stmt_execute($insert_stmt)) {
@@ -137,7 +140,7 @@ if (mysqli_stmt_execute($insert_stmt)) {
         a.job_id,
         a.student_id,
         a.cover_letter,
-        -- a.resume_link,
+        a.resume_link,
         a.status,
         a.applied_at,
         j.title as job_title,

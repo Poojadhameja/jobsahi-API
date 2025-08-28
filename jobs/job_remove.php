@@ -26,7 +26,7 @@ if (!$conn) {
 // --- Get input data ---
 // Job ID from URL or request body
 $job_id = null;
-$user_id = null;
+$student_id = null;
 
 $content_type = isset($_SERVER["CONTENT_TYPE"]) ? trim($_SERVER["CONTENT_TYPE"]) : '';
 $raw_input = file_get_contents('php://input');
@@ -44,12 +44,12 @@ if (strpos($content_type, "application/json") !== false && !empty($raw_input)) {
     parse_str($raw_input, $input);
 }
 
-// Also support job_id via query string `/remove_saved_job.php?job_id=...&user_id=...`
+// Also support job_id via query string `/remove_saved_job.php?job_id=...&student_id=...`
 if (isset($_GET['job_id'])) $input['job_id'] = $_GET['job_id'];
-if (isset($_GET['user_id'])) $input['user_id'] = $_GET['user_id'];
+if (isset($_GET['student_id'])) $input['student_id'] = $_GET['student_id'];
 
 $job_id = isset($input['job_id']) ? intval($input['job_id']) : null;
-$user_id = isset($input['user_id']) ? intval($input['user_id']) : null;
+$student_id = isset($input['student_id']) ? intval($input['student_id']) : null;
 
 // --- Validation ---
 if (!$job_id || $job_id <= 0) {
@@ -61,11 +61,11 @@ if (!$job_id || $job_id <= 0) {
     exit;
 }
 
-if (!$user_id || $user_id <= 0) {
+if (!$student_id || $student_id <= 0) {
     echo json_encode([
         "message" => "User ID is required and must be a positive integer",
         "status" => false,
-        "received_user_id" => $user_id
+        "received_student_id" => $student_id
     ]);
     exit;
 }
@@ -79,7 +79,7 @@ if (!$check_stmt) {
     exit;
 }
 
-mysqli_stmt_bind_param($check_stmt, "ii", $user_id, $job_id);
+mysqli_stmt_bind_param($check_stmt, "ii", $student_id, $job_id);
 mysqli_stmt_execute($check_stmt);
 $result = mysqli_stmt_get_result($check_stmt);
 
@@ -103,7 +103,7 @@ if (!$delete_stmt) {
     exit;
 }
 
-mysqli_stmt_bind_param($delete_stmt, "ii", $user_id, $job_id);
+mysqli_stmt_bind_param($delete_stmt, "ii", $student_id, $job_id);
 
 if (mysqli_stmt_execute($delete_stmt)) {
     echo json_encode([
