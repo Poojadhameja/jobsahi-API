@@ -10,7 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-include "../config.php"; // Adjust the path as per your structure
+include "../config.php"; 
 
 if (!$conn) {
     echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
@@ -121,11 +121,11 @@ if (!$insert_stmt) {
 // Handle optional resume_link
 $resume_link = isset($input['resume_link']) ? $input['resume_link'] : null;
 
-mysqli_stmt_bind_param($insert_stmt, "iiss",
+mysqli_stmt_bind_param($insert_stmt, "iis",
     $job_id,
     $input['student_id'],
     $input['cover_letter'],
-    $resume_link
+    // $resume_link
 );
 
 if (mysqli_stmt_execute($insert_stmt)) {
@@ -137,7 +137,7 @@ if (mysqli_stmt_execute($insert_stmt)) {
         a.job_id,
         a.student_id,
         a.cover_letter,
-        a.resume_link,
+        -- a.resume_link,
         a.status,
         a.applied_at,
         j.title as job_title,

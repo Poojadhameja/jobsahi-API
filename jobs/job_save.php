@@ -20,7 +20,7 @@ if (!$conn) {
 // Get input data - Handle both JSON and form data
 $input = null;
 $job_id = null;
-$user_id = null;
+$student_id = null;
 
 // Check Content-Type and get data accordingly
 $content_type = isset($_SERVER["CONTENT_TYPE"]) ? trim($_SERVER["CONTENT_TYPE"]) : '';
@@ -40,11 +40,11 @@ if (strpos($content_type, "application/json") !== false) {
     }
     
     $job_id = isset($input['job_id']) ? intval($input['job_id']) : null;
-    $user_id = isset($input['user_id']) ? intval($input['user_id']) : null;
+    $student_id= isset($input['student_id']) ? intval($input['student_id']) : null;
 } else {
     // Handle form data (POST parameters)
     $job_id = isset($_POST['job_id']) ? intval($_POST['job_id']) : null;
-    $user_id = isset($_POST['user_id']) ? intval($_POST['user_id']) : null;
+    $student_id= isset($_POST['student_id']) ? intval($_POST['student_id']) : null;
 }
 
 // Validation
@@ -62,11 +62,11 @@ if (!$job_id || $job_id <= 0) {
     exit;
 }
 
-if (!$user_id || $user_id <= 0) {
+if (!$student_id|| $student_id<= 0) {
     echo json_encode([
         "message" => "User ID is required and must be a positive integer", 
         "status" => false,
-        "received_user_id" => $user_id,
+        "received_user_id" => $student_id,
         "debug_info" => [
             "content_type" => $content_type,
             "post_data" => $_POST,
@@ -85,7 +85,7 @@ if (!$check_student_stmt) {
     exit;
 }
 
-mysqli_stmt_bind_param($check_student_stmt, "i", $user_id);
+mysqli_stmt_bind_param($check_student_stmt, "i", $student_id);
 mysqli_stmt_execute($check_student_stmt);
 $student_result = mysqli_stmt_get_result($check_student_stmt);
 
@@ -93,7 +93,7 @@ if (mysqli_num_rows($student_result) === 0) {
     echo json_encode([
         "message" => "Student not found. Please make sure the student profile exists.", 
         "status" => false,
-        "student_id" => $user_id
+        "student_id" => $student_id
     ]);
     mysqli_stmt_close($check_student_stmt);
     mysqli_close($conn);
@@ -131,7 +131,7 @@ if (!$check_saved_stmt) {
     exit;
 }
 
-mysqli_stmt_bind_param($check_saved_stmt, "ii", $user_id, $job_id);
+mysqli_stmt_bind_param($check_saved_stmt, "ii", $student_id, $job_id);
 mysqli_stmt_execute($check_saved_stmt);
 $saved_result = mysqli_stmt_get_result($check_saved_stmt);
 
@@ -156,7 +156,7 @@ if (!$insert_stmt) {
     exit;
 }
 
-mysqli_stmt_bind_param($insert_stmt, "ii", $user_id, $job_id);
+mysqli_stmt_bind_param($insert_stmt, "ii", $student_id, $job_id);
 
 if (mysqli_stmt_execute($insert_stmt)) {
     $saved_job_id = mysqli_insert_id($conn);

@@ -19,16 +19,6 @@ if (isset($_GET['student_id']) && !empty($_GET['student_id'])) {
     $student_id = (int)$_GET['student_id'];
 }
 
-// Method 2: Get from Authorization header (if using JWT or session-based auth)
-// Uncomment and modify this section if you're using token-based authentication
-// /*
-// $headers = getallheaders();
-// if (isset($headers['Authorization'])) {
-//     // Extract student_id from token or session
-//     // $student_id = extract_student_id_from_token($headers['Authorization']);
-// }
-// */
-
 // Validate student_id
 if (!$student_id || $student_id <= 0) {
     echo json_encode(array("message" => "Valid student_id is required", "status" => false));
