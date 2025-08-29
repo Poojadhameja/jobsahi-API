@@ -16,7 +16,7 @@ if (empty($search_value)) {
     exit;
 }
 
-include "../config.php";
+include "../database/config.php";
 
 $search_value = mysqli_real_escape_string($conn, $search_value); // prevent SQL injection
 

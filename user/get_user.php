@@ -30,7 +30,7 @@ if ($current_user['role'] !== 'admin' && $current_user['user_id'] != $user_id) {
     exit;
 }
 
-include "../config.php";
+include "../database/config.php";
 
 $sql = "SELECT id, name, email, role, phone_number, is_verified FROM users WHERE id = ?";
 if ($stmt = mysqli_prepare($conn, $sql)) {

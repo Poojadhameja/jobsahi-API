@@ -1,11 +1,9 @@
 <?php
-// config.php - Database Configuration and JWT Settings
 $conn = mysqli_connect("localhost", "root", "", "jobsahi_data_new");
 if (!$conn) {
     die("Connection failed: " . mysqli_connect_error());
 }
 
-// JWT Configuration - Check if constants are already defined
 if (!defined('JWT_SECRET')) {
     define('JWT_SECRET', 'jobsahi'); // Use a strong, unique key in production
 }

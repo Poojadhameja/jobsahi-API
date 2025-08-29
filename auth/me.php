@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 require_once '../jwt_token/jwt_helper.php';
-include "../config.php";
+include "../database/config.php";
 
 // Get JWT token from Authorization header
 $headers = getallheaders();
