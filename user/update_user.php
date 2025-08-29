@@ -78,21 +78,6 @@ error_log("Current user role: " . $current_user['role']);
 error_log("Current user ID: " . $current_user['user_id']);
 error_log("Target user ID: " . $id);
 
-// Check if user can update this data (own data or admin)
-// if ($current_user['role'] !== 'admin' && $current_user['user_id'] != $id) {
-//     http_response_code(403);
-//     echo json_encode(array(
-//         "message" => "Access denied", 
-//         "status" => false,
-//         "debug" => array(
-//             "your_role" => $current_user['role'],
-//             "your_user_id" => $current_user['user_id'],
-//             "target_user_id" => $id,
-//             "explanation" => "You can only update your own profile unless you're an admin"
-//         )
-//     ));
-//     exit;
-// }
 
 // Validate input data
 if (empty($name) || empty($email) || empty($role) || empty($phone_number)) {
