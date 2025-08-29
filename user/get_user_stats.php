@@ -3,7 +3,7 @@
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
-include "../database/config.php";
+include "../db.php";
 
 $stats_sql = "
     SELECT 

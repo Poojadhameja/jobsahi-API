@@ -21,11 +21,11 @@ function send_response($success, $message, $data = [], $code = 200) {
 }
 
 // Check if config file exists
-if (!file_exists('../config.php')) {
+if (!file_exists('../db.php')) {
     send_response(false, "Configuration error", [], 500);
 }
 
-require_once '../config.php';
+require_once '../db.php';
 
 // Check database connection
 if (!isset($conn) || !$conn) {

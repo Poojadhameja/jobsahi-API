@@ -34,7 +34,7 @@ if ($current_user['role'] !== 'admin' && $current_user['user_id'] != $user_id) {
     exit;
 }
 
-include "../database/config.php";
+include "../db.php";
 
 // Check if user exists and is currently active
 $check_sql = "SELECT id, status FROM users WHERE id = ?";

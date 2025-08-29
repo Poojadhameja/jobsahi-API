@@ -14,7 +14,7 @@ if (empty($user_ids) || !is_array($user_ids)) {
     exit;
 }
 
-include "../databse/config.php";
+include "../databse/db.php";
 
 $user_ids_str = implode(',', array_map('intval', $user_ids));
 $success_count = 0;

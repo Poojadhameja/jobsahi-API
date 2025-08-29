@@ -5,7 +5,7 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
-require_once '../config.php';
+require_once '../db.php';
 
 // Get student_id from query params
 $student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : 0;

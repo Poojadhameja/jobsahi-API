@@ -50,7 +50,7 @@ if (strlen($password) < 6) {
     exit;
 }
 
-include "../database/config.php";
+include "../db.php";
 
 // Check if user already exists
 $check_sql = "SELECT id FROM users WHERE email = ?";

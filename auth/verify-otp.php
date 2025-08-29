@@ -5,7 +5,7 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Access-Control-Allow-Methods, Authorization, X-Requested-With');
 
-require_once '../config.php';
+require_once '../db.php';
 
 // Function to debug response
 function debug_response($message, $data = [], $status = false, $code = 400) {

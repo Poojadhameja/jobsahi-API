@@ -1,6 +1,6 @@
 <?php
 // auth_middleware.php - JWT Authentication Middleware
-require_once '../database/config.php'; // Add this line to include the config file
+require_once '../db.php'; // Add this line to include the config file
 
 function authenticateJWT($required_role = null) {
     $jwt = JWTHelper::getJWTFromHeader();
