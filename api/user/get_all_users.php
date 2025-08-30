@@ -10,7 +10,7 @@ require_once '../auth/auth_middleware.php';
 // Authenticate and check for admin role
 authenticateJWT('admin');
 
-include "../database/db.php";
+include "../db.php";
 
 $sql = "SELECT id, name, email, role, phone_number, is_verified FROM users ORDER BY id DESC";
 $result = mysqli_query($conn, $sql);

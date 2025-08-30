@@ -18,7 +18,7 @@ if (!in_array($role, $valid_roles)) {
     exit;
 }
 
-include "../database/db.php";
+include "../db.php";
 
 $sql = "SELECT id, name, email, role, phone_number, is_verified 
         FROM users 

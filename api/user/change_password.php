@@ -10,7 +10,7 @@ $user_id = $data['uid'];
 $current_password = $data['current_password'];
 $new_password = $data['new_password'];
 
-include "../database/db.php";
+include "../db.php";
 
 // Verify current password
 $check_sql = "SELECT password FROM users WHERE id = {$user_id}";
