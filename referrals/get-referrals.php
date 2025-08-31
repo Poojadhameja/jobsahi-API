@@ -18,13 +18,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-require_once __DIR__ . '/../config.php'; // $conn = new mysqli(...)
+require_once __DIR__ . '/../db.php'; // $conn = new mysqli(...)
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 try {
     if (!isset($conn) || !($conn instanceof mysqli)) {
-        throw new Exception("DB connection not found. Check config.php");
+        throw new Exception("DB connection not found. Check db.php");
     }
 
     // Require referrer_id

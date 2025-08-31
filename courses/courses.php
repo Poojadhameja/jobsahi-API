@@ -5,7 +5,7 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With');
 
-require_once '../config.php'; // DB connection
+require_once '../db.php'; // DB connection
 
 // Base SQL
 $sql = "SELECT id, institute_id, title, description, duration, fee FROM courses WHERE 1=1";

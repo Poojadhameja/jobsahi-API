@@ -5,7 +5,7 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: PATCH');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
-require_once '../config.php';
+require_once '../db.php';
 
 // Check request method
 if ($_SERVER['REQUEST_METHOD'] !== 'PATCH') {
