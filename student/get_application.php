@@ -16,7 +16,7 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
 
 $applicationId = intval($_GET['id']);
 
-include "../config.php";
+include "../db.php";
 if (!$conn) {
     echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
     exit;

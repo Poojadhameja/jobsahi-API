@@ -5,7 +5,7 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
-require_once '../config.php';  // DB connection
+require_once '../db.php';  // DB connection
 
 // Check if request method is GET
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {

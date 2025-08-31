@@ -41,7 +41,7 @@ if (empty($email) || empty($password)) {
 }
 
 
-include "../config.php";
+include "../db.php";
 // Use prepared statements
 $sql = "SELECT id, name, email, role, phone_number, is_verified, password 
         FROM users 

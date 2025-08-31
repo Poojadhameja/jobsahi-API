@@ -25,7 +25,7 @@ if (!$student_id || $student_id <= 0) {
     exit;
 }
 
-include "../config.php";
+include "../db.php";
 
 // Verify student exists
 $verify_sql = "SELECT id FROM users WHERE id = ? AND role = 'student'";

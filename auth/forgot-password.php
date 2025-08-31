@@ -5,7 +5,7 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Access-Control-Allow-Methods, Authorization, X-Requested-With');
 
-require_once '../config.php';
+require_once '../db.php';
 require_once '../helpers/email_helper.php';
 require_once '../helpers/otp_helper.php'; // use helper only, no duplicate generateOTP
 
