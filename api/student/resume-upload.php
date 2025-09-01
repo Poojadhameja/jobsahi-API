@@ -2,6 +2,7 @@
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
+<<<<<<< HEAD
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
 require_once '../jwt_token/jwt_helper.php';
@@ -9,6 +10,9 @@ require_once '../auth/auth_middleware.php';
 
 // Authenticate JWT for student role
 $studentData = authenticateJWT('student'); // decoded JWT payload
+=======
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(["message" => "Only POST requests allowed", "status" => false]);
@@ -24,6 +28,15 @@ if (!$conn) {
 
 $input = json_decode(file_get_contents("php://input"), true);
 
+<<<<<<< HEAD
+=======
+if (!$input || empty($input['id'])) {
+    echo json_encode(["message" => "Student ID is required", "status" => false]);
+    exit;
+}
+
+$id = intval($input['id']);
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 $resumePath = $input['resume'] ?? null;
 
 if (!$resumePath) {
@@ -31,6 +44,7 @@ if (!$resumePath) {
     exit;
 }
 
+<<<<<<< HEAD
 // ✅ Use student ID directly from JWT (do not rely on frontend input)
 $studentId = $studentData['id'] ?? ($studentData['student_id'] ?? ($studentData['user_id'] ?? null));
 
@@ -39,12 +53,18 @@ if ($studentId === null) {
     exit;
 }
 
+=======
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 $sql = "UPDATE student_profiles 
         SET resume = ?, modified_at = NOW() 
         WHERE id = ? AND deleted_at IS NULL";
 
 $stmt = mysqli_prepare($conn, $sql);
+<<<<<<< HEAD
 mysqli_stmt_bind_param($stmt, "si", $resumePath, $studentId);
+=======
+mysqli_stmt_bind_param($stmt, "si", $resumePath, $id);
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 
 if (mysqli_stmt_execute($stmt)) {
     if (mysqli_stmt_affected_rows($stmt) > 0) {
@@ -55,7 +75,11 @@ if (mysqli_stmt_execute($stmt)) {
         ]);
     } else {
         echo json_encode([
+<<<<<<< HEAD
             "message" => "No rows updated (check if profile exists or same value submitted)",
+=======
+            "message" => "No rows updated (check if ID exists and deleted_at is NULL, or same value submitted)",
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
             "status" => false
         ]);
     }

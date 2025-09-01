@@ -3,6 +3,7 @@
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
+<<<<<<< HEAD
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
 require_once '../jwt_token/jwt_helper.php';
@@ -11,6 +12,9 @@ require_once '../auth/auth_middleware.php';
 // ✅ Authenticate (you can restrict by role if needed, e.g. 'student' or 'recruiter')
 // Example: authenticateJWT('student');
 $decoded = authenticateJWT();  // no role restriction, just valid token
+=======
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 
 // Only allow GET requests
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -67,6 +71,10 @@ mysqli_stmt_close($panel_stmt);
 
 $interview['panel'] = $panels;
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 echo json_encode([
     "message" => "Interview detail fetched successfully",
     "status" => true,

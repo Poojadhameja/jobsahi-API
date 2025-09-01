@@ -1,5 +1,10 @@
 <?php
+<<<<<<< HEAD
 // referrals.php
+=======
+// api/v1/referrals.php
+// GET /api/v1/referrals?referrer_id=3
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
@@ -17,12 +22,15 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
+<<<<<<< HEAD
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 // Authenticate and allow both admin , recruiter and student roles
 authenticateJWT(['admin', 'student', 'recruiter']);
 
+=======
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 require_once __DIR__ . '/../db.php'; // $conn = new mysqli(...)
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);

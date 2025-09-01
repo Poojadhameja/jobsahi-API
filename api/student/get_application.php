@@ -1,4 +1,5 @@
 <?php
+<<<<<<< HEAD
 // get_application.php - Fetch single application (Student/Authorized access)
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -6,17 +7,27 @@ header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
 // Allow only GET
+=======
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET');
+header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Access-Control-Allow-Methods, Authorization, X-Requested-With');
+
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     echo json_encode(["message" => "Only GET requests allowed", "status" => false]);
     exit;
 }
 
+<<<<<<< HEAD
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 // ✅ Authenticate (student can access)
 authenticateJWT('student'); // will allow if role is student (or higher if you extend logic)
 
+=======
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
     echo json_encode(["message" => "Application ID is required and must be numeric", "status" => false]);
     exit;
@@ -30,7 +41,11 @@ if (!$conn) {
     exit;
 }
 
+<<<<<<< HEAD
 // Fetch application
+=======
+// Adjust query to match actual table columns
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 $sql = "SELECT 
             a.id,
             a.student_id,
@@ -68,4 +83,9 @@ echo json_encode([
     "data" => $application,
     "timestamp" => date('Y-m-d H:i:s')
 ]);
+<<<<<<< HEAD
 ?>
+=======
+
+?>
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289

@@ -1,4 +1,5 @@
 <?php
+<<<<<<< HEAD
 // interviews.php - Fetch interviews (Student only)
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -10,6 +11,12 @@ require_once '../auth/auth_middleware.php';
 
 // ✅ Authenticate and allow only "student" role
 $decoded = authenticateJWT('student');  // decoded JWT payload
+=======
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 
 // Only allow GET requests
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {

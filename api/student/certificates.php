@@ -5,6 +5,7 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
+<<<<<<< HEAD
 // ✅ Add JWT
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
@@ -12,6 +13,8 @@ require_once '../auth/auth_middleware.php';
 // Authenticate user (any logged-in user)
 $current_user = authenticateJWT();
 
+=======
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 require_once '../db.php';
 
 // Check request method

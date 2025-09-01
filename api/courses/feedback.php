@@ -5,12 +5,15 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
+<<<<<<< HEAD
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 // Authenticate and check for student role
 authenticateJWT('student');
 
+=======
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 require_once '../db.php';  // DB connection
 
 // Check if request method is POST

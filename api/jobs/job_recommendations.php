@@ -1,4 +1,5 @@
 <?php
+<<<<<<< HEAD
 // get_recommended_jobs.php - Fetch recommended jobs for a student (JWT - Student Only)
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -10,6 +11,12 @@ require_once '../auth/auth_middleware.php';
 
 // ✅ Authenticate and allow only "student" role
 $decoded = authenticateJWT('student');  // decoded JWT payload
+=======
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 
 // Only allow GET requests
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -24,14 +31,25 @@ if (!$conn) {
     exit;
 }
 
+<<<<<<< HEAD
 // ✅ Student ID from JWT payload (instead of query param)
 $student_id = $decoded['id'] ?? $decoded['user_id'] ?? $decoded['student_id'] ?? null;
+=======
+// Get student_id from query params
+$student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : null;
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 
 // Validate student_id
 if (!$student_id || $student_id <= 0) {
     echo json_encode([
+<<<<<<< HEAD
         "message" => "Invalid token: student ID missing or invalid", 
         "status" => false
+=======
+        "message" => "Student ID is required and must be a positive integer", 
+        "status" => false,
+        "received_student_id" => $student_id
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
     ]);
     exit;
 }
@@ -70,6 +88,10 @@ $get_recommend_sql = "
     ORDER BY jr.score DESC, jr.created_at DESC
 ";
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 $get_recommend_stmt = mysqli_prepare($conn, $get_recommend_sql);
 if (!$get_recommend_stmt) {
     echo json_encode(["message" => "Database prepare error: " . mysqli_error($conn), "status" => false]);
