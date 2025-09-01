@@ -54,8 +54,4 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
 }
 
 mysqli_close($conn);
-<<<<<<< HEAD
 ?>
-=======
-?>
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289

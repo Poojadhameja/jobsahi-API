@@ -5,15 +5,12 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With');
 
-<<<<<<< HEAD
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
-// Authenticate and check for student role
-authenticateJWT('student');
+// Authenticate and check for admin and student role
+authenticateJWT(['admin','student']);
 
-=======
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 require_once '../db.php'; // database connection
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {

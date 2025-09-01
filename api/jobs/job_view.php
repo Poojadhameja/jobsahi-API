@@ -1,15 +1,11 @@
 <?php
 // job_view.php - Record Job View API
-<<<<<<< HEAD
 
-=======
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Access-Control-Allow-Methods, Authorization, X-Requested-With');
 
-<<<<<<< HEAD
 // Include JWT helper & middleware
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
@@ -19,8 +15,6 @@ $decoded = authenticateJWT(['student', 'admin']);
 // Debug: log JWT payload
 error_log("Decoded JWT: " . print_r($decoded, true));
 
-=======
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 // Check request method
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(["message" => "Only POST requests allowed", "status" => false]);
@@ -30,7 +24,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 include "../db.php";
 
 if (!$conn) {
-<<<<<<< HEAD
     echo json_encode(["message" => "❌ DB connection failed: " . mysqli_connect_error(), "status" => false]);
     exit;
 } else {
@@ -38,13 +31,6 @@ if (!$conn) {
 }
 
 // Get request body
-=======
-    echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
-    exit;
-}
-
-// Get request body for both job_id and student_id
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 $input = json_decode(file_get_contents('php://input'), true);
 
 // Check if JSON decode was successful
@@ -59,7 +45,6 @@ if (!isset($input['job_id']) || !is_numeric($input['job_id'])) {
     exit;
 }
 
-<<<<<<< HEAD
 $job_id = (int)$input['job_id'];
 
 // ✅ Fix: use correct key from JWT
@@ -77,29 +62,10 @@ if (empty($student_id)) {
 // Check if job exists
 $check_job_sql = "SELECT id, title, status FROM jobs WHERE id = ?";
 $check_stmt = mysqli_prepare($conn, $check_job_sql);
-=======
-// Validate student_id
-if (!isset($input['student_id']) || !is_numeric($input['student_id'])) {
-    echo json_encode(["message" => "student_id is required and must be numeric", "status" => false]);
-    exit;
-}
-
-$job_id = (int)$input['job_id'];
-$student_id = (int)$input['student_id'];
-
-// Check if job exists (with more detailed checking)
-$check_job_sql = "SELECT id, title, status FROM jobs WHERE id = ?";
-$check_stmt = mysqli_prepare($conn, $check_job_sql);
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 if (!$check_stmt) {
     echo json_encode(["message" => "Query error: " . mysqli_error($conn), "status" => false]);
     exit;
 }
-<<<<<<< HEAD
-=======
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 mysqli_stmt_bind_param($check_stmt, "i", $job_id);
 mysqli_stmt_execute($check_stmt);
 $job_result = mysqli_stmt_get_result($check_stmt);
@@ -116,38 +82,20 @@ if ($job_data['status'] !== 'open') {
     mysqli_stmt_close($check_stmt);
     mysqli_close($conn);
     echo json_encode([
-<<<<<<< HEAD
         "message" => "Job is not active (status: " . $job_data['status'] . ")",
-=======
-        "message" => "Job is not active (status: " . $job_data['status'] . ")", 
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
         "status" => false
     ]);
     exit;
 }
-<<<<<<< HEAD
 mysqli_stmt_close($check_stmt);
 
 // Check if user exists
 $check_student_sql = "SELECT id, name, email, role FROM users WHERE id = ?";
 $student_stmt = mysqli_prepare($conn, $check_student_sql);
-=======
-
-mysqli_stmt_close($check_stmt);
-
-// Check if student exists (with more detailed checking)
-$check_student_sql = "SELECT id, name, email, role FROM users WHERE id = ?";
-$student_stmt = mysqli_prepare($conn, $check_student_sql);
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 if (!$student_stmt) {
     echo json_encode(["message" => "Query error: " . mysqli_error($conn), "status" => false]);
     exit;
 }
-<<<<<<< HEAD
-=======
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 mysqli_stmt_bind_param($student_stmt, "i", $student_id);
 mysqli_stmt_execute($student_stmt);
 $student_result = mysqli_stmt_get_result($student_stmt);
@@ -160,7 +108,6 @@ if (mysqli_num_rows($student_result) === 0) {
 }
 
 $student_data = mysqli_fetch_assoc($student_result);
-<<<<<<< HEAD
 
 // ✅ Role check (already handled by authenticateJWT, but double safety)
 $allowed_roles = ['student', 'admin'];
@@ -169,42 +116,20 @@ if (!in_array($student_data['role'], $allowed_roles)) {
     mysqli_close($conn);
     echo json_encode([
         "message" => "User is not allowed (role: " . $student_data['role'] . ")",
-=======
-if ($student_data['role'] !== 'student') {
-    mysqli_stmt_close($student_stmt);
-    mysqli_close($conn);
-    echo json_encode([
-        "message" => "User is not a student (role: " . $student_data['role'] . ")", 
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
         "status" => false
     ]);
     exit;
 }
-<<<<<<< HEAD
 mysqli_stmt_close($student_stmt);
 
 // Check if this view already exists today
 $today = date('Y-m-d');
 $check_view_sql = "SELECT id FROM job_views WHERE job_id = ? AND student_id = ? AND DATE(viewed_at) = ?";
 $view_check_stmt = mysqli_prepare($conn, $check_view_sql);
-=======
-
-mysqli_stmt_close($student_stmt);
-
-// Check if this view already exists today (to prevent duplicate views from same user on same day)
-$today = date('Y-m-d');
-$check_view_sql = "SELECT id FROM job_views WHERE job_id = ? AND student_id = ? AND DATE(viewed_at) = ?";
-$view_check_stmt = mysqli_prepare($conn, $check_view_sql);
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 if (!$view_check_stmt) {
     echo json_encode(["message" => "Query error: " . mysqli_error($conn), "status" => false]);
     exit;
 }
-<<<<<<< HEAD
-=======
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 mysqli_stmt_bind_param($view_check_stmt, "iis", $job_id, $student_id, $today);
 mysqli_stmt_execute($view_check_stmt);
 $existing_view = mysqli_stmt_get_result($view_check_stmt);
@@ -224,42 +149,23 @@ if (mysqli_num_rows($existing_view) > 0) {
     ]);
     exit;
 }
-<<<<<<< HEAD
-=======
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 mysqli_stmt_close($view_check_stmt);
 
 // Insert new job view
 $current_datetime = date('Y-m-d H:i:s');
 $insert_sql = "INSERT INTO job_views (job_id, student_id, viewed_at) VALUES (?, ?, ?)";
 $insert_stmt = mysqli_prepare($conn, $insert_sql);
-<<<<<<< HEAD
-=======
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 if (!$insert_stmt) {
     echo json_encode(["message" => "Query error: " . mysqli_error($conn), "status" => false]);
     exit;
 }
-<<<<<<< HEAD
-=======
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 mysqli_stmt_bind_param($insert_stmt, "iis", $job_id, $student_id, $current_datetime);
 
 if (mysqli_stmt_execute($insert_stmt)) {
     $view_id = mysqli_insert_id($conn);
-<<<<<<< HEAD
     mysqli_stmt_close($insert_stmt);
     mysqli_close($conn);
 
-=======
-    
-    mysqli_stmt_close($insert_stmt);
-    mysqli_close($conn);
-    
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
     echo json_encode([
         "message" => "Job view recorded successfully",
         "status" => true,
@@ -269,10 +175,7 @@ if (mysqli_stmt_execute($insert_stmt)) {
             "student_id" => $student_id,
             "job_title" => $job_data['title'],
             "student_name" => $student_data['name'],
-<<<<<<< HEAD
             "role" => $student_data['role'],
-=======
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
             "viewed_at" => $current_datetime
         ],
         "timestamp" => date('Y-m-d H:i:s')
@@ -280,17 +183,9 @@ if (mysqli_stmt_execute($insert_stmt)) {
 } else {
     mysqli_stmt_close($insert_stmt);
     mysqli_close($conn);
-<<<<<<< HEAD
-=======
-    
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
     echo json_encode([
         "message" => "Failed to record job view: " . mysqli_error($conn),
         "status" => false
     ]);
 }
-<<<<<<< HEAD
 ?>
-=======
-?>
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289

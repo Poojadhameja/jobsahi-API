@@ -2,7 +2,6 @@
 // get-certificate.php
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
-<<<<<<< HEAD
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
 require_once '../jwt_token/jwt_helper.php';
@@ -12,11 +11,6 @@ require_once '../db.php';
 // Authenticate and allow both admin and student roles
 authenticateJWT(['admin', 'student']);
 
-=======
-
-require_once '../db.php';
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (!isset($_GET['id']) || empty($_GET['id'])) {
         echo json_encode([

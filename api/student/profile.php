@@ -2,17 +2,13 @@
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
-<<<<<<< HEAD
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 // Authenticate JWT for 'student' role
-authenticateJWT('student');  // only students can access
-=======
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
+authenticateJWT(['admin', 'student']);  // only students can access
 
 // Only allow GET requests
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {

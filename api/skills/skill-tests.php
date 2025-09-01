@@ -1,23 +1,16 @@
 <?php
 // skill-tests 
-<<<<<<< HEAD
-=======
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
-<<<<<<< HEAD
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 // Authenticate and check for student role
 authenticateJWT('student');
 
-=======
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 include "../db.php"; 
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -55,14 +48,8 @@ try {
         VALUES 
             (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     ");
-<<<<<<< HEAD
     $stmt->bind_param("issiiisi", $student_id, $test_platform, $test_name, $score, $max_score, $completed_at, $badge_awarded, $passed);
     
-=======
-
-    $stmt->bind_param("issiiisi", $student_id, $test_platform, $test_name, $score, $max_score, $completed_at, $badge_awarded, $passed);
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
     if ($stmt->execute()) {
         echo json_encode([
             "status" => true,
@@ -75,8 +62,4 @@ try {
 } catch (Exception $e) {
     echo json_encode(["status" => false, "message" => $e->getMessage()]);
 }
-<<<<<<< HEAD
 ?>
-=======
-?>
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289

@@ -1,10 +1,6 @@
 <?php
 // referrals.php
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 declare(strict_types=1);
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
@@ -25,15 +21,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-<<<<<<< HEAD
 require_once __DIR__ . '/../jwt_token/jwt_helper.php';
 require_once __DIR__ . '/../auth/auth_middleware.php';
 
 // Authenticate and allow both admin , recruiter and student roles
 authenticateJWT(['admin', 'student', 'recruiter']);
 
-=======
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 require_once __DIR__ . '/../db.php'; // make sure this defines $conn = new mysqli(...)
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
@@ -124,8 +117,4 @@ try {
     exit;
 }
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 ?>

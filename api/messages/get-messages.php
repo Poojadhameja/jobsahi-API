@@ -4,15 +4,12 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
-<<<<<<< HEAD
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 // Authenticate and allow both admin, recruiter, institute and student roles
 authenticateJWT(['admin', 'student','recruiter','institute']);
 
-=======
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 include "../db.php";
 
 // Only allow GET requests
@@ -70,8 +67,4 @@ try {
 }
 
 $conn->close();
-<<<<<<< HEAD
 ?>
-=======
-?>
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289

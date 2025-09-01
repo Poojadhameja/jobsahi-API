@@ -5,7 +5,6 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
-<<<<<<< HEAD
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 require_once '../db.php';
@@ -13,10 +12,6 @@ require_once '../db.php';
 // Authenticate and check for student role
 authenticateJWT('student');
 
-=======
-require_once '../db.php';
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 // Only allow POST requests
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -93,8 +88,4 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
 }
 
 mysqli_close($conn);
-<<<<<<< HEAD
 ?>
-=======
-?>
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289

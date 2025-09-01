@@ -16,7 +16,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'DELETE') {
     exit;
 }
 
-<<<<<<< HEAD
 // ---- JWT Authentication ----
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
@@ -39,8 +38,6 @@ if (isset($decoded['id'])) {
     exit;
 }
 
-=======
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 include "../db.php";
 
 if (!$conn) {
@@ -49,21 +46,11 @@ if (!$conn) {
 }
 
 // --- Get input data ---
-<<<<<<< HEAD
 $job_id = null;
 $input = [];
 
 $content_type = isset($_SERVER["CONTENT_TYPE"]) ? trim($_SERVER["CONTENT_TYPE"]) : '';
 $raw_input = file_get_contents('php://input');
-=======
-// Job ID from URL or request body
-$job_id = null;
-$student_id = null;
-
-$content_type = isset($_SERVER["CONTENT_TYPE"]) ? trim($_SERVER["CONTENT_TYPE"]) : '';
-$raw_input = file_get_contents('php://input');
-$input = [];
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 
 // Handle JSON or x-www-form-urlencoded
 if (strpos($content_type, "application/json") !== false && !empty($raw_input)) {
@@ -77,19 +64,10 @@ if (strpos($content_type, "application/json") !== false && !empty($raw_input)) {
     parse_str($raw_input, $input);
 }
 
-<<<<<<< HEAD
 // Support job_id via query string `/remove_saved_job.php?job_id=...`
 if (isset($_GET['job_id'])) $input['job_id'] = $_GET['job_id'];
 
 $job_id = isset($input['job_id']) ? intval($input['job_id']) : null;
-=======
-// Also support job_id via query string `/remove_saved_job.php?job_id=...&student_id=...`
-if (isset($_GET['job_id'])) $input['job_id'] = $_GET['job_id'];
-if (isset($_GET['student_id'])) $input['student_id'] = $_GET['student_id'];
-
-$job_id = isset($input['job_id']) ? intval($input['job_id']) : null;
-$student_id = isset($input['student_id']) ? intval($input['student_id']) : null;
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 
 // --- Validation ---
 if (!$job_id || $job_id <= 0) {
@@ -101,18 +79,6 @@ if (!$job_id || $job_id <= 0) {
     exit;
 }
 
-<<<<<<< HEAD
-=======
-if (!$student_id || $student_id <= 0) {
-    echo json_encode([
-        "message" => "User ID is required and must be a positive integer",
-        "status" => false,
-        "received_student_id" => $student_id
-    ]);
-    exit;
-}
-
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 // --- Check if saved job exists ---
 $check_sql = "SELECT id FROM saved_jobs WHERE student_id = ? AND job_id = ?";
 $check_stmt = mysqli_prepare($conn, $check_sql);
@@ -153,10 +119,7 @@ if (mysqli_stmt_execute($delete_stmt)) {
         "message" => "Job removed from bookmarks successfully",
         "status" => true,
         "deleted_job_id" => $job_id,
-<<<<<<< HEAD
         "student_id" => $student_id,
-=======
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
         "timestamp" => date('Y-m-d H:i:s')
     ]);
 } else {

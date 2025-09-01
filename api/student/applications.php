@@ -6,16 +6,13 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
-<<<<<<< HEAD
 // Include JWT helper & middleware
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
-// ✅ Authenticate user (only student allowed)
-$current_user = authenticateJWT('student');
+// ✅ Authenticate JWT and allow multiple roles
+$current_user = authenticateJWT(['admin', 'student']);
 
-=======
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
 // Only allow GET requests
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     echo json_encode(["message" => "Only GET requests allowed", "status" => false]);

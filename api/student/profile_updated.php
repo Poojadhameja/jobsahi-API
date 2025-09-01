@@ -2,17 +2,13 @@
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: PUT');
-<<<<<<< HEAD
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
 require_once '../jwt_token/jwt_helper.php';  // Include your JWT helper
 require_once '../auth/auth_middleware.php';  // Include your middleware
 
-// Authenticate and allow 'student' role
-authenticateJWT('student');
-=======
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
+// Authenticate and allow 'admin' and 'student' role
+authenticateJWT(['admin', 'student']);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
     echo json_encode(["message" => "Only PUT requests allowed", "status" => false]);

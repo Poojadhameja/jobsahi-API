@@ -6,14 +6,11 @@ header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
 require_once '../db.php';
-<<<<<<< HEAD
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 // Authenticate JWT for student role
-authenticateJWT('student'); // Only allow students
-=======
->>>>>>> 1235f3517c57dd991bcdc278f57123fa99efe289
+authenticateJWT(['admin', 'student']); // Only allow students
 
 // Only allow GET requests
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
