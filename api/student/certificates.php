@@ -1,40 +1,46 @@
 <?php
-// certificates.php - Get student certificates
+// certificates.php - Get student certificates with role-based visibility
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
-// ✅ Add JWT
+// ✅ JWT
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
-// Authenticate user (any logged-in user)
+// Authenticate user (admin, student allowed)
 $current_user = authenticateJWT(['admin', 'student']);
+$role = $current_user['role'];  // role from JWT payload
 
 require_once '../db.php';
 
-// Check request method
+// ✅ Only allow GET
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    http_response_code(405); // Method Not Allowed
+    http_response_code(405);
     echo json_encode(["error" => "Only GET method allowed"]);
     exit();
 }
 
-// Optional filters: student_id, course_id
+// Optional filters
 $student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : null;
 $course_id  = isset($_GET['course_id']) ? intval($_GET['course_id']) : null;
 
+// Base query with role-based condition
 $query = "SELECT c.id, c.student_id, c.course_id, c.file_url, c.issue_date,
-                 cr.title AS course_title
+                 cr.title AS course_title, c.admin_action
           FROM certificates c
           LEFT JOIN courses cr ON c.course_id = cr.id
-          WHERE 1=1";
+          WHERE (
+              (? = 'admin')
+              OR
+              (? IN ('student','recruiter','institute') AND c.admin_action = 'approved')
+          )";
 
-$params = [];
-$types  = "";
+$params = [$role, $role];
+$types  = "ss";
 
-// Add filters dynamically
+// Extra filters
 if ($student_id) {
     $query .= " AND c.student_id = ?";
     $params[] = $student_id;
@@ -49,10 +55,8 @@ if ($course_id) {
 
 $stmt = $conn->prepare($query);
 
-// Bind params if any
-if (!empty($params)) {
-    $stmt->bind_param($types, ...$params);
-}
+// Bind parameters dynamically
+$stmt->bind_param($types, ...$params);
 
 $stmt->execute();
 $result = $stmt->get_result();

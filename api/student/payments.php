@@ -7,11 +7,11 @@ header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-W
 
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
-
-// Authenticate and check for admin and student role
-authenticateJWT(['admin', 'student']);
-
 require_once '../db.php';
+
+// ✅ Authenticate and get user data
+$current_user = authenticateJWT(['admin', 'student']);
+$user_role = strtolower($current_user['role']); // e.g., "admin", "student"
 
 // Allow only GET requests
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -29,7 +29,7 @@ if (!isset($_GET['student_id'])) {
 
 $student_id = intval($_GET['student_id']);
 
-// Query to fetch student payment history
+// ✅ SQL query with role-based filter on admin_action
 $sql = "SELECT 
             cp.id,
             cp.student_id,
@@ -44,22 +44,26 @@ $sql = "SELECT
             cp.gateway_response_json,
             cp.paid_at,
             cp.created_at,
-            cp.modified_at
+            cp.modified_at,
+            cp.admin_action
         FROM course_payments cp
         LEFT JOIN courses c ON cp.course_id = c.id
-        WHERE cp.student_id = ? 
+        WHERE cp.student_id = ?
           AND cp.deleted_at IS NULL
+          AND (
+              (? = 'admin') -- Admin sees all
+              OR (cp.admin_action = 'approved') -- Others see only approved
+          )
         ORDER BY cp.paid_at DESC";
 
 $stmt = $conn->prepare($sql);
-$stmt->bind_param("i", $student_id);
+$stmt->bind_param("is", $student_id, $user_role);
 
 if ($stmt->execute()) {
     $result = $stmt->get_result();
     $payments = [];
 
     while ($row = $result->fetch_assoc()) {
-        // Optional: Decode gateway JSON if not null
         if (!empty($row['gateway_response_json'])) {
             $row['gateway_response_json'] = json_decode($row['gateway_response_json'], true);
         }

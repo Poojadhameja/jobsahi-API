@@ -1,5 +1,5 @@
 <?php
-// update_recruiter_profile.php - Update recruiter/company profile (Admin and Student only)
+// update_recruiter_profile.php - Update recruiter/company profile with role-based visibility
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: PUT, OPTIONS');
@@ -13,11 +13,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
-
-// Authenticate and check for admin and recruiter role
-authenticateJWT(['admin', 'recruiter']);
-
 include "../db.php";
+
+// Authenticate user and get role
+$current_user = authenticateJWT(['admin', 'recruiter']);
+$user_role = $current_user['role'] ?? '';
 
 // Get JSON input
 $input = json_decode(file_get_contents('php://input'), true);
@@ -42,8 +42,7 @@ $update_fields = array();
 $params = array();
 $types = '';
 
-// Define allowed fields for update
-$allowed_fields = ['company_name', 'company_logo', 'industry', 'website', 'location'];
+$allowed_fields = ['company_name', 'company_logo', 'industry', 'website', 'location', 'admin_action'];
 
 foreach ($allowed_fields as $field) {
     if (isset($input[$field])) {
@@ -62,12 +61,11 @@ if (empty($update_fields)) {
 // Add modified_at timestamp
 $update_fields[] = "modified_at = NOW()";
 
-// Build the SQL query
+// Build SQL query for update
 $sql = "UPDATE recruiter_profiles SET " . implode(', ', $update_fields) . " WHERE id = ? AND deleted_at IS NULL";
 $params[] = $profile_id;
 $types .= 'i';
 
-// Prepare and execute the statement
 $stmt = mysqli_prepare($conn, $sql);
 if (!$stmt) {
     http_response_code(500);
@@ -86,31 +84,48 @@ if (!$result) {
 
 $affected_rows = mysqli_stmt_affected_rows($stmt);
 
+mysqli_stmt_close($stmt);
+
 if ($affected_rows > 0) {
-    // Fetch the updated profile
-    $fetch_sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, created_at, modified_at FROM recruiter_profiles WHERE id = ? AND deleted_at IS NULL";
-    $fetch_stmt = mysqli_prepare($conn, $fetch_sql);
-    mysqli_stmt_bind_param($fetch_stmt, 'i', $profile_id);
+    // Build fetch query with role-based visibility
+    if ($user_role === 'admin') {
+        $fetch_sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, admin_action, created_at, modified_at 
+                      FROM recruiter_profiles 
+                      WHERE id = ? AND deleted_at IS NULL";
+        $fetch_stmt = mysqli_prepare($conn, $fetch_sql);
+        mysqli_stmt_bind_param($fetch_stmt, 'i', $profile_id);
+    } else {
+        // Non-admin users: only see admin_action = 'approval'
+        $fetch_sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, admin_action, created_at, modified_at 
+                      FROM recruiter_profiles 
+                      WHERE id = ? AND admin_action = 'approval' AND deleted_at IS NULL";
+        $fetch_stmt = mysqli_prepare($conn, $fetch_sql);
+        mysqli_stmt_bind_param($fetch_stmt, 'i', $profile_id);
+    }
+
     mysqli_stmt_execute($fetch_stmt);
     $fetch_result = mysqli_stmt_get_result($fetch_stmt);
-    
+
     if ($updated_profile = mysqli_fetch_assoc($fetch_result)) {
         http_response_code(200);
         echo json_encode(array(
-            "message" => "Profile updated successfully", 
+            "message" => "Profile updated successfully",
             "profile" => $updated_profile,
             "status" => true
         ));
     } else {
-        http_response_code(200);
-        echo json_encode(array("message" => "Profile updated successfully", "status" => true));
+        http_response_code(403);
+        echo json_encode(array(
+            "message" => "Profile updated but you are not authorized to view it",
+            "status" => false
+        ));
     }
+
     mysqli_stmt_close($fetch_stmt);
 } else {
     http_response_code(404);
     echo json_encode(array("message" => "Profile not found or no changes made", "status" => false));
 }
 
-mysqli_stmt_close($stmt);
 mysqli_close($conn);
 ?>

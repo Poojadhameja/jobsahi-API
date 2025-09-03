@@ -7,10 +7,11 @@ header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-W
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
-// Authenticate JWT for 'student' role
-authenticateJWT(['admin', 'student']);  // only students can access
+// ✅ Authenticate JWT (allowed roles: admin, student)
+$current_user = authenticateJWT(['admin', 'student']); 
+$user_role = strtolower($current_user['role']); // assuming payload has 'role'
 
-// Only allow GET requests
+// ✅ Allow only GET requests
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     echo json_encode(["message" => "Only GET requests allowed", "status" => false]);
     exit;
@@ -23,26 +24,54 @@ if (!$conn) {
     exit;
 }
 
-// ---- Fetch all student profiles ----
-$sql = "SELECT 
-            id, 
-            user_id, 
-            skills, 
-            education, 
-            resume, 
-            portfolio_link, 
-            linkedin_url, 
-            dob, 
-            gender, 
-            job_type, 
-            trade, 
-            location, 
-            created_at, 
-            modified_at, 
-            deleted_at
-        FROM student_profiles 
-        WHERE deleted_at IS NULL 
-        ORDER BY created_at DESC";
+// ✅ Role-based SQL condition
+if ($user_role === 'admin') {
+    // Admin sees both pending and approved
+    $sql = "SELECT 
+                id, 
+                user_id, 
+                skills, 
+                education, 
+                resume, 
+                portfolio_link, 
+                linkedin_url, 
+                dob, 
+                gender, 
+                job_type, 
+                trade, 
+                location, 
+                admin_action,
+                created_at, 
+                modified_at, 
+                deleted_at
+            FROM student_profiles 
+            WHERE deleted_at IS NULL 
+              AND (admin_action = 'pending' OR admin_action = 'approved')
+            ORDER BY created_at DESC";
+} else {
+    // Other roles → only approved
+    $sql = "SELECT 
+                id, 
+                user_id, 
+                skills, 
+                education, 
+                resume, 
+                portfolio_link, 
+                linkedin_url, 
+                dob, 
+                gender, 
+                job_type, 
+                trade, 
+                location, 
+                admin_action,
+                created_at, 
+                modified_at, 
+                deleted_at
+            FROM student_profiles 
+            WHERE deleted_at IS NULL 
+              AND admin_action = 'approved'
+            ORDER BY created_at DESC";
+}
 
 $result = mysqli_query($conn, $sql);
 

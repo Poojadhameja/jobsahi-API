@@ -25,8 +25,9 @@ require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 // ✅ Authenticate JWT and allow multiple roles
-$decoded = authenticateJWT(['admin', 'recruiter']); // returns array
-$user_id = $decoded['user_id']; // Extract user_id from JWT token
+$decoded = authenticateJWT(['admin', 'recruiter']); // all possible roles
+$user_id = $decoded['user_id'];
+$user_role = $decoded['role'];
 
 // Get interview ID from URL parameter
 $interview_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
@@ -58,41 +59,52 @@ if (empty($scheduled_at)) {
 }
 
 try {
-    // Check if interview exists and belongs to recruiter (if recruiter role)
-    if ($decoded['role'] === 'recruiter') {
-        $check_stmt = $conn->prepare("SELECT i.id FROM interviews i 
-                                     JOIN applications a ON i.application_id = a.id
-                                     JOIN jobs j ON a.job_id = j.id 
-                                     WHERE i.id = ? AND j.recruiter_id = ?");
-        $check_stmt->bind_param("ii", $interview_id, $user_id);
-        $check_stmt->execute();
-        $result = $check_stmt->get_result();
-        
-        if ($result->num_rows === 0) {
-            echo json_encode([
-                "status" => false,
-                "message" => "Interview not found or access denied"
-            ]);
-            exit();
-        }
-    } else {
-        // For admin, just check if interview exists
-        $check_stmt = $conn->prepare("SELECT id FROM interviews WHERE id = ?");
+    // Role-based visibility query for admin_action
+    if ($user_role === 'admin') {
+        // Admin sees all, including 'pending'
+        $check_sql = "SELECT * FROM interviews WHERE id = ? AND (admin_action = 'pending' OR admin_action = 'approval')";
+        $check_stmt = $conn->prepare($check_sql);
         $check_stmt->bind_param("i", $interview_id);
-        $check_stmt->execute();
-        $result = $check_stmt->get_result();
-        
-        if ($result->num_rows === 0) {
+    } else {
+        // Non-admin (recruiter, institute, student) sees only approved interviews
+        $check_sql = "SELECT * FROM interviews WHERE id = ? AND admin_action = 'approval'";
+        $check_stmt = $conn->prepare($check_sql);
+        $check_stmt->bind_param("i", $interview_id);
+    }
+
+    $check_stmt->execute();
+    $result = $check_stmt->get_result();
+    if ($result->num_rows === 0) {
+        echo json_encode([
+            "status" => false,
+            "message" => "Interview not found or access denied"
+        ]);
+        exit();
+    }
+
+    // Additional check: recruiters can only update their own interviews
+    if ($user_role === 'recruiter') {
+        $row = $result->fetch_assoc();
+        // Join with jobs table to check recruiter ownership
+        $verify_stmt = $conn->prepare("SELECT j.id FROM interviews i 
+                                       JOIN applications a ON i.application_id = a.id
+                                       JOIN jobs j ON a.job_id = j.id 
+                                       WHERE i.id = ? AND j.recruiter_id = ?");
+        $verify_stmt->bind_param("ii", $interview_id, $user_id);
+        $verify_stmt->execute();
+        $verify_result = $verify_stmt->get_result();
+        if ($verify_result->num_rows === 0) {
             echo json_encode([
                 "status" => false,
-                "message" => "Interview not found"
+                "message" => "Access denied for this interview"
             ]);
             exit();
         }
     }
 
     // Update interview record
-    $stmt = $conn->prepare("UPDATE interviews SET scheduled_at = ?, mode = ?, location = ?, status = ?, feedback = ?, modified_at = NOW()
+    $stmt = $conn->prepare("UPDATE interviews 
+                            SET scheduled_at = ?, mode = ?, location = ?, status = ?, feedback = ?, modified_at = NOW()
                             WHERE id = ?");
     $stmt->bind_param("sssssi", $scheduled_at, $mode, $location, $status, $feedback, $interview_id);
     
@@ -116,6 +128,7 @@ try {
             "error" => $stmt->error
         ]);
     }
+
 } catch (Exception $e) {
     echo json_encode([
         "status" => false,

@@ -1,5 +1,5 @@
 <?php
-// interviews.php - Fetch interviews (Student only)
+// interviews.php - Fetch interviews (Student/Admin)
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
@@ -8,8 +8,9 @@ header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-W
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
-// ✅ Authenticate and allow "admin" and  "student" role
-$decoded = authenticateJWT(['admin', 'student']);  // decoded JWT payload
+// ✅ Authenticate and allow roles
+$decoded = authenticateJWT(['admin', 'student']);  
+$role = strtolower($decoded['role']); // role from JWT payload
 
 // Only allow GET requests
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -26,17 +27,26 @@ if (!$conn) {
 
 // ---- Fetch Filters from Query Params ----
 $status = isset($_GET['status']) ? trim($_GET['status']) : null; // e.g., scheduled, completed, cancelled
-$type = isset($_GET['type']) ? trim($_GET['type']) : null;       // upcoming or past
-$limit = isset($_GET['limit']) ? intval($_GET['limit']) : 50;
+$type   = isset($_GET['type'])   ? trim($_GET['type'])   : null; // upcoming or past
+$limit  = isset($_GET['limit'])  ? intval($_GET['limit']) : 50;
 $offset = isset($_GET['offset']) ? intval($_GET['offset']) : 0;
 
 // ---- Build Dynamic SQL ----
-$sql = "SELECT id, application_id, scheduled_at, mode, location, status, feedback, created_at, modified_at, deleted_at
+$sql = "SELECT id, application_id, scheduled_at, mode, location, status, feedback, 
+               created_at, modified_at, deleted_at, admin_action
         FROM interviews 
-        WHERE 1=1"; // always true, makes adding filters easier
+        WHERE 1=1"; 
 
 $params = [];
-$types = "";
+$types  = "";
+
+// ✅ Role-based filter on admin_action
+if ($role !== 'admin') {
+    // Only approved records for non-admins
+    $sql .= " AND admin_action = 'approved'";
+}
+
+// ---- Additional Filters ----
 
 // Filter by status
 if (!empty($status)) {
@@ -66,12 +76,7 @@ if (!$stmt) {
     exit;
 }
 
-if (!empty($types)) {
-    mysqli_stmt_bind_param($stmt, $types, ...$params);
-} else {
-    mysqli_stmt_bind_param($stmt, "ii", $limit, $offset);
-}
-
+mysqli_stmt_bind_param($stmt, $types, ...$params);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 
@@ -82,10 +87,10 @@ while ($row = mysqli_fetch_assoc($result)) {
 }
 
 echo json_encode([
-    "message" => "Interviews fetched successfully",
-    "status" => true,
-    "count" => count($interviews),
-    "data" => $interviews,
+    "message"   => "Interviews fetched successfully",
+    "status"    => true,
+    "count"     => count($interviews),
+    "data"      => $interviews,
     "timestamp" => date('Y-m-d H:i:s')
 ]);
 

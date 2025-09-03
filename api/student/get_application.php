@@ -1,5 +1,5 @@
 <?php
-// get_application.php - Fetch single application (Student/Authorized access)
+// get_application.php - Fetch single application (Student/Admin/Authorized access)
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
@@ -14,8 +14,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
-// ✅ Authenticate (student can access)
-authenticateJWT(['admin', 'student']); // will allow if role is student (or higher if you extend logic)
+// ✅ Authenticate (admin, student can access)
+$current_user = authenticateJWT(['admin', 'student']); 
 
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
     echo json_encode(["message" => "Application ID is required and must be numeric", "status" => false]);
@@ -23,6 +23,7 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
 }
 
 $applicationId = intval($_GET['id']);
+$role = $current_user['role']; // role from JWT payload
 
 include "../db.php";
 if (!$conn) {
@@ -30,15 +31,22 @@ if (!$conn) {
     exit;
 }
 
-// Fetch application
-$sql = "SELECT 
-            a.id,
-            a.student_id,
-            a.job_id,
-            a.status,
-            a.applied_at
-        FROM applications a
-        WHERE a.id = ?";
+// ✅ Role-based query
+$sql = "
+    SELECT 
+        a.id,
+        a.student_id,
+        a.job_id,
+        a.status,
+        a.applied_at,
+        a.admin_action
+    FROM applications a
+    WHERE a.id = ?
+      AND (
+            (? = 'admin')
+            OR (? IN ('recruiter', 'institute', 'student') AND a.admin_action = 'approved')
+          )
+";
 
 $stmt = mysqli_prepare($conn, $sql);
 if (!$stmt) {
@@ -46,14 +54,14 @@ if (!$stmt) {
     exit;
 }
 
-mysqli_stmt_bind_param($stmt, "i", $applicationId);
+mysqli_stmt_bind_param($stmt, "iss", $applicationId, $role, $role);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 
 if ($row = mysqli_fetch_assoc($result)) {
     $application = $row;
 } else {
-    echo json_encode(["message" => "Application not found", "status" => false]);
+    echo json_encode(["message" => "Application not found or not accessible", "status" => false]);
     mysqli_stmt_close($stmt);
     mysqli_close($conn);
     exit;

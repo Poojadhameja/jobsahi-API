@@ -20,8 +20,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
-// Authenticate and allow both admin and student roles
-authenticateJWT(['admin', 'student']);
+// Authenticate and allow multiple roles
+$decoded = authenticateJWT(['admin', 'student']);
+$user_role = $decoded->role ?? ''; // role from JWT
 
 require_once __DIR__ . '/../db.php'; // $conn = new mysqli(...)
 
@@ -40,11 +41,22 @@ try {
         exit;
     }
 
-    // Fetch referrals
-    $sql = "SELECT id, referrer_id, referee_email, job_id, status, created_at 
-            FROM referrals 
-            WHERE referrer_id = ? 
-            ORDER BY created_at DESC";
+    // SQL query: pending only for admin, approval for everyone
+    if ($user_role === 'admin') {
+        $sql = "SELECT id, referrer_id, referee_email, job_id, status, admin_action, created_at 
+                FROM referrals 
+                WHERE referrer_id = ? 
+                  AND (admin_action = 'pending' OR admin_action = 'approval')
+                ORDER BY created_at DESC";
+    } else {
+        // Non-admin users see only 'approval'
+        $sql = "SELECT id, referrer_id, referee_email, job_id, status, admin_action, created_at 
+                FROM referrals 
+                WHERE referrer_id = ? 
+                  AND admin_action = 'approval'
+                ORDER BY created_at DESC";
+    }
+
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("i", $referrer_id);
     $stmt->execute();

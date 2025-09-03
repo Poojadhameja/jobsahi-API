@@ -1,5 +1,5 @@
 <?php
-// get_recruiter_jobs.php - List jobs posted by recruiter (Admin, Recruiter access)
+// get_jobs_by_role.php - List jobs/applications based on admin_action and user role
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, OPTIONS');
@@ -15,26 +15,25 @@ require_once '../db.php';
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
-// ✅ Authenticate JWT and allow both roles
+// ✅ Authenticate JWT and allow all roles
 $decoded = authenticateJWT(['admin', 'recruiter']); // returns array
-
-// Extract recruiter_id from JWT payload
-$recruiter_id = $decoded['recruiter_id'] ?? $decoded['user_id'] ?? null;
 $role = strtolower($decoded['role'] ?? '');
 
+// Build SQL based on role
 try {
     if ($role === 'admin') {
-        // ✅ Admin can see all jobs
-        $stmt = $conn->prepare("SELECT id, recruiter_id, title, description, location, skills_required, salary_min, salary_max, job_type, experience_required, application_deadline, is_remote, no_of_vacancies, status, created_at
-                                FROM jobs 
-                                ORDER BY created_at DESC");
+        // Admin sees all records
+        $sql = "SELECT id, recruiter_id, title, description, location, skills_required, salary_min, salary_max, job_type, experience_required, application_deadline, is_remote, no_of_vacancies, status, admin_action, created_at
+                FROM jobs
+                ORDER BY created_at DESC";
+        $stmt = $conn->prepare($sql);
     } else {
-        // ✅ Recruiter can only see their jobs
-        $stmt = $conn->prepare("SELECT id, recruiter_id, title, description, location, skills_required, salary_min, salary_max, job_type, experience_required, application_deadline, is_remote, no_of_vacancies, status, created_at
-                                FROM jobs 
-                                WHERE recruiter_id = ? 
-                                ORDER BY created_at DESC");
-        $stmt->bind_param("i", $recruiter_id);
+        // Others only see approved jobs
+        $sql = "SELECT id, recruiter_id, title, description, location, skills_required, salary_min, salary_max, job_type, experience_required, application_deadline, is_remote, no_of_vacancies, status, admin_action, created_at
+                FROM jobs
+                WHERE admin_action = 'approval'
+                ORDER BY created_at DESC";
+        $stmt = $conn->prepare($sql);
     }
 
     if ($stmt->execute()) {

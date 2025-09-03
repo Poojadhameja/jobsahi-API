@@ -1,5 +1,5 @@
 <?php
-// PUT /api/v1/employer/profile/{id} - Update recruiter/company profile by id
+// update_recruiter_profile_id.php - Update recruiter/company profile by id
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: PUT, OPTIONS');
@@ -20,10 +20,11 @@ if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
 
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
-// Authenticate and check for admin and recruiter role
-authenticateJWT(['admin', 'recruiter']);
-
 include "../db.php";
+
+// Authenticate user and get role
+$current_user = authenticateJWT(['admin', 'recruiter', 'institute', 'student']);
+$user_role = $current_user['role'] ?? '';
 
 // Extract ID from query parameter
 if (!isset($_GET['id']) || empty($_GET['id'])) {
@@ -33,7 +34,6 @@ if (!isset($_GET['id']) || empty($_GET['id'])) {
 }
 
 $profile_id = intval($_GET['id']);
-
 if ($profile_id <= 0) {
     http_response_code(400);
     echo json_encode(array("message" => "Invalid profile ID", "status" => false));
@@ -42,7 +42,6 @@ if ($profile_id <= 0) {
 
 // Get JSON input
 $input = json_decode(file_get_contents('php://input'), true);
-
 if ($input === null) {
     http_response_code(400);
     echo json_encode(array("message" => "Invalid JSON input", "status" => false));
@@ -50,12 +49,12 @@ if ($input === null) {
 }
 
 // Build update query dynamically based on provided fields
-$update_fields = array();
-$params = array();
+$update_fields = [];
+$params = [];
 $types = '';
 
 // Define allowed fields for update
-$allowed_fields = ['company_name', 'company_logo', 'industry', 'website', 'location'];
+$allowed_fields = ['company_name', 'company_logo', 'industry', 'website', 'location', 'admin_action'];
 
 foreach ($allowed_fields as $field) {
     if (isset($input[$field])) {
@@ -99,24 +98,33 @@ if (!$result) {
 $affected_rows = mysqli_stmt_affected_rows($stmt);
 
 if ($affected_rows > 0) {
-    // Fetch the updated profile
-    $fetch_sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, created_at, modified_at FROM recruiter_profiles WHERE id = ? AND deleted_at IS NULL";
+    // Fetch updated profile with role-based visibility
+    $fetch_sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, admin_action, created_at, modified_at 
+                  FROM recruiter_profiles 
+                  WHERE id = ? AND deleted_at IS NULL";
+
+    // Role-based filtering: if user is not admin, only fetch approved records
+    if ($user_role !== 'admin') {
+        $fetch_sql .= " AND admin_action = 'approval'";
+    }
+
     $fetch_stmt = mysqli_prepare($conn, $fetch_sql);
     mysqli_stmt_bind_param($fetch_stmt, 'i', $profile_id);
     mysqli_stmt_execute($fetch_stmt);
     $fetch_result = mysqli_stmt_get_result($fetch_stmt);
-    
+
     if ($updated_profile = mysqli_fetch_assoc($fetch_result)) {
         http_response_code(200);
         echo json_encode(array(
-            "message" => "Employer profile updated successfully", 
+            "message" => "Employer profile updated successfully",
             "data" => $updated_profile,
             "status" => true
         ));
     } else {
-        http_response_code(200);
-        echo json_encode(array("message" => "Employer profile updated successfully", "status" => true));
+        http_response_code(404);
+        echo json_encode(array("message" => "Profile updated but not visible to your role", "status" => false));
     }
+
     mysqli_stmt_close($fetch_stmt);
 } else {
     http_response_code(404);
