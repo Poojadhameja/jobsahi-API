@@ -1,5 +1,5 @@
 <?php
-// update_course.php - Update existing course (Admin, Institute access)
+// update_course.php - Update existing course with role-based visibility
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: PUT, OPTIONS');
@@ -15,12 +15,12 @@ require_once '../db.php';
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
-// ✅ Authenticate JWT and allow multiple roles
-$decoded = authenticateJWT(['admin', 'institute']); // returns array
+// Authenticate JWT and allow multiple roles
+$decoded = authenticateJWT(['admin', 'institute']); // returns array with 'role' key
+$role = $decoded['role'] ?? '';
 
 // Get course ID from URL parameter
 $course_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-
 if ($course_id <= 0) {
     echo json_encode([
         "status" => false,
@@ -31,13 +31,13 @@ if ($course_id <= 0) {
 
 // Get PUT data
 $data = json_decode(file_get_contents("php://input"), true);
+$title        = isset($data['title']) ? trim($data['title']) : '';
+$description  = isset($data['description']) ? trim($data['description']) : '';
+$duration     = isset($data['duration']) ? trim($data['duration']) : '';
+$fee          = isset($data['fee']) ? floatval($data['fee']) : 0;
+$admin_action = isset($data['admin_action']) ? trim($data['admin_action']) : 'pending'; // optional
 
-$title       = isset($data['title']) ? trim($data['title']) : '';
-$description = isset($data['description']) ? trim($data['description']) : '';
-$duration    = isset($data['duration']) ? trim($data['duration']) : '';
-$fee         = isset($data['fee']) ? floatval($data['fee']) : 0;
-
-// ✅ Validation
+// Validation
 if (empty($title) || empty($description) || empty($duration) || $fee <= 0) {
     echo json_encode([
         "status" => false,
@@ -46,28 +46,46 @@ if (empty($title) || empty($description) || empty($duration) || $fee <= 0) {
     exit();
 }
 
+// Role-based visibility
+if ($role !== 'admin' && $admin_action === 'pending') {
+    echo json_encode([
+        "status" => false,
+        "message" => "You are not authorized to update pending courses"
+    ]);
+    exit();
+}
+
 try {
-    $stmt = $conn->prepare("UPDATE courses SET title = ?, description = ?, duration = ?, fee = ? WHERE id = ?");
-    $stmt->bind_param("sssdi", $title, $description, $duration, $fee, $course_id);
-    
-    if ($stmt->execute()) {
-        if ($stmt->affected_rows > 0) {
-            echo json_encode([
-                "status" => true,
-                "message" => "Course updated successfully",
-                "course_id" => $course_id
-            ]);
-        } else {
-            echo json_encode([
-                "status" => false,
-                "message" => "Course not found or no changes made"
-            ]);
-        }
-    } else {
+    // First, check if the course exists
+    $check = $conn->prepare("SELECT * FROM courses WHERE id = ?");
+    $check->bind_param("i", $course_id);
+    $check->execute();
+    $result = $check->get_result();
+
+    if ($result->num_rows === 0) {
         echo json_encode([
             "status" => false,
-            "message" => "Failed to update course",
-            "error" => $stmt->error
+            "message" => "Course not found"
+        ]);
+        exit();
+    }
+
+    // Prepare update query
+    $stmt = $conn->prepare("UPDATE courses SET title = ?, description = ?, duration = ?, fee = ?, admin_action = ? WHERE id = ?");
+    $stmt->bind_param("sssdsi", $title, $description, $duration, $fee, $admin_action, $course_id);
+    $stmt->execute();
+
+    if ($stmt->affected_rows > 0) {
+        echo json_encode([
+            "status" => true,
+            "message" => "Course updated successfully",
+            "course_id" => $course_id
+        ]);
+    } else {
+        echo json_encode([
+            "status" => true,
+            "message" => "No changes made, values are same as before",
+            "course_id" => $course_id
         ]);
     }
 } catch (Exception $e) {

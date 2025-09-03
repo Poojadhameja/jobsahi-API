@@ -10,8 +10,9 @@ header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
-// ✅ Authenticate student (or allow recruiter/admin if you want multiple roles)
-authenticateJWT(['student', 'recruiter', 'admin']);
+// ✅ Authenticate roles (students, recruiters, institutes, admins)
+$decodedToken = authenticateJWT(['student', 'recruiter', 'admin']);
+$user_role = $decodedToken['role']; // role from JWT
 
 // ✅ Check request method
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -35,6 +36,15 @@ if ($job_id <= 0) {
     exit;
 }
 
+/**
+ * ✅ SQL CONDITION BASED ON ROLE:
+ * - Admin can see both 'pending' and 'approval'
+ * - Others can only see 'approval'
+ */
+$visibilityCondition = ($user_role === 'admin') 
+    ? "j.admin_action IN ('pending', 'approval')" 
+    : "j.admin_action = 'approval'";
+
 // ✅ Main job query with recruiter info & stats
 $sql = "SELECT 
             j.id,
@@ -51,6 +61,7 @@ $sql = "SELECT
             j.is_remote,
             j.no_of_vacancies,
             j.status,
+            j.admin_action,
             j.created_at,
             -- Recruiter information
             rp.company_name,
@@ -67,7 +78,7 @@ $sql = "SELECT
             (SELECT COUNT(*) FROM saved_jobs s WHERE s.job_id = j.id) AS times_saved
         FROM jobs j
         LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
-        WHERE j.id = ?";
+        WHERE j.id = ? AND $visibilityCondition";
 
 $stmt = mysqli_prepare($conn, $sql);
 if (!$stmt) {
@@ -84,7 +95,7 @@ $result = mysqli_stmt_get_result($stmt);
 if (mysqli_num_rows($result) === 0) {
     mysqli_stmt_close($stmt);
     mysqli_close($conn);
-    echo json_encode(["message" => "Job not found", "status" => false]);
+    echo json_encode(["message" => "Job not found or not accessible", "status" => false]);
     exit;
 }
 
@@ -107,6 +118,7 @@ $formatted_job = [
         'is_remote' => (bool)$job['is_remote'],
         'no_of_vacancies' => intval($job['no_of_vacancies']),
         'status' => $job['status'],
+        'admin_action' => $job['admin_action'],
         'created_at' => $job['created_at']
     ],
     'company_info' => [
@@ -127,8 +139,12 @@ $formatted_job = [
     ]
 ];
 
-// ✅ Optional: Get similar jobs
+// ✅ Optional: Get similar jobs (only approved ones visible to non-admins)
 if (isset($_GET['include_similar']) && $_GET['include_similar'] === 'true') {
+    $similarVisibilityCondition = ($user_role === 'admin') 
+        ? "j.admin_action IN ('pending', 'approval')" 
+        : "j.admin_action = 'approval'";
+
     $similar_sql = "SELECT 
                         j.id,
                         j.title,
@@ -141,6 +157,7 @@ if (isset($_GET['include_similar']) && $_GET['include_similar'] === 'true') {
                     LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
                     WHERE j.id != ? 
                     AND j.status = 'open'
+                    AND $similarVisibilityCondition
                     AND (j.location = ? OR j.job_type = ?)
                     ORDER BY j.created_at DESC
                     LIMIT 5";

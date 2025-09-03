@@ -1,5 +1,5 @@
 <?php
-// update_application_status.php - Update application status (Admin or Recruiter access)
+// update_application_status.php - Update application status (Admin or Recruiter access, with admin_action visibility)
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: PUT, OPTIONS');
@@ -46,26 +46,34 @@ if (!in_array($new_status, $valid_statuses)) {
 }
 
 try {
-    // Check if application exists and get job details
-    $check_stmt = $conn->prepare("SELECT a.id, a.job_id, j.recruiter_id 
-                                  FROM applications a 
-                                  JOIN jobs j ON a.job_id = j.id 
-                                  WHERE a.id = ?");
-    $check_stmt->bind_param("i", $application_id);
+    // ✅ Check if application exists and get job + visibility details
+    $check_sql = "
+        SELECT a.id, a.job_id, a.admin_action, j.recruiter_id
+        FROM applications a
+        JOIN jobs j ON a.job_id = j.id
+        WHERE a.id = ?
+          AND (
+                (a.admin_action = 'approval') 
+                OR (a.admin_action = 'pending' AND ? = 'admin')
+              )
+    ";
+
+    $check_stmt = $conn->prepare($check_sql);
+    $check_stmt->bind_param("is", $application_id, $user_role);
     $check_stmt->execute();
     $result = $check_stmt->get_result();
-    
+
     if ($result->num_rows === 0) {
         echo json_encode([
             "status" => false,
-            "message" => "Application not found"
+            "message" => "Application not found or access denied"
         ]);
         exit();
     }
-    
+
     $application = $result->fetch_assoc();
-    
-    // Check authorization: Admin can update any application, Recruiter can only update their own job applications
+
+    // ✅ Authorization: Admin can update any application, Recruiter only their own job applications
     if ($user_role !== 'admin' && $application['recruiter_id'] != $user_id) {
         echo json_encode([
             "status" => false,
@@ -73,11 +81,11 @@ try {
         ]);
         exit();
     }
-    
-    // Update application status
+
+    // ✅ Update application status
     $update_stmt = $conn->prepare("UPDATE applications SET status = ? WHERE id = ?");
     $update_stmt->bind_param("si", $new_status, $application_id);
-    
+
     if ($update_stmt->execute()) {
         echo json_encode([
             "status" => true,
@@ -92,7 +100,7 @@ try {
             "error" => $update_stmt->error
         ]);
     }
-    
+
 } catch (Exception $e) {
     echo json_encode([
         "status" => false,

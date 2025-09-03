@@ -1,5 +1,5 @@
 <?php
-// get_job_applications.php - List job applicants (Admin, Recruiter access)
+// get_job_applications.php - List job applicants (Role-based visibility)
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, OPTIONS');
@@ -15,8 +15,9 @@ require_once '../db.php';
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
-// ✅ Authenticate JWT and allow multiple roles
-$decoded = authenticateJWT(['admin', 'recruiter']); // returns array
+// ✅ Authenticate JWT (allow admin, recruiter)
+$decoded = authenticateJWT(['admin', 'recruiter']); 
+$user_role = $decoded['role']; // role from JWT payload
 
 // Get job ID from URL parameter
 $job_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
@@ -30,21 +31,31 @@ if ($job_id <= 0) {
 }
 
 try {
-    // Get job applications from the applications table
-    $stmt = $conn->prepare("SELECT * FROM applications WHERE job_id = ? ORDER BY applied_at DESC");
-    $stmt->bind_param("i", $job_id);
-    
+    // ✅ Build query conditionally based on role
+    if ($user_role === 'admin') {
+        // Admin sees ALL (pending + approval)
+        $query = "SELECT * FROM applications WHERE job_id = ? ORDER BY applied_at DESC";
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("i", $job_id);
+    } else {
+        // Recruiter, Institute, Students → Only approved applications
+        $query = "SELECT * FROM applications WHERE job_id = ? AND admin_action = 'approval' ORDER BY applied_at DESC";
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("i", $job_id);
+    }
+
     if ($stmt->execute()) {
         $result = $stmt->get_result();
         $applications = [];
-        
+
         while ($row = $result->fetch_assoc()) {
             $applications[] = $row;
         }
-        
+
         echo json_encode([
             "status" => true,
             "message" => "Job applications retrieved successfully",
+            "role" => $user_role,
             "job_id" => $job_id,
             "applications" => $applications,
             "total_applications" => count($applications)

@@ -1,5 +1,5 @@
 <?php
-// schedule_interview.php - Schedule interview for candidate (Admin, Recruiter access)
+// schedule_interview.php - Schedule interview for candidate (Admin, Recruiter access with role-based visibility)
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
@@ -16,8 +16,9 @@ require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 // ✅ Authenticate JWT and allow multiple roles
-$decoded = authenticateJWT(['admin', 'recruiter']); // returns array
-$user_id = $decoded['user_id']; // Extract user_id from JWT token
+$decoded = authenticateJWT(['admin', 'recruiter']); 
+$user_id = $decoded['user_id'];
+$user_role = $decoded['role'];
 
 // Get application ID from URL parameter
 $application_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
@@ -49,19 +50,48 @@ if (empty($scheduled_at)) {
 }
 
 try {
-    // Check if application exists and belongs to recruiter (if recruiter role)
-    if ($decoded['role'] === 'recruiter') {
-        $check_stmt = $conn->prepare("SELECT a.id FROM applications a 
-                                     JOIN jobs j ON a.job_id = j.id 
-                                     WHERE a.id = ? AND j.recruiter_id = ?");
-        $check_stmt->bind_param("ii", $application_id, $user_id);
-        $check_stmt->execute();
-        $result = $check_stmt->get_result();
-        
-        if ($result->num_rows === 0) {
+    // ✅ Visibility filter using admin_action
+    if ($user_role === 'admin') {
+        // Admin can see pending & approval
+        $check_sql = "SELECT a.id, a.admin_action 
+                      FROM applications a
+                      WHERE a.id = ?";
+        $check_stmt = $conn->prepare($check_sql);
+        $check_stmt->bind_param("i", $application_id);
+    } else {
+        // Recruiter, Institute, Student → Only see if admin_action = 'approval'
+        $check_sql = "SELECT a.id, a.admin_action 
+                      FROM applications a
+                      WHERE a.id = ? AND a.admin_action = 'approval'";
+        $check_stmt = $conn->prepare($check_sql);
+        $check_stmt->bind_param("i", $application_id);
+    }
+
+    $check_stmt->execute();
+    $result = $check_stmt->get_result();
+
+    if ($result->num_rows === 0) {
+        echo json_encode([
+            "status" => false,
+            "message" => "Application not found or access denied (based on admin_action)"
+        ]);
+        exit();
+    }
+
+    // Extra recruiter ownership check
+    if ($user_role === 'recruiter') {
+        $check_recruiter = $conn->prepare("SELECT a.id 
+                                          FROM applications a 
+                                          JOIN jobs j ON a.job_id = j.id 
+                                          WHERE a.id = ? AND j.recruiter_id = ?");
+        $check_recruiter->bind_param("ii", $application_id, $user_id);
+        $check_recruiter->execute();
+        $rec_result = $check_recruiter->get_result();
+
+        if ($rec_result->num_rows === 0) {
             echo json_encode([
                 "status" => false,
-                "message" => "Application not found or access denied"
+                "message" => "Recruiter does not own this application"
             ]);
             exit();
         }
