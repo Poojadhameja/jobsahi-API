@@ -10,7 +10,7 @@ header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
-// ✅ Authenticate roles (students, recruiters, institutes, admins)
+// ✅ Authenticate roles (students, recruiters, admins)
 $decodedToken = authenticateJWT(['student', 'recruiter', 'admin']);
 $user_role = $decodedToken['role']; // role from JWT
 
