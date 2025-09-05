@@ -1,5 +1,5 @@
 <?php
-// courses.php - Course analytics report (JWT protected)
+// reports.php - Reports analytics (JWT protected)
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, OPTIONS');
@@ -25,29 +25,33 @@ try {
         // Admin sees both pending and approval
         $sql = "
             SELECT 
-                e.course_id,
-                COUNT(DISTINCT e.student_id) AS total_enrollments,
-                COUNT(DISTINCT CASE WHEN e.status = 'completed' THEN e.student_id END) AS completed_enrollments,
-                COUNT(DISTINCT CASE WHEN e.status = 'enrolled' THEN e.student_id END) AS active_enrollments
-            FROM student_course_enrollments e
-            WHERE (e.deleted_at IS NULL OR e.deleted_at = '')
-              AND (e.admin_action = 'pending' OR e.admin_action = 'approval')
-            GROUP BY e.course_id
-            ORDER BY total_enrollments DESC
+                report_type,
+                COUNT(*) AS total_reports,
+                COUNT(CASE WHEN admin_action = 'pending' THEN 1 END) AS pending_reports,
+                COUNT(CASE WHEN admin_action = 'approval' THEN 1 END) AS approved_reports,
+                COUNT(CASE WHEN DATE(generated_at) = CURDATE() THEN 1 END) AS reports_today,
+                COUNT(CASE WHEN DATE(generated_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN 1 END) AS reports_this_week,
+                COUNT(CASE WHEN DATE(generated_at) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 1 END) AS reports_this_month
+            FROM reports
+            WHERE (admin_action = 'pending' OR admin_action = 'approval')
+            GROUP BY report_type
+            ORDER BY total_reports DESC
         ";
     } else {
-        // Recruiter, Institute, Students → only approval
+        // Recruiter, Institute → only approval
         $sql = "
             SELECT 
-                e.course_id,
-                COUNT(DISTINCT e.student_id) AS total_enrollments,
-                COUNT(DISTINCT CASE WHEN e.status = 'completed' THEN e.student_id END) AS completed_enrollments,
-                COUNT(DISTINCT CASE WHEN e.status = 'enrolled' THEN e.student_id END) AS active_enrollments
-            FROM student_course_enrollments e
-            WHERE (e.deleted_at IS NULL OR e.deleted_at = '')
-              AND e.admin_action = 'approval'
-            GROUP BY e.course_id
-            ORDER BY total_enrollments DESC
+                report_type,
+                COUNT(*) AS total_reports,
+                COUNT(CASE WHEN admin_action = 'pending' THEN 1 END) AS pending_reports,
+                COUNT(CASE WHEN admin_action = 'approval' THEN 1 END) AS approved_reports,
+                COUNT(CASE WHEN DATE(generated_at) = CURDATE() THEN 1 END) AS reports_today,
+                COUNT(CASE WHEN DATE(generated_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN 1 END) AS reports_this_week,
+                COUNT(CASE WHEN DATE(generated_at) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 1 END) AS reports_this_month
+            FROM reports
+            WHERE admin_action = 'approval'
+            GROUP BY report_type
+            ORDER BY total_reports DESC
         ";
     }
 
@@ -55,41 +59,52 @@ try {
     $stmt->execute();
     $result = $stmt->get_result();
 
-    $courses_analytics = [];
+    $reports_analytics = [];
     while ($row = $result->fetch_assoc()) {
-        $courses_analytics[] = [
-            'course_id' => $row['course_id'],
-            'enrollments' => [
-                'total' => (int)$row['total_enrollments'],
-                'completed' => (int)$row['completed_enrollments'],
-                'active' => (int)$row['active_enrollments']
+        $reports_analytics[] = [
+            'report_type' => $row['report_type'],
+            'counts' => [
+                'total' => (int)$row['total_reports'],
+                'pending' => (int)$row['pending_reports'],
+                'approved' => (int)$row['approved_reports']
+            ],
+            'timeline' => [
+                'today' => (int)$row['reports_today'],
+                'this_week' => (int)$row['reports_this_week'],
+                'this_month' => (int)$row['reports_this_month']
             ]
         ];
     }
 
-    // ✅ Summary
-    $total_courses = count($courses_analytics);
-    $total_enrollments = array_sum(array_column(array_column($courses_analytics, 'enrollments'), 'total'));
-    $total_completed = array_sum(array_column(array_column($courses_analytics, 'enrollments'), 'completed'));
+    // ✅ Overall Summary
+    $total_report_types = count($reports_analytics);
+    $total_reports = array_sum(array_column(array_column($reports_analytics, 'counts'), 'total'));
+    $total_pending = array_sum(array_column(array_column($reports_analytics, 'counts'), 'pending'));
+    $total_approved = array_sum(array_column(array_column($reports_analytics, 'counts'), 'approved'));
+
+    // ✅ Most popular report types
+    $popular_reports = array_slice($reports_analytics, 0, 5);
 
     echo json_encode([
         "status" => true,
-        "message" => "Course analytics report retrieved successfully",
+        "message" => "Reports analytics retrieved successfully",
         "data" => [
             "summary" => [
-                "total_courses" => $total_courses,
-                "total_enrollments" => $total_enrollments,
-                "total_completed" => $total_completed,
-                "completion_rate" => $total_enrollments > 0 ? round(($total_completed / $total_enrollments) * 100, 2) : 0
+                "total_report_types" => $total_report_types,
+                "total_reports" => $total_reports,
+                "total_pending" => $total_pending,
+                "total_approved" => $total_approved,
+                "approval_rate" => $total_reports > 0 ? round(($total_approved / $total_reports) * 100, 2) : 0
             ],
-            "courses" => $courses_analytics
+            "report_types" => $reports_analytics,
+            "popular_reports" => $popular_reports
         ]
     ]);
 
 } catch (Exception $e) {
     echo json_encode([
         "status" => false,
-        "message" => "Error retrieving course analytics: " . $e->getMessage()
+        "message" => "Error retrieving reports analytics: " . $e->getMessage()
     ]);
 }
 
