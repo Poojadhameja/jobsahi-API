@@ -1,8 +1,8 @@
 <?php
-// get_plans_templates.php - Get all plan templates (JWT required)
+// get_plans.php - Get subscription plans (POST, JWT required)
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, OPTIONS');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
 // Handle preflight OPTIONS request
@@ -15,69 +15,81 @@ require_once '../db.php';
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
-// ✅ Authenticate JWT (any valid user can access plan templates)
-$decoded = authenticateJWT(); // returns array
+// ✅ Authenticate JWT (any valid user can access plans)
+$decoded = authenticateJWT(); // returns array with 'role'
+
+// Get user role
+$userRole = isset($decoded['role']) ? strtolower($decoded['role']) : '';
 
 try {
-    // First, check structure of plan_templates table
-    $checkPlans = $conn->query("DESCRIBE plan_templates");
-    
+    // First, check what columns exist in plans table
+    $checkPlans = $conn->query("DESCRIBE plans");
     if (!$checkPlans) {
-        throw new Exception("Cannot access plan_templates table structure");
+        throw new Exception("Cannot access plans table structure");
     }
-    
-    // Get column names for plan_templates table
+
+    // Get column names
     $plansColumns = [];
     while ($row = $checkPlans->fetch_assoc()) {
         $plansColumns[] = $row['Field'];
     }
-    
-    // Determine the correct ID column name
-    $idColumn = 'id'; // default
-    if (in_array('plan_template_id', $plansColumns)) {
-        $idColumn = 'plan_template_id';
-    } elseif (in_array('id', $plansColumns)) {
-        $idColumn = 'id';
-    }
-    
-    // Check if required columns exist
+
+    // Detect correct columns
+    $idColumn = in_array('plan_id', $plansColumns) ? 'plan_id' : 'id';
     $titleColumn = in_array('title', $plansColumns) ? 'title' : 'NULL';
     $typeColumn = in_array('type', $plansColumns) ? 'type' : 'NULL';
     $priceColumn = in_array('price', $plansColumns) ? 'price' : 'NULL';
     $durationDaysColumn = in_array('duration_days', $plansColumns) ? 'duration_days' : 'NULL';
     $featuresJsonColumn = in_array('features_json', $plansColumns) ? 'features_json' : 'NULL';
-    
-    // Build query
-    $stmt = $conn->prepare("
+    $adminActionColumn = in_array('admin_action', $plansColumns) ? 'admin_action' : 'NULL';
+
+    // ✅ Build WHERE condition based on role
+    $whereCondition = "";
+    if ($adminActionColumn !== 'NULL') {
+        if ($userRole === 'admin') {
+            // Admin sees both pending + approval
+            $whereCondition = "WHERE {$adminActionColumn} IN ('pending', 'approval')";
+        } else {
+            // Recruiter, Institute, Student see only approval
+            $whereCondition = "WHERE {$adminActionColumn} = 'approval'";
+        }
+    }
+
+    // ✅ Final query
+    $sql = "
         SELECT 
             {$idColumn} as id,
             {$titleColumn} as title,
             {$typeColumn} as type,
             {$priceColumn} as price,
             {$durationDaysColumn} as duration_days,
-            {$featuresJsonColumn} as features_json
-        FROM plan_templates
+            {$featuresJsonColumn} as features_json,
+            {$adminActionColumn} as admin_action
+        FROM plans
+        {$whereCondition}
         ORDER BY {$priceColumn} ASC
-    ");
-    
+    ";
+
+    $stmt = $conn->prepare($sql);
+
     if ($stmt->execute()) {
         $result = $stmt->get_result();
         $plans = [];
-        
+
         while ($row = $result->fetch_assoc()) {
             $plans[] = $row;
         }
-        
+
         echo json_encode([
             "status" => true,
-            "message" => "Plan templates retrieved successfully",
+            "message" => "Subscription plans retrieved successfully",
             "data" => $plans,
             "count" => count($plans)
         ]);
     } else {
         echo json_encode([
             "status" => false,
-            "message" => "Failed to retrieve plan templates",
+            "message" => "Failed to retrieve subscription plans",
             "error" => $stmt->error
         ]);
     }
