@@ -44,6 +44,12 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
+// Validate phone number format (basic validation for numeric characters and length)
+if (!preg_match('/^[0-9]{10,15}$/', $phone_number)) {
+    echo json_encode(array("message" => "Invalid phone number format. Phone number must contain only digits and be 10-15 characters long", "status" => false));
+    exit;
+}
+
 // Password strength validation (optional)
 if (strlen($password) < 6) {
     echo json_encode(array("message" => "Password must be at least 6 characters long", "status" => false));
@@ -52,7 +58,7 @@ if (strlen($password) < 6) {
 
 include "../db.php";
 
-// Check if user already exists
+// Check if user already exists (email)
 $check_sql = "SELECT id FROM users WHERE email = ?";
 if ($check_stmt = mysqli_prepare($conn, $check_sql)) {
     mysqli_stmt_bind_param($check_stmt, "s", $email);
@@ -66,6 +72,22 @@ if ($check_stmt = mysqli_prepare($conn, $check_sql)) {
         exit;
     }
     mysqli_stmt_close($check_stmt);
+}
+
+// Check if phone number already exists
+$check_phone_sql = "SELECT id FROM users WHERE phone_number = ?";
+if ($check_phone_stmt = mysqli_prepare($conn, $check_phone_sql)) {
+    mysqli_stmt_bind_param($check_phone_stmt, "s", $phone_number);
+    mysqli_stmt_execute($check_phone_stmt);
+    $check_phone_result = mysqli_stmt_get_result($check_phone_stmt);
+    
+    if (mysqli_num_rows($check_phone_result) > 0) {
+        echo json_encode(array("message" => "Phone number already exists", "status" => false));
+        mysqli_stmt_close($check_phone_stmt);
+        mysqli_close($conn);
+        exit;
+    }
+    mysqli_stmt_close($check_phone_stmt);
 }
 
 // Hash the password
