@@ -36,7 +36,6 @@ $password = trim($data['password']);
 $phone_number = trim($data['phone_number']);
 $role = isset($data['role']) ? trim($data['role']) : 'student'; // Default role
 $is_verified = isset($data['is_verified']) ? (int)$data['is_verified'] : 0; // Default 0 (not verified)
-// Removed status variable since column doesn't exist in database
 
 // Validate email format
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -44,7 +43,7 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
-// Password strength validation (optional)
+// Password strength validation
 if (strlen($password) < 6) {
     echo json_encode(array("message" => "Password must be at least 6 characters long", "status" => false));
     exit;
@@ -52,7 +51,7 @@ if (strlen($password) < 6) {
 
 include "../db.php";
 
-// Check if user already exists
+// ✅ Check if email already exists
 $check_sql = "SELECT id FROM users WHERE email = ?";
 if ($check_stmt = mysqli_prepare($conn, $check_sql)) {
     mysqli_stmt_bind_param($check_stmt, "s", $email);
@@ -66,6 +65,22 @@ if ($check_stmt = mysqli_prepare($conn, $check_sql)) {
         exit;
     }
     mysqli_stmt_close($check_stmt);
+}
+
+// ✅ Check if phone number already exists
+$check_phone_sql = "SELECT id FROM users WHERE phone_number = ?";
+if ($check_phone_stmt = mysqli_prepare($conn, $check_phone_sql)) {
+    mysqli_stmt_bind_param($check_phone_stmt, "s", $phone_number);
+    mysqli_stmt_execute($check_phone_stmt);
+    $check_phone_result = mysqli_stmt_get_result($check_phone_stmt);
+    
+    if (mysqli_num_rows($check_phone_result) > 0) {
+        echo json_encode(array("message" => "Phone number already exists", "status" => false));
+        mysqli_stmt_close($check_phone_stmt);
+        mysqli_close($conn);
+        exit;
+    }
+    mysqli_stmt_close($check_phone_stmt);
 }
 
 // Hash the password
