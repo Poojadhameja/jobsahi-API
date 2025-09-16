@@ -1,11 +1,5 @@
 <?php
-// applications.php - Fetch all applications with optional filters
-
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
-
+include '../CORS.php';
 // Include JWT helper & middleware
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';

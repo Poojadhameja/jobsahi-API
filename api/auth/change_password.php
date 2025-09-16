@@ -1,10 +1,5 @@
 <?php
-// change_password.php - Change user password
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: PUT');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
+include '../CORS.php';
 // Check if request method is PUT
 if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
     http_response_code(405);

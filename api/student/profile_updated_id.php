@@ -1,9 +1,5 @@
 <?php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: PUT');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
+include '../CORS.php';
 require_once '../jwt_token/jwt_helper.php';  // Include your JWT helper
 require_once '../auth/auth_middleware.php';  // Include your middleware
 

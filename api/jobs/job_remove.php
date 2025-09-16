@@ -1,10 +1,5 @@
 <?php
-// remove_saved_job.php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
-
+include '../CORS.php';
 // Handle preflight (CORS) requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);

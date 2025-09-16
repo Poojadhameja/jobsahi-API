@@ -1,11 +1,5 @@
 <?php
-// update_user.php - Update user with JWT authentication
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: PUT, POST');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-// Include config first to define constants
+include '../CORS.php';
 require_once '../db.php';
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';

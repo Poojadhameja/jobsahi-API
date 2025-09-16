@@ -1,10 +1,6 @@
 <?php
 // enroll.php - Enroll a student into a course & fetch enrollments based on role
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
+include '../CORS.php';
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 require_once '../db.php';

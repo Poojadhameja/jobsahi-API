@@ -1,10 +1,5 @@
 <?php
-// interview_detail.php - Get Interview by ID with Panel (with admin_action logic)
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
+include '../CORS.php';
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 

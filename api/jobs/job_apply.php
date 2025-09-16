@@ -1,22 +1,10 @@
 <?php
-// apply_job.php - Apply for a Job (Student only)
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
+include '../CORS.php';
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 // ✅ Authenticate and allow only "student" role
 $decoded = authenticateJWT('student');  // decoded JWT payload
-
-// Only allow POST requests
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(["message" => "Only POST requests allowed", "status" => false]);
-    exit;
-}
 
 include "../db.php"; 
 

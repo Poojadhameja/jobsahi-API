@@ -1,10 +1,5 @@
 <?php
-// get_application.php - Fetch single application (Student/Admin/Authorized access)
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
+include '../CORS.php';
 // Allow only GET
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     echo json_encode(["message" => "Only GET requests allowed", "status" => false]);

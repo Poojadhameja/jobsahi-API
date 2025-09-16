@@ -1,10 +1,5 @@
 <?php
-// update-notification.php - Mark a notification as read
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: PATCH');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
+include '../CORS.php';
 // TEMPORARY: Test if file is accessible
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     echo json_encode([

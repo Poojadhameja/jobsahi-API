@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../vendor/vendor/autoload.php';
 
 use Dotenv\Dotenv;
 
@@ -18,9 +18,9 @@ if (file_exists($envFile)) {
 // Database Configuration
 $dbHost = $_ENV['DB_HOST'] ?? '127.0.0.1';
 $dbPort = $_ENV['DB_PORT'] ?? '3306';
-$dbName = $_ENV['DB_DATABASE'] ?? '';
-$dbUser = $_ENV['DB_USERNAME'] ?? 'root';
-$dbPass = $_ENV['DB_PASSWORD'] ?? '';
+$dbName = $_ENV['DB_DATABASE'] ?? 'u829931622_jobsahi';
+$dbUser = $_ENV['DB_USERNAME'] ?? 'u829931622_jobsahi';
+$dbPass = $_ENV['DB_PASSWORD'] ?? 'Jobsahi12@123';
 
 $dsn = "mysql:host={$dbHost};port={$dbPort};dbname={$dbName};charset=utf8mb4";
 
