@@ -91,7 +91,7 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
     mysqli_stmt_close($stmt);
 } else {
     http_response_code(500);
-    echo json_encode(array("message" => "Database query failed", "status" => false));
+    // echo json_encode(array("message" => "Database query failed", "status" => false));
 }
 
 mysqli_close($conn);

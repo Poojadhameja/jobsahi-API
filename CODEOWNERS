@@ -1,0 +1,6 @@
+# This CODEOWNERS file ensures that only @Poojadhameja 
+# has ownership on the repository.
+# Any pull request will require approval from this user.
+
+# Entire repository
+*   @Poojadhameja

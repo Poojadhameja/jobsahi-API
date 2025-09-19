@@ -14,6 +14,10 @@ if (preg_match('#^http://localhost(:\d+)?$#', $origin)) {
   $allow = true;
 } elseif (preg_match('#^http://127\.0\.0\.1(:\d+)?$#', $origin)) {
   $allow = true;
+} elseif (preg_match('#^https://localhost(:\d+)?$#', $origin)) {
+  $allow = true;
+} elseif (preg_match('#^https://127\.0\.0\.1(:\d+)?$#', $origin)) {
+  $allow = true;
 } elseif (in_array($origin, $strictAllowed, true)) {
   $allow = true;
 }
@@ -28,12 +32,17 @@ if ($allow) {
   // exit;
 }
 
-// Preflight + headers
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept, Origin");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
+// Enhanced CORS headers for Flutter Web
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers");
+header("Access-Control-Allow-Methods: POST, GET, OPTIONS, PUT, DELETE");
 header("Access-Control-Max-Age: 86400"); // cache preflight 24h
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+header("Access-Control-Allow-Credentials: true"); // For future authentication
+header("Access-Control-Expose-Headers: Content-Length, X-JSON"); // Expose additional headers
 
+// Additional security headers
+header("X-Content-Type-Options: nosniff");
+header("X-Frame-Options: DENY");
+header("X-XSS-Protection: 1; mode=block");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
@@ -50,5 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
   exit;
 }
 
+// Add request logging for debugging (remove in production)
+error_log("API Request from: " . $origin . " - Method: " . $_SERVER['REQUEST_METHOD']);
 
 ?>
