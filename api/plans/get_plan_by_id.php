@@ -44,7 +44,7 @@ try {
         FROM plans
         WHERE id = ?
           AND (
-                (admin_action = 'approval')
+                (admin_action = 'approved')
                 OR (admin_action = 'pending' AND ? = 'ADMIN')
               )
     ";

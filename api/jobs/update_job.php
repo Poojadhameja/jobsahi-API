@@ -16,7 +16,7 @@ require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 // ✅ Authenticate JWT and allow multiple roles
-$decoded = authenticateJWT(['admin']); // returns array
+$decoded = authenticateJWT(['admin','recruiter']); // returns array
 
 // Get job ID from URL parameter
 $job_id = isset($_GET['id']) ? $_GET['id'] : '';

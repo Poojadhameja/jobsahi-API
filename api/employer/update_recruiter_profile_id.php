@@ -105,7 +105,7 @@ if ($affected_rows > 0) {
 
     // Role-based filtering: if user is not admin, only fetch approved records
     if ($user_role !== 'admin') {
-        $fetch_sql .= " AND admin_action = 'approval'";
+        $fetch_sql .= " AND admin_action = 'approved'";
     }
 
     $fetch_stmt = mysqli_prepare($conn, $fetch_sql);

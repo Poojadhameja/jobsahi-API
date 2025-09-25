@@ -33,15 +33,15 @@ if (empty($recruiter_id)) {
 try {
     // ✅ Build query with role-based visibility
     if ($user_role === 'admin') {
-        // Admin sees both pending + approval
+        // Admin sees both pending + approved
         $sql = "SELECT recruiter_id, title, description, location, skills_required, salary_min, salary_max, job_type, experience_required, application_deadline, is_remote, no_of_vacancies, status, admin_action, created_at 
                 FROM jobs 
                 WHERE recruiter_id = ?";
     } else {
-        // Recruiter, Institute, Student see only approval
+        // Recruiter, Institute, Student see only approved
         $sql = "SELECT recruiter_id, title, description, location, skills_required, salary_min, salary_max, job_type, experience_required, application_deadline, is_remote, no_of_vacancies, status, admin_action, created_at 
                 FROM jobs 
-                WHERE recruiter_id = ? AND admin_action = 'approval'";
+                WHERE recruiter_id = ? AND admin_action = 'approved'";
     }
 
     $stmt = $conn->prepare($sql);

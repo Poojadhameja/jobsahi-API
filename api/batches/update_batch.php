@@ -57,7 +57,7 @@ try {
 
     $batch = $result->fetch_assoc();
 
-    // Only admin can change 'admin_action' from 'pending' to 'approval'
+    // Only admin can change 'admin_action' from 'pending' to 'approved'
     if (isset($data['admin_action']) && $user_role !== 'admin') {
         echo json_encode([
             "status" => false,

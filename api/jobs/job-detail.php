@@ -38,12 +38,12 @@ if ($job_id <= 0) {
 
 /**
  * ✅ SQL CONDITION BASED ON ROLE:
- * - Admin can see both 'pending' and 'approval'
- * - Others can only see 'approval'
+ * - Admin can see both 'pending' and 'approved'
+ * - Others can only see 'approved'
  */
 $visibilityCondition = ($user_role === 'admin') 
-    ? "j.admin_action IN ('pending', 'approval')" 
-    : "j.admin_action = 'approval'";
+    ? "j.admin_action IN ('pending', 'approved')" 
+    : "j.admin_action = 'approved'";
 
 // ✅ Main job query with recruiter info & stats
 $sql = "SELECT 
@@ -142,8 +142,8 @@ $formatted_job = [
 // ✅ Optional: Get similar jobs (only approved ones visible to non-admins)
 if (isset($_GET['include_similar']) && $_GET['include_similar'] === 'true') {
     $similarVisibilityCondition = ($user_role === 'admin') 
-        ? "j.admin_action IN ('pending', 'approval')" 
-        : "j.admin_action = 'approval'";
+        ? "j.admin_action IN ('pending', 'approved')" 
+        : "j.admin_action = 'approved'";
 
     $similar_sql = "SELECT 
                         j.id,

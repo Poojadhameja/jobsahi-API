@@ -45,9 +45,9 @@ INNER JOIN institute_profiles ist
 WHERE ist.id = ?
 ";
 
-// Only admin sees 'pending', others only see 'approval'
+// Only admin sees 'pending', others only see 'approved'
 if ($user_role !== 'admin') {
-    $sql .= " AND sp.admin_action = 'approval'";
+    $sql .= " AND sp.admin_action = 'approved'";
 }
 
 $sql .= " ORDER BY sp.created_at DESC";

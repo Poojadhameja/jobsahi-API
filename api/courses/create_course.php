@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $sql = "SELECT * FROM courses";
         } else {
             // Other roles see only approved courses
-            $sql = "SELECT * FROM courses WHERE admin_action = 'approval'";
+            $sql = "SELECT * FROM courses WHERE admin_action = 'approved'";
         }
 
         $result = $conn->query($sql);

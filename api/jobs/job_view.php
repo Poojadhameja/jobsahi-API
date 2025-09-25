@@ -17,7 +17,7 @@ require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 // ✅ Authenticate (student + admin)
-$decoded = authenticateJWT(['student', 'admin']); 
+$decoded = authenticateJWT(['student', 'admin','recruiter','institute']); // decoded JWT payload
 
 include "../db.php";
 if (!$conn) {
@@ -53,7 +53,7 @@ if ($user_role === 'admin') {
 } else {
     $check_job_sql = "SELECT id, title, status, admin_action 
                       FROM jobs 
-                      WHERE id = ? AND admin_action = 'approval'";
+                      WHERE id = ? AND admin_action = 'approved'";
 }
 
 $check_stmt = mysqli_prepare($conn, $check_job_sql);
@@ -154,6 +154,7 @@ if (mysqli_stmt_execute($insert_stmt)) {
             "job_title" => $job_data['title'],
             "student_name" => $student_data['user_name'],
             "role" => $student_data['role'],
+            "status" => $job_data['status'],
             "admin_action" => $job_data['admin_action'],
             "viewed_at" => $current_datetime
         ],

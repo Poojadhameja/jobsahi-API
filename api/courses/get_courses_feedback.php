@@ -76,11 +76,11 @@ if ($rating_filter !== null && $rating_filter >= 1 && $rating_filter <= 5) {
 
 // Role-based admin_action filter
 if ($user_role === 'admin') {
-    // Admin sees all: pending + approval
-    $where_conditions[] = "(admin_action = 'approval' OR admin_action = 'pending')";
+    // Admin sees all: pending + approved
+    $where_conditions[] = "(admin_action = 'approved' OR admin_action = 'pending')";
 } else {
-    // Others see only approval
-    $where_conditions[] = "admin_action = 'approval'";
+    // Others see only approved
+    $where_conditions[] = "admin_action = 'approved'";
 }
 
 $where_clause = implode(" AND ", $where_conditions);
@@ -135,7 +135,7 @@ mysqli_stmt_close($stmt);
 $total_pages = ceil($total_feedback / $limit);
 
 // Average rating
-$avg_sql = "SELECT AVG(rating) as avg_rating FROM course_feedback WHERE course_id = ? AND " . ($user_role === 'admin' ? "(admin_action = 'approval' OR admin_action = 'pending')" : "admin_action = 'approval'");
+$avg_sql = "SELECT AVG(rating) as avg_rating FROM course_feedback WHERE course_id = ? AND " . ($user_role === 'admin' ? "(admin_action = 'approved' OR admin_action = 'pending')" : "admin_action = 'approved'");
 $avg_stmt = mysqli_prepare($conn, $avg_sql);
 mysqli_stmt_bind_param($avg_stmt, "i", $course_id);
 mysqli_stmt_execute($avg_stmt);
@@ -146,7 +146,7 @@ mysqli_stmt_close($avg_stmt);
 // Rating distribution
 $dist_sql = "SELECT rating, COUNT(*) as count 
              FROM course_feedback 
-             WHERE course_id = ? AND " . ($user_role === 'admin' ? "(admin_action = 'approval' OR admin_action = 'pending')" : "admin_action = 'approval'") . " 
+             WHERE course_id = ? AND " . ($user_role === 'admin' ? "(admin_action = 'approved' OR admin_action = 'pending')" : "admin_action = 'approved'") . " 
              GROUP BY rating ORDER BY rating DESC";
 $rating_distribution = [];
 $dist_stmt = mysqli_prepare($conn, $dist_sql);

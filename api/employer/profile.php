@@ -18,14 +18,14 @@ if ($user_role === 'admin') {
     $sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, admin_action, created_at, modified_at 
             FROM recruiter_profiles 
             WHERE deleted_at IS NULL
-            AND (admin_action = 'pending' OR admin_action = 'approval')
+            AND (admin_action = 'pending' OR admin_action = 'approved')
             ORDER BY id DESC";
 } else {
     // Other roles see only approved
     $sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, admin_action, created_at, modified_at 
             FROM recruiter_profiles 
             WHERE deleted_at IS NULL
-            AND admin_action = 'approval'
+            AND admin_action = 'approved'
             ORDER BY id DESC";
 }
 

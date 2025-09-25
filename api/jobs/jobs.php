@@ -38,11 +38,11 @@ $types  = "";
 
 // ✅ Role-based filter for admin_action
 if ($userRole === 'admin') {
-    // Admin sees both pending + approval
-    $filters[] = "(j.admin_action = 'pending' OR j.admin_action = 'approval')";
+    // Admin sees both pending + approved
+    $filters[] = "(j.admin_action = 'pending' OR j.admin_action = 'approved')";
 } else {
     // Other roles only see approved jobs
-    $filters[] = "j.admin_action = 'approval'";
+    $filters[] = "j.admin_action = 'approved'";
 }
 
 // Keyword search (title/description)

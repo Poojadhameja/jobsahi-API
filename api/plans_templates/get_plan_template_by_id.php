@@ -63,11 +63,11 @@ try {
     // ✅ Role-based filtering for admin_action
     $adminActionCondition = "";
     if ($userRole === 'ADMIN') {
-        // ADMIN can see all (pending + approval)
-        $adminActionCondition = "({$adminActionColumn} = 'pending' OR {$adminActionColumn} = 'approval')";
+        // ADMIN can see all (pending + approved)
+        $adminActionCondition = "({$adminActionColumn} = 'pending' OR {$adminActionColumn} = 'approved')";
     } else {
-        // Recruiter, Institute, Student → can see only approval
-        $adminActionCondition = "({$adminActionColumn} = 'approval')";
+        // Recruiter, Institute, Student → can see only approved
+        $adminActionCondition = "({$adminActionColumn} = 'approved')";
     }
 
     // Build the query with correct column names matching the actual schema

@@ -32,9 +32,9 @@ $sql = "SELECT
     FROM institute_profiles
 ";
 
-// Only admin sees 'pending', others only see 'approval'
+// Only admin sees 'pending', others only see 'approved'
 if ($user_role !== 'admin') {
-    $sql .= " WHERE admin_action = 'approval'";
+    $sql .= " WHERE admin_action = 'approved'";
 }
 
 $sql .= " ORDER BY created_at DESC";
