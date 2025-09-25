@@ -12,7 +12,7 @@ authenticateJWT('admin');
 
 include "../db.php";
 
-$sql = "SELECT id, name, email, role, phone_number, is_verified FROM users ORDER BY id DESC";
+$sql = "SELECT id, user_name, email, role, phone_number, is_verified FROM users ORDER BY id DESC";
 $result = mysqli_query($conn, $sql);
 
 if (!$result) {

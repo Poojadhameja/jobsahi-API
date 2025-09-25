@@ -42,7 +42,7 @@ if (empty($email) || empty($password)) {
 }
 
 // Use prepared statements
-$sql = "SELECT id, name, email, role, phone_number, is_verified, password 
+$sql = "SELECT id, user_name, email, role, phone_number, is_verified, password 
         FROM users 
         WHERE email = ?";
 
@@ -60,7 +60,7 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
                 $payload = [
                     'user_id' => $user['id'],
                     'email' => $user['email'],
-                    'name' => $user['name'],
+                    'name' => $user['user_name'],
                     'role' => $user['role'],
                     'phone_number' => $user['phone_number'],
                     'iat' => time(),

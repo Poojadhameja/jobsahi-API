@@ -38,8 +38,6 @@ try {
         throw new Exception("MySQLi connection failed: " . mysqli_connect_error());
     }
 
-    echo "✅ Database connected successfully";
-
 } catch (Exception $e) {
     die("❌ DB Connection failed: " . $e->getMessage());
 }

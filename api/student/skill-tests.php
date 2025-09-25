@@ -1,5 +1,5 @@
 <?php
-// skill-tests.php - List attempts & results for skill tests
+// skill-tests.php - List attempts & results for skill tests with admin_action filter
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
@@ -9,8 +9,9 @@ require_once '../db.php';
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
-// Authenticate JWT for student role
-authenticateJWT('student'); // Only allow students
+// Authenticate JWT and get user info
+$current_user = authenticateJWT(['admin', 'student']); 
+// $current_user should have 'role' and 'id' (decoded JWT payload)
 
 // Only allow GET requests
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -22,41 +23,52 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 $student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : null;
 
 try {
-    if ($student_id) {
-        $sql = "SELECT 
-                    id,
-                    student_id,
-                    test_platform,
-                    test_name,
-                    score,
-                    max_score,
-                    completed_at,
-                    badge_awarded,
-                    passed,
-                    created_at,
-                    modified_at
-                FROM skill_tests
-                WHERE deleted_at IS NULL AND student_id = ?
-                ORDER BY completed_at DESC";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("i", $student_id);
+    // Base SQL query
+    $sql = "SELECT 
+                id,
+                student_id,
+                test_platform,
+                test_name,
+                score,
+                max_score,
+                completed_at,
+                badge_awarded,
+                passed,
+                admin_action,
+                created_at,
+                modified_at
+            FROM skill_tests
+            WHERE deleted_at IS NULL";
+
+    $params = [];
+    $types = "";
+
+    // Role-based filter
+    if ($current_user['role'] !== 'admin') {
+        // Non-admin users can only see 'approval' records
+        $sql .= " AND admin_action = 'approval'";
     } else {
-        $sql = "SELECT 
-                    id,
-                    student_id,
-                    test_platform,
-                    test_name,
-                    score,
-                    max_score,
-                    completed_at,
-                    badge_awarded,
-                    passed,
-                    created_at,
-                    modified_at
-                FROM skill_tests
-                WHERE deleted_at IS NULL
-                ORDER BY completed_at DESC";
-        $stmt = $conn->prepare($sql);
+        // Admin can see everything (pending + approval)
+        if ($student_id) {
+            $sql .= " AND student_id = ?";
+            $types = "i";
+            $params[] = $student_id;
+        }
+    }
+
+    // If student_id is provided for non-admins, include it
+    if ($student_id && $current_user['role'] !== 'admin') {
+        $sql .= " AND student_id = ?";
+        $types .= "i";
+        $params[] = $student_id;
+    }
+
+    $sql .= " ORDER BY completed_at DESC";
+
+    $stmt = $conn->prepare($sql);
+
+    if (!empty($params)) {
+        $stmt->bind_param($types, ...$params);
     }
 
     $stmt->execute();

@@ -49,7 +49,7 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
 }
 
 // Check if user exists
-$sql = "SELECT id, name, email FROM users WHERE email = ?";
+$sql = "SELECT id, user_name, email FROM users WHERE email = ?";
 if ($stmt = mysqli_prepare($conn, $sql)) {
     mysqli_stmt_bind_param($stmt, "s", $email);
     mysqli_stmt_execute($stmt);

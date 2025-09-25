@@ -1,65 +1,92 @@
 <?php
-// skill-tests 
+// skill-tests.php
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST');
+header('Access-Control-Allow-Methods: POST, GET');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
+include "../db.php";
 
-// Authenticate and check for student role
-authenticateJWT('student');
+// Authenticate JWT and get user role
+$current_user = authenticateJWT(['admin', 'student']);
+$user_role = $current_user['role'] ?? '';
 
-include "../db.php"; 
+// ----------------------
+// POST: Insert Skill Test
+// ----------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $data = json_decode(file_get_contents("php://input"), true);
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    echo json_encode(["status" => false, "message" => "Only POST requests allowed"]);
+    // Required fields
+    $required = ['student_id','test_platform','test_name','score','max_score','completed_at','badge_awarded','passed','admin_action'];
+    foreach ($required as $field) {
+        if (!isset($data[$field])) {
+            echo json_encode(["status"=>false,"message"=>"Missing field: $field"]);
+            exit;
+        }
+    }
+
+    // Extract fields
+    $student_id    = $data['student_id'];
+    $test_platform = $data['test_platform'];
+    $test_name     = $data['test_name'];
+    $score         = $data['score'];
+    $max_score     = $data['max_score'];
+    $completed_at  = $data['completed_at'];
+    $badge_awarded = $data['badge_awarded'];
+    $passed        = $data['passed'];
+    $admin_action  = $data['admin_action']; // pending/approval
+
+    try {
+        $stmt = $conn->prepare("
+            INSERT INTO skill_tests 
+            (student_id, test_platform, test_name, score, max_score, completed_at, badge_awarded, passed, admin_action, created_at, modified_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        ");
+        $stmt->bind_param("issiiissi", $student_id, $test_platform, $test_name, $score, $max_score, $completed_at, $badge_awarded, $passed, $admin_action);
+
+        if ($stmt->execute()) {
+            echo json_encode([
+                "status"=>true,
+                "message"=>"Skill test submitted successfully",
+                "insert_id"=>$stmt->insert_id
+            ]);
+        } else {
+            echo json_encode(["status"=>false,"message"=>"Failed to submit skill test"]);
+        }
+    } catch (Exception $e) {
+        echo json_encode(["status"=>false,"message"=>$e->getMessage()]);
+    }
     exit;
 }
 
-// Get raw input JSON
-$data = json_decode(file_get_contents("php://input"), true);
+// ----------------------
+// GET: Fetch Skill Tests
+// ----------------------
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    try {
+        if ($user_role === 'admin') {
+            // Admin sees all records
+            $query = "SELECT * FROM skill_tests ORDER BY created_at DESC";
+        } else {
+            // Other roles see only approved tests
+            $query = "SELECT * FROM skill_tests WHERE admin_action='approval' ORDER BY created_at DESC";
+        }
 
-// Validate required fields
-$required = ['student_id', 'test_platform', 'test_name', 'score', 'max_score', 'completed_at', 'badge_awarded', 'passed'];
-foreach ($required as $field) {
-    if (!isset($data[$field])) {
-        echo json_encode(["status" => false, "message" => "Missing field: $field"]);
-        exit;
+        $result = $conn->query($query);
+        $tests = [];
+        while ($row = $result->fetch_assoc()) {
+            $tests[] = $row;
+        }
+
+        echo json_encode(["status"=>true,"data"=>$tests]);
+    } catch (Exception $e) {
+        echo json_encode(["status"=>false,"message"=>$e->getMessage()]);
     }
+    exit;
 }
 
-// Extract fields
-$student_id    = $data['student_id'];
-$test_platform = $data['test_platform'];
-$test_name     = $data['test_name'];
-$score         = $data['score'];
-$max_score     = $data['max_score'];
-$completed_at  = $data['completed_at'];
-$badge_awarded = $data['badge_awarded'];
-$passed        = $data['passed'];
-
-try {
-    // Insert into skill_tests table
-    $stmt = $conn->prepare("
-        INSERT INTO skill_tests 
-            (student_id, test_platform, test_name, score, max_score, completed_at, badge_awarded, passed, created_at, modified_at) 
-        VALUES 
-            (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-    ");
-    $stmt->bind_param("issiiisi", $student_id, $test_platform, $test_name, $score, $max_score, $completed_at, $badge_awarded, $passed);
-    
-    if ($stmt->execute()) {
-        echo json_encode([
-            "status" => true,
-            "message" => "Skill test result submitted successfully",
-            "insert_id" => $stmt->insert_id
-        ]);
-    } else {
-        echo json_encode(["status" => false, "message" => "Failed to submit result"]);
-    }
-} catch (Exception $e) {
-    echo json_encode(["status" => false, "message" => $e->getMessage()]);
-}
-?>
+// Invalid method
+echo json_encode(["status"=>false,"message"=>"Only POST and GET requests are allowed"]);

@@ -1,5 +1,5 @@
 <?php
-// jobs.php - Job Listings API (Student access with JWT)
+// jobs.php - Job Listings API (Role-based access with admin_action filter)
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
@@ -8,8 +8,16 @@ header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
-// ✅ Authenticate and allow only "student" role
-$decoded = authenticateJWT('student');  // decoded JWT payload
+// ✅ Authenticate all roles
+$decoded = authenticateJWT(['student', 'admin', 'recruiter', 'institute']);  // decoded JWT payload
+
+// Ensure we got the role correctly
+$userRole = isset($decoded['role']) ? $decoded['role'] : null;
+
+if (!$userRole) {
+    echo json_encode(["message" => "Unauthorized: Role not found in token", "status" => false]);
+    exit;
+}
 
 // Check request method
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -27,6 +35,15 @@ if (!$conn) {
 $filters = [];
 $params = [];
 $types  = "";
+
+// ✅ Role-based filter for admin_action
+if ($userRole === 'admin') {
+    // Admin sees both pending + approval
+    $filters[] = "(j.admin_action = 'pending' OR j.admin_action = 'approval')";
+} else {
+    // Other roles only see approved jobs
+    $filters[] = "j.admin_action = 'approval'";
+}
 
 // Keyword search (title/description)
 if (!empty($_GET['keyword'])) {
@@ -81,6 +98,7 @@ $sql = "SELECT
             j.is_remote,
             j.no_of_vacancies,
             j.status,
+            j.admin_action,
             j.created_at,
             (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS views
         FROM jobs j";

@@ -1,21 +1,22 @@
 <?php
-// student_enrollments.php - List student enrolled courses
+// student_enrollments.php - List student enrolled courses with admin_action filter
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
 require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php'; // include your JWT helper
-require_once '../auth/auth_middleware.php'; // include middleware
+require_once '../jwt_token/jwt_helper.php'; // JWT helper
+require_once '../auth/auth_middleware.php'; // middleware
 
-// Authenticate JWT for student role
-authenticateJWT('student'); // <-- this will check JWT and role
+// Authenticate user for all roles
+$decoded = authenticateJWT(['admin', 'student']); 
 
-// Get student_id from query params
-$student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : 0;
+// Get user role from decoded token
+$user_role = isset($decoded['role']) ? $decoded['role'] : '';
 
-if ($student_id <= 0) {
+// Validate student_id from GET
+if (!isset($_GET['student_id']) || intval($_GET['student_id']) <= 0) {
     http_response_code(400);
     echo json_encode([
         "status" => false,
@@ -24,19 +25,27 @@ if ($student_id <= 0) {
     exit;
 }
 
+$student_id = intval($_GET['student_id']);
+
 try {
-    // SQL: join student_course_enrollments with courses
+    // Base SQL: join enrollments with courses
     $sql = "SELECT 
-                e.id as enrollment_id,
-                c.id as course_id,
+                e.id AS enrollment_id,
+                c.id AS course_id,
                 c.title,
                 c.description,
                 c.duration,
                 c.fee,
-                c.institute_id
+                c.institute_id,
+                c.admin_action
             FROM student_course_enrollments e
             INNER JOIN courses c ON e.course_id = c.id
             WHERE e.student_id = ?";
+
+    // Append admin_action filter for non-admins
+    if ($user_role !== 'admin') {
+        $sql .= " AND c.admin_action = 'approval'";
+    }
 
     if ($stmt = $conn->prepare($sql)) {
         $stmt->bind_param("i", $student_id);
@@ -56,6 +65,7 @@ try {
     } else {
         throw new Exception("Failed to prepare statement: " . $conn->error);
     }
+
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode([

@@ -20,12 +20,12 @@ include "../db.php";
 
 $search_value = mysqli_real_escape_string($conn, $search_value); // prevent SQL injection
 
-$sql = "SELECT id, name, email, role, phone_number, is_verified 
+$sql = "SELECT id, user_name, email, role, phone_number, is_verified 
         FROM users 
         WHERE id LIKE '{$search_value}%' 
            OR email LIKE '{$search_value}%' 
            OR phone_number LIKE '{$search_value}%'
-        ORDER BY name ASC";
+        ORDER BY user_name ASC";
 
 $result = mysqli_query($conn, $sql) or die("SQL Query Failed.");
 

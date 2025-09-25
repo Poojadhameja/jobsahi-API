@@ -19,7 +19,7 @@ require_once '../auth/auth_middleware.php';
 require_once '../db.php';
 
 // Authenticate JWT for both admin and student roles
-authenticateJWT(['admin', 'student']);
+authenticateJWT(['admin', 'recruiter','institute' , 'student']);
 
 // Check request method
 if ($_SERVER['REQUEST_METHOD'] !== 'PATCH') {

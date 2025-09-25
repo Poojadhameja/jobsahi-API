@@ -1,17 +1,34 @@
 <?php
-// get_employer_profiles.php - Get all employer/recruiter profiles (Admin and Student access)
+// get_employer_profiles.php - Get employer/recruiter profiles with admin_action filter
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
-
-// Authenticate and check for recruiter role
-authenticateJWT(['recruiter']);
-
 include "../db.php";
 
-$sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, created_at, modified_at FROM recruiter_profiles WHERE deleted_at IS NULL ORDER BY id DESC";
+// ✅ Authenticate user and get decoded token
+$decoded_token = authenticateJWT(['admin', 'recruiter']);
+$user_role = $decoded_token['role']; // <-- fixed here
+
+// Build SQL query based on role
+if ($user_role === 'admin') {
+    // Admin sees all pending and approved
+    $sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, admin_action, created_at, modified_at 
+            FROM recruiter_profiles 
+            WHERE deleted_at IS NULL
+            AND (admin_action = 'pending' OR admin_action = 'approval')
+            ORDER BY id DESC";
+} else {
+    // Other roles see only approved
+    $sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, admin_action, created_at, modified_at 
+            FROM recruiter_profiles 
+            WHERE deleted_at IS NULL
+            AND admin_action = 'approval'
+            ORDER BY id DESC";
+}
+
 $result = mysqli_query($conn, $sql);
 
 if (!$result) {

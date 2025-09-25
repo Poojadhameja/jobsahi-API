@@ -9,7 +9,7 @@ require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 // ✅ Authenticate as student role
-$decoded = authenticateJWT('student');
+$decoded = authenticateJWT(['admin', 'student']);
 
 // Handle possible payload key mismatch
 if (isset($decoded['id'])) {
@@ -31,7 +31,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 include "../db.php";
-echo "✅ Database connected successfully";
 
 // Verify student exists
 $verify_sql = "SELECT id FROM users WHERE id = ? AND role = 'student'";

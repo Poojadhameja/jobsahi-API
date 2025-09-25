@@ -8,7 +8,7 @@ require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
 
 // Authenticate JWT for student role
-$studentData = authenticateJWT('student'); // decoded JWT payload
+$studentData = authenticateJWT(['admin', 'student']); // decoded JWT payload
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(["message" => "Only POST requests allowed", "status" => false]);

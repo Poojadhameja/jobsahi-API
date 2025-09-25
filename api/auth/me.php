@@ -47,7 +47,7 @@ if (!$decoded_token) {
 $user_id = $decoded_token['user_id'];
 
 // Fetch user basic information
-$user_sql = "SELECT id, name, email, phone_number, role, is_verified 
+$user_sql = "SELECT id, user_name, email, phone_number, role, is_verified 
              FROM users WHERE id = ?";
 
 if ($user_stmt = mysqli_prepare($conn, $user_sql)) {

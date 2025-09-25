@@ -10,7 +10,7 @@ require_once '../auth/auth_middleware.php';
 require_once '../db.php'; // DB connection
 
 // Authenticate and allow both admin and student roles
-authenticateJWT(['admin', 'student']);
+authenticateJWT(['admin', 'recruiter','institute' , 'student']);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     echo json_encode(["status" => false, "message" => "Only GET requests allowed"]);

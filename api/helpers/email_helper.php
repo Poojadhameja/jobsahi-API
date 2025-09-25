@@ -2,7 +2,6 @@
 // email_helper.php - Fixed Email sending functions
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
-require '../vendor/autoload.php';
 
 function sendPasswordResetOTP($email, $name, $otp) {
     // Use PHPMailer instead of basic mail() function

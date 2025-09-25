@@ -20,10 +20,10 @@ if (!in_array($role, $valid_roles)) {
 
 include "../db.php";
 
-$sql = "SELECT id, name, email, role, phone_number, is_verified 
+$sql = "SELECT id, user_name, email, role, phone_number, is_verified 
         FROM users 
         WHERE role = '{$role}' 
-        ORDER BY name ASC";
+        ORDER BY user_name ASC";
 $result = mysqli_query($conn, $sql) or die("SQL Query Failed.");
 
 if(mysqli_num_rows($result) > 0){
