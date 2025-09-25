@@ -22,34 +22,34 @@ $role = $decoded['role']; // Assuming 'role' exists in your JWT payload
 try {
     // ✅ Apply role-based filter for admin_action
     if ($role === 'admin') {
-        // Admin sees both pending and approval
+        // Admin sees both pending and approved
         $sql = "
             SELECT 
                 report_type,
                 COUNT(*) AS total_reports,
                 COUNT(CASE WHEN admin_action = 'pending' THEN 1 END) AS pending_reports,
-                COUNT(CASE WHEN admin_action = 'approval' THEN 1 END) AS approved_reports,
+                COUNT(CASE WHEN admin_action = 'approved' THEN 1 END) AS approved_reports,
                 COUNT(CASE WHEN DATE(generated_at) = CURDATE() THEN 1 END) AS reports_today,
                 COUNT(CASE WHEN DATE(generated_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN 1 END) AS reports_this_week,
                 COUNT(CASE WHEN DATE(generated_at) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 1 END) AS reports_this_month
             FROM reports
-            WHERE (admin_action = 'pending' OR admin_action = 'approval')
+            WHERE (admin_action = 'pending' OR admin_action = 'approved')
             GROUP BY report_type
             ORDER BY total_reports DESC
         ";
     } else {
-        // Recruiter, Institute → only approval
+        // Recruiter, Institute → only approved
         $sql = "
             SELECT 
                 report_type,
                 COUNT(*) AS total_reports,
                 COUNT(CASE WHEN admin_action = 'pending' THEN 1 END) AS pending_reports,
-                COUNT(CASE WHEN admin_action = 'approval' THEN 1 END) AS approved_reports,
+                COUNT(CASE WHEN admin_action = 'approved' THEN 1 END) AS approved_reports,
                 COUNT(CASE WHEN DATE(generated_at) = CURDATE() THEN 1 END) AS reports_today,
                 COUNT(CASE WHEN DATE(generated_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN 1 END) AS reports_this_week,
                 COUNT(CASE WHEN DATE(generated_at) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 1 END) AS reports_this_month
             FROM reports
-            WHERE admin_action = 'approval'
+            WHERE admin_action = 'approved'
             GROUP BY report_type
             ORDER BY total_reports DESC
         ";

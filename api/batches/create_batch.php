@@ -31,7 +31,7 @@ try {
             $stmt = $conn->prepare($sql);
         } else {
             // Other roles see only approved batches
-            $sql = "SELECT * FROM batches WHERE admin_action = 'approval'";
+            $sql = "SELECT * FROM batches WHERE admin_action = 'approved'";
             $stmt = $conn->prepare($sql);
         }
 

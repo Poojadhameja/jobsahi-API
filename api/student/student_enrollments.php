@@ -44,7 +44,7 @@ try {
 
     // Append admin_action filter for non-admins
     if ($user_role !== 'admin') {
-        $sql .= " AND c.admin_action = 'approval'";
+        $sql .= " AND c.admin_action = 'approved'";
     }
 
     if ($stmt = $conn->prepare($sql)) {

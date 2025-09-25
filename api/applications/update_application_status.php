@@ -53,7 +53,7 @@ try {
         JOIN jobs j ON a.job_id = j.id
         WHERE a.id = ?
           AND (
-                (a.admin_action = 'approval') 
+                (a.admin_action = 'approved') 
                 OR (a.admin_action = 'pending' AND ? = 'admin')
               )
     ";

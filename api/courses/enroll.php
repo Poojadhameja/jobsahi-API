@@ -93,9 +93,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     // Build SQL query with role-based admin_action filter
     if ($user_role === 'admin') {
-        $sql = "SELECT * FROM student_course_enrollments WHERE admin_action IN ('pending','approval')";
+        $sql = "SELECT * FROM student_course_enrollments WHERE admin_action IN ('pending','approved')";
     } else {
-        $sql = "SELECT * FROM student_course_enrollments WHERE admin_action = 'approval'";
+        $sql = "SELECT * FROM student_course_enrollments WHERE admin_action = 'approved'";
     }
 
     $result = mysqli_query($conn, $sql);

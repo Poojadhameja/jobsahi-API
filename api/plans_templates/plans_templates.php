@@ -48,7 +48,7 @@ try {
             // Other roles → only if approved
             $sql = "SELECT id, plan_name, type, price, duration_days, features, admin_action 
                     FROM plan_templates 
-                    WHERE id = ? AND admin_action = 'approval'";
+                    WHERE id = ? AND admin_action = 'approved'";
         }
 
         $checkStmt = $conn->prepare($sql);

@@ -47,11 +47,11 @@ try {
     $whereCondition = "";
     if ($adminActionColumn !== 'NULL') {
         if ($userRole === 'admin') {
-            // Admin sees both pending + approval
-            $whereCondition = "WHERE {$adminActionColumn} IN ('pending', 'approval')";
+            // Admin sees both pending + approved
+            $whereCondition = "WHERE {$adminActionColumn} IN ('pending', 'approved')";
         } else {
-            // Recruiter, Institute, Student see only approval
-            $whereCondition = "WHERE {$adminActionColumn} = 'approval'";
+            // Recruiter, Institute, Student see only approved
+            $whereCondition = "WHERE {$adminActionColumn} = 'approved'";
         }
     }
 

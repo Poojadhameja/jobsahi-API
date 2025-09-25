@@ -45,10 +45,10 @@ try {
 
     // Role-based filter
     if ($current_user['role'] !== 'admin') {
-        // Non-admin users can only see 'approval' records
-        $sql .= " AND admin_action = 'approval'";
+        // Non-admin users can only see 'approved' records
+        $sql .= " AND admin_action = 'approved'";
     } else {
-        // Admin can see everything (pending + approval)
+        // Admin can see everything (pending + approved)
         if ($student_id) {
             $sql .= " AND student_id = ?";
             $types = "i";

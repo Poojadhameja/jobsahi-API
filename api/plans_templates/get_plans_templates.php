@@ -32,11 +32,11 @@ try {
 
     // ✅ Build SQL query based on role
     if ($role === 'admin') {
-        // Admin sees both pending & approval
-        $sql = "SELECT * FROM plan_templates WHERE admin_action IN ('pending', 'approval')";
+        // Admin sees both pending & approved
+        $sql = "SELECT * FROM plan_templates WHERE admin_action IN ('pending', 'approved')";
     } else {
-        // Other roles see only approval
-        $sql = "SELECT * FROM plan_templates WHERE admin_action = 'approval'";
+        // Other roles see only approved
+        $sql = "SELECT * FROM plan_templates WHERE admin_action = 'approved'";
     }
 
     $stmt = $conn->prepare($sql);

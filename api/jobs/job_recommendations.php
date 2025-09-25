@@ -65,7 +65,7 @@ if ($role === 'student') {
 
 // ✅ Build SQL query with role-based visibility
 if ($role === 'admin') {
-    // Admin can see both pending + approval
+    // Admin can see both pending + approved
     $get_recommend_sql = "
         SELECT jr.id AS recommendation_id, jr.student_id, jr.job_id, jr.source, jr.score, jr.created_at,
                j.title, j.location, j.job_type, j.salary_min, j.salary_max, j.status, j.admin_action
@@ -81,7 +81,7 @@ if ($role === 'admin') {
                j.title, j.location, j.job_type, j.salary_min, j.salary_max, j.status, j.admin_action
         FROM job_recommendations jr
         JOIN jobs j ON jr.job_id = j.id
-        WHERE j.admin_action = 'approval'
+        WHERE j.admin_action = 'approved'
         " . ($role === 'student' ? "AND jr.student_id = ?" : "") . "
         ORDER BY jr.score DESC, jr.created_at DESC
     ";

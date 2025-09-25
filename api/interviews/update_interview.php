@@ -62,12 +62,12 @@ try {
     // Role-based visibility query for admin_action
     if ($user_role === 'admin') {
         // Admin sees all, including 'pending'
-        $check_sql = "SELECT * FROM interviews WHERE id = ? AND (admin_action = 'pending' OR admin_action = 'approval')";
+        $check_sql = "SELECT * FROM interviews WHERE id = ? AND (admin_action = 'pending' OR admin_action = 'approved')";
         $check_stmt = $conn->prepare($check_sql);
         $check_stmt->bind_param("i", $interview_id);
     } else {
         // Non-admin (recruiter, institute, student) sees only approved interviews
-        $check_sql = "SELECT * FROM interviews WHERE id = ? AND admin_action = 'approval'";
+        $check_sql = "SELECT * FROM interviews WHERE id = ? AND admin_action = 'approved'";
         $check_stmt = $conn->prepare($check_sql);
         $check_stmt->bind_param("i", $interview_id);
     }

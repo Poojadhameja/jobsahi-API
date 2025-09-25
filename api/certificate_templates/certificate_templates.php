@@ -44,7 +44,7 @@ try {
             ORDER BY created_at DESC
         ";
     } else {
-        // Other roles see only 'approval' templates
+        // Other roles see only 'approved' templates
         $sql = "
             SELECT 
                 id, 
@@ -62,7 +62,7 @@ try {
                 deleted_at, 
                 admin_action
             FROM certificate_templates
-            WHERE is_active = 1 AND admin_action = 'approval'
+            WHERE is_active = 1 AND admin_action = 'approved'
             ORDER BY created_at DESC
         ";
     }

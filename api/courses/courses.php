@@ -34,7 +34,7 @@ try {
     } else {
         // Students and other roles see only approved courses
         $sql .= " AND admin_action = ?";
-        $params[] = 'approved'; // Changed from 'approval' to 'approved'
+        $params[] = 'approved'; // Changed from 'approved' to 'approved'
         $types .= "s";
     }
 
