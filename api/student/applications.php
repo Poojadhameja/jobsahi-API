@@ -1,30 +1,12 @@
 <?php
 // applications.php - Fetch all applications with optional filters
-
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
-
-// Include JWT helper & middleware
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 // ✅ Authenticate JWT (allow both admin & student roles)
 $current_user = authenticateJWT(['admin', 'student']);
 
-// Only allow GET requests
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    echo json_encode(["message" => "Only GET requests allowed", "status" => false]);
-    exit;
-}
 
-include "../db.php";
 
-if (!$conn) {
-    echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
-    exit;
-}
 
 // ---- Fetch Filters from Query Params ----
 $student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : null;

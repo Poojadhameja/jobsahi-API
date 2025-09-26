@@ -1,19 +1,11 @@
 <?php
 // courses.php - Get course list with proper role-based visibility
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
-header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With');
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 try {
     // Authenticate user and get role
     $user = authenticateJWT(['admin', 'student', 'institute']);
     $user_role = $user['role'] ?? 'student';
-    
-    require_once '../db.php'; // DB connection
 
     // Base SQL - Select all necessary fields
     $sql = "SELECT id, institute_id, title, description, duration, fee, admin_action FROM courses WHERE 1=1";

@@ -1,13 +1,6 @@
 <?php
 // get-notifications.php 
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
-header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With');
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-require_once '../db.php'; // DB connection
+require_once '../cors.php';
 
 // Authenticate and allow both admin and student roles
 authenticateJWT(['admin', 'recruiter','institute' , 'student']);

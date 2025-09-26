@@ -1,19 +1,10 @@
 <?php
 // certificates.php - Get student certificates with role-based visibility
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-// ✅ JWT
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 // Authenticate user (admin, student allowed)
 $current_user = authenticateJWT(['admin', 'student']);
 $role = $current_user['role'];  // role from JWT payload
-
-require_once '../db.php';
 
 // ✅ Only allow GET
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {

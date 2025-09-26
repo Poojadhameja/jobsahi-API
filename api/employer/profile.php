@@ -1,12 +1,6 @@
 <?php
 // get_employer_profiles.php - Get employer/recruiter profiles with admin_action filter
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-include "../db.php";
+require_once '../cors.php';
 
 // ✅ Authenticate user and get decoded token
 $decoded_token = authenticateJWT(['admin', 'recruiter']);

@@ -1,12 +1,6 @@
 <?php
 // interviews.php - Fetch interviews (Student/Admin)
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 // ✅ Authenticate and allow roles
 $decoded = authenticateJWT(['admin', 'student']);  

@@ -1,9 +1,6 @@
 <?php
 // get_user_stats.php - Get user statistics
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-
-include "../db.php";
+require_once '../cors.php';
 
 $stats_sql = "
     SELECT 

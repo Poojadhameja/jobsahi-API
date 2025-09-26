@@ -1,16 +1,11 @@
 <?php
 // change_password.php - Change user password
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: PUT');
-header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Access-Control-Allow-Methods, Authorization, X-Requested-With');
+require_once '../cors.php';
 
 $data = json_decode(file_get_contents('php://input'), true);
 $user_id = $data['uid'];
 $current_password = $data['current_password'];
 $new_password = $data['new_password'];
-
-include "../db.php";
 
 // Verify current password
 $check_sql = "SELECT password FROM users WHERE id = {$user_id}";

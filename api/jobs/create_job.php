@@ -1,19 +1,6 @@
 <?php
 // create_job.php - Create new job posting (Admin, Recruiter access)
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 // ✅ Authenticate JWT and allow multiple roles
 $decoded = authenticateJWT(['admin', 'recruiter']); // returns array
@@ -97,24 +84,27 @@ try {
     }
     
     // Insert job
-    $stmt = $conn->prepare("INSERT INTO jobs (recruiter_id, title, description, location, skills_required, salary_min, salary_max, job_type, experience_required, application_deadline, is_remote, no_of_vacancies, status, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
-    
-    $stmt->bind_param("issssddsssiii", 
-        $recruiter_id, 
-        $title, 
-        $description, 
-        $location, 
-        $skills_required, 
-        $salary_min, 
-        $salary_max, 
-        $job_type, 
-        $experience_required, 
-        $application_deadline, 
-        $is_remote, 
-        $no_of_vacancies, 
-        $status
-    );
+$stmt = $conn->prepare("INSERT INTO jobs (
+    recruiter_id, title, description, location, skills_required, salary_min, salary_max, 
+    job_type, experience_required, application_deadline, is_remote, no_of_vacancies, status, created_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+
+$stmt->bind_param("issssddsssiss", 
+    $recruiter_id, 
+    $title, 
+    $description, 
+    $location, 
+    $skills_required, 
+    $salary_min, 
+    $salary_max, 
+    $job_type, 
+    $experience_required, 
+    $application_deadline, 
+    $is_remote, 
+    $no_of_vacancies, 
+    $status   // ✅ string type
+);
+
     
     if ($stmt->execute()) {
         echo json_encode([

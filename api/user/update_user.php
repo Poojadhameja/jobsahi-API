@@ -17,8 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'PUT' && $_SERVER['REQUEST_METHOD'] !== 'POST
 }
 
 // Debug: Check if Authorization header exists
-$headers = getallheaders();
-if (!isset($headers['Authorization']) && !isset($headers['authorization'])) {
+$headers = getallheaders();if (!isset($headers['Authorization']) && !isset($headers['authorization'])) {
     http_response_code(401);
     echo json_encode(array(
         "message" => "Authorization header missing", 
