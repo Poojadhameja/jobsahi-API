@@ -57,7 +57,7 @@ try {
         $start_date    = isset($data['start_date']) ? $data['start_date'] : null;
         $end_date      = isset($data['end_date']) ? $data['end_date'] : null;
         $instructor_id = isset($data['instructor_id']) ? (int)$data['instructor_id'] : null;
-        $admin_action  = "pending"; // default value
+        $admin_action  = "approved"; // default value
 
         // Validate course exists
         $check = $conn->prepare("SELECT id FROM courses WHERE id = ?");

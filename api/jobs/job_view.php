@@ -5,18 +5,6 @@ require_once '../cors.php';
 // ✅ Authenticate (student + admin)
 $decoded = authenticateJWT(['student', 'admin','recruiter','institute']); // decoded JWT payload
 
-include "../db.php";
-if (!$conn) {
-    echo json_encode(["message" => "❌ DB connection failed: " . mysqli_connect_error(), "status" => false]);
-    exit;
-}
-
-// Allow only POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    echo json_encode(["message" => "Only POST requests allowed", "status" => false]);
-    exit;
-}
-
 // ✅ Get job_id ONLY from URL (?id=...)
 $job_id = isset($_GET['id']) && is_numeric($_GET['id']) ? (int)$_GET['id'] : null;
 if (!$job_id) {

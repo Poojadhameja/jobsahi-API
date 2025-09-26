@@ -1,36 +1,22 @@
 <?php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+require_once '../cors.php';
 
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-
-// Authenticate and allow both admin, recruiter, institute and student roles
-authenticateJWT(['admin', 'student','recruiter','institute']);
-
-include "../db.php";
-
-// Only allow POST requests
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    echo json_encode(["status" => false, "message" => "Only POST requests allowed"]);
-    exit;
-}
+// Authenticate and allow admin, recruiter, institute, and student roles
+$decoded = authenticateJWT(['admin', 'student', 'recruiter', 'institute']);
+$sender_id = intval($decoded['user_id']); // ✅ Sender is the logged-in user
 
 // Get raw POST body
 $input = json_decode(file_get_contents("php://input"), true);
 
-// Validate input
-if (!isset($input['sender_id'], $input['receiver_id'], $input['message'], $input['type'])) {
+// Validate input (no need for sender_id here)
+if (!isset($input['receiver_id'], $input['message'], $input['type'])) {
     echo json_encode([
         "status" => false,
-        "message" => "Missing required fields: sender_id, receiver_id, message, type"
+        "message" => "Missing required fields: receiver_id, message, type"
     ]);
     exit;
 }
 
-$sender_id   = intval($input['sender_id']);
 $receiver_id = intval($input['receiver_id']);
 $message     = trim($input['message']);
 $type        = trim($input['type']); // e.g., 'text', 'image', etc.

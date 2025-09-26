@@ -6,13 +6,6 @@ require_once '../cors.php';
 $decodedToken = authenticateJWT(['student', 'recruiter', 'admin']);
 $user_role = $decodedToken['role']; // role from JWT
 
-// ✅ Check request method
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    echo json_encode(["message" => "Only GET requests allowed", "status" => false]);
-    exit;
-}
-
-include "../db.php";
 
 // ✅ Check DB connection
 if (!$conn) {
