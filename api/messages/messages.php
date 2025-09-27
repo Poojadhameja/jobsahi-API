@@ -1,5 +1,6 @@
 <?php
 require_once '../cors.php';
+require_once '../db.php'; // ✅ make sure DB connection is included
 
 // Authenticate and allow admin, recruiter, institute, and student roles
 $decoded = authenticateJWT(['admin', 'student', 'recruiter', 'institute']);
@@ -57,28 +58,24 @@ if ($receiver_role && !in_array($receiver_role, $valid_roles)) {
 }
 
 try {
-    // If receiver_role is not provided, we need to fetch it from the database
+    // If receiver_role is not provided, try to fetch it from the database
     if (!$receiver_role) {
-        // You'll need to determine how to get receiver_role
-        // This assumes you have user tables for each role type
-        // Modify this query based on your actual database structure
-        
         $role_query = "
-            SELECT 'student' as role FROM students WHERE id = ? 
+            SELECT 'student' AS role FROM students WHERE id = ? 
             UNION ALL 
-            SELECT 'recruiter' as role FROM recruiters WHERE id = ? 
+            SELECT 'recruiter' AS role FROM recruiters WHERE id = ? 
             UNION ALL 
-            SELECT 'institute' as role FROM institutes WHERE id = ? 
+            SELECT 'institute' AS role FROM institutes WHERE id = ? 
             UNION ALL 
-            SELECT 'admin' as role FROM admins WHERE id = ?
+            SELECT 'admin' AS role FROM admins WHERE id = ?
             LIMIT 1
         ";
-        
+
         $role_stmt = $conn->prepare($role_query);
         $role_stmt->bind_param("iiii", $receiver_id, $receiver_id, $receiver_id, $receiver_id);
         $role_stmt->execute();
         $role_result = $role_stmt->get_result();
-        
+
         if ($role_result->num_rows > 0) {
             $role_row = $role_result->fetch_assoc();
             $receiver_role = $role_row['role'];
@@ -92,11 +89,22 @@ try {
     }
 
     // Insert message with all required and optional fields
-    $sql = "INSERT INTO messages (sender_id, sender_role, receiver_id, receiver_role, message, attachment_url, attachment_type, type, created_at)
+    $sql = "INSERT INTO messages 
+            (sender_id, sender_role, receiver_id, receiver_role, message, attachment_url, attachment_type, type, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())";
-    
+
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("ississss", $sender_id, $sender_role, $receiver_id, $receiver_role, $message, $attachment_url, $attachment_type, $type);
+    // ✅ FIXED bind_param types (was wrong before)
+    $stmt->bind_param("isisssss",
+        $sender_id,        // i = int
+        $sender_role,      // s = string
+        $receiver_id,      // i = int
+        $receiver_role,    // s = string
+        $message,          // s = string
+        $attachment_url,   // s = string (nullable)
+        $attachment_type,  // s = string (nullable)
+        $type              // s = string
+    );
 
     if ($stmt->execute()) {
         echo json_encode([

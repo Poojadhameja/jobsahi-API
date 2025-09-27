@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/../vendor/autoload.php';
 
-require_once __DIR__ . '/cors.php';
 // Database Configuration
 $dbHost = '127.0.0.1';
 $dbPort = '3307';
