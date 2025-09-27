@@ -1,15 +1,6 @@
 <?php
 // referrals.php
-
-header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(204);
-    exit;
-}
+require_once '../cors.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
@@ -41,19 +32,19 @@ try {
         exit;
     }
 
-    // SQL query: pending only for admin, approval for everyone
+    // SQL query: pending only for admin, approved for everyone
     if ($user_role === 'admin') {
         $sql = "SELECT id, referrer_id, referee_email, job_id, status, admin_action, created_at 
                 FROM referrals 
                 WHERE referrer_id = ? 
-                  AND (admin_action = 'pending' OR admin_action = 'approval')
+                  AND (admin_action = 'pending' OR admin_action = 'approved')
                 ORDER BY created_at DESC";
     } else {
-        // Non-admin users see only 'approval'
+        // Non-admin users see only 'approved'
         $sql = "SELECT id, referrer_id, referee_email, job_id, status, admin_action, created_at 
                 FROM referrals 
                 WHERE referrer_id = ? 
-                  AND admin_action = 'approval'
+                  AND admin_action = 'approved'
                 ORDER BY created_at DESC";
     }
 

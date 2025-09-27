@@ -1,5 +1,7 @@
 <?php
-require '../cors.php';
+// resolve_job_flag.php - Resolve job flag (Admin access only)
+require_once '../cors.php';
+
 // ✅ Authenticate JWT and allow admin role only
 $decoded = authenticateJWT(['admin']); // returns array
 

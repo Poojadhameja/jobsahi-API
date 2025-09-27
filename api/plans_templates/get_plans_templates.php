@@ -1,15 +1,6 @@
 <?php
 // get_plans_templates.php - Get plans templates (Role-based access)
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+require_once '../cors.php';
 
 // Only allow GET requests
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -32,11 +23,11 @@ try {
 
     // ✅ Build SQL query based on role
     if ($role === 'admin') {
-        // Admin sees both pending & approval
-        $sql = "SELECT * FROM plan_templates WHERE admin_action IN ('pending', 'approval')";
+        // Admin sees both pending & approved
+        $sql = "SELECT * FROM plan_templates WHERE admin_action IN ('pending', 'approved')";
     } else {
-        // Other roles see only approval
-        $sql = "SELECT * FROM plan_templates WHERE admin_action = 'approval'";
+        // Other roles see only approved
+        $sql = "SELECT * FROM plan_templates WHERE admin_action = 'approved'";
     }
 
     $stmt = $conn->prepare($sql);

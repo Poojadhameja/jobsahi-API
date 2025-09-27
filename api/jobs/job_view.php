@@ -1,35 +1,9 @@
 <?php
 // job_view.php - Record Job View API
-
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-// Handle CORS preflight
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
-
-// Include JWT helper & middleware
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 // ✅ Authenticate (student + admin)
-$decoded = authenticateJWT(['student', 'admin']); 
-
-include "../db.php";
-if (!$conn) {
-    echo json_encode(["message" => "❌ DB connection failed: " . mysqli_connect_error(), "status" => false]);
-    exit;
-}
-
-// Allow only POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    echo json_encode(["message" => "Only POST requests allowed", "status" => false]);
-    exit;
-}
+$decoded = authenticateJWT(['student', 'admin','recruiter','institute']); // decoded JWT payload
 
 // ✅ Get job_id ONLY from URL (?id=...)
 $job_id = isset($_GET['id']) && is_numeric($_GET['id']) ? (int)$_GET['id'] : null;
@@ -53,7 +27,7 @@ if ($user_role === 'admin') {
 } else {
     $check_job_sql = "SELECT id, title, status, admin_action 
                       FROM jobs 
-                      WHERE id = ? AND admin_action = 'approval'";
+                      WHERE id = ? AND admin_action = 'approved'";
 }
 
 $check_stmt = mysqli_prepare($conn, $check_job_sql);
@@ -154,6 +128,7 @@ if (mysqli_stmt_execute($insert_stmt)) {
             "job_title" => $job_data['title'],
             "student_name" => $student_data['user_name'],
             "role" => $student_data['role'],
+            "status" => $job_data['status'],
             "admin_action" => $job_data['admin_action'],
             "viewed_at" => $current_datetime
         ],

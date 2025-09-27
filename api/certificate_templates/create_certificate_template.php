@@ -1,19 +1,6 @@
 <?php
 // create_certificate_template.php - Create/update certificate template (Admin, Institute access)
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 // ✅ Authenticate JWT and allow multiple roles
 $decoded = authenticateJWT(['admin', 'institute']); // returns array
@@ -33,7 +20,7 @@ $header_text = isset($data['header_text']) ? $data['header_text'] : '';
 $footer_text = isset($data['footer_text']) ? $data['footer_text'] : '';
 $background_image_url = isset($data['background_image_url']) ? $data['background_image_url'] : '';
 $is_active = isset($data['is_active']) ? $data['is_active'] : 1;
-$admin_action = isset($data['admin_action']) ? $data['admin_action'] : 'pending';
+$admin_action = isset($data['admin_action']) ? $data['admin_action'] : 'approved';
 $template_id = isset($data['id']) ? $data['id'] : null; // for update operations
 
 try {

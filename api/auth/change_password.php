@@ -1,5 +1,7 @@
 <?php
-require '../cors.php';
+// change_password.php - Change user password
+require_once '../cors.php';
+
 // Get JWT token from Authorization header
 $jwt_token = JWTHelper::getJWTFromHeader();
 

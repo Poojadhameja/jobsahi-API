@@ -1,13 +1,6 @@
 <?php
 // skill-tests.php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-include "../db.php";
+require_once '../cors.php';
 
 // Authenticate JWT and get user role
 $current_user = authenticateJWT(['admin', 'student']);
@@ -37,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $completed_at  = $data['completed_at'];
     $badge_awarded = $data['badge_awarded'];
     $passed        = $data['passed'];
-    $admin_action  = $data['admin_action']; // pending/approval
+    $admin_action  = $data['admin_action']; // pending/approved
 
     try {
         $stmt = $conn->prepare("
@@ -72,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $query = "SELECT * FROM skill_tests ORDER BY created_at DESC";
         } else {
             // Other roles see only approved tests
-            $query = "SELECT * FROM skill_tests WHERE admin_action='approval' ORDER BY created_at DESC";
+            $query = "SELECT * FROM skill_tests WHERE admin_action='approved' ORDER BY created_at DESC";
         }
 
         $result = $conn->query($query);

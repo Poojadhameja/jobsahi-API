@@ -1,11 +1,6 @@
 <?php
 // get_user.php - Get single user by ID
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 // Authenticate user
 $current_user = authenticateJWT();
@@ -29,8 +24,6 @@ if ($current_user['role'] !== 'admin' && $current_user['user_id'] != $user_id) {
     echo json_encode(array("message" => "Access denied", "status" => false));
     exit;
 }
-
-include "../db.php";
 
 $sql = "SELECT id, user_name, email, role, phone_number, is_verified FROM users WHERE id = ?";
 if ($stmt = mysqli_prepare($conn, $sql)) {

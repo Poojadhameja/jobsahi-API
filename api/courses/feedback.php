@@ -108,7 +108,7 @@ if ($method === 'POST') {
         $sql = "SELECT * FROM course_feedback WHERE course_id = ?";
     } else {
         // Others see only approved feedback
-        $sql = "SELECT * FROM course_feedback WHERE course_id = ? AND admin_action = 'approval'";
+        $sql = "SELECT * FROM course_feedback WHERE course_id = ? AND admin_action = 'approved'";
     }
 
     if ($stmt = mysqli_prepare($conn, $sql)) {

@@ -1,12 +1,6 @@
 <?php
 // jobs.php - Job Listings API (Role-based access with admin_action filter)
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
-header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Access-Control-Allow-Methods, Authorization, X-Requested-With');
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 // ✅ Authenticate all roles
 $decoded = authenticateJWT(['student', 'admin', 'recruiter', 'institute']);  // decoded JWT payload
@@ -25,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-require_once "../db.php";
+
 if (!$conn) {
     echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
     exit;
@@ -38,11 +32,11 @@ $types  = "";
 
 // ✅ Role-based filter for admin_action
 if ($userRole === 'admin') {
-    // Admin sees both pending + approval
-    $filters[] = "(j.admin_action = 'pending' OR j.admin_action = 'approval')";
+    // Admin sees both pending + approved
+    $filters[] = "(j.admin_action = 'pending' OR j.admin_action = 'approved')";
 } else {
     // Other roles only see approved jobs
-    $filters[] = "j.admin_action = 'approval'";
+    $filters[] = "j.admin_action = 'approved'";
 }
 
 // Keyword search (title/description)

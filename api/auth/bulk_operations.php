@@ -1,5 +1,7 @@
 <?php
-require '../cors.php';
+// bulk_operations.php - Bulk operations for users
+require_once '../cors.php';
+
 $data = json_decode(file_get_contents('php://input'), true);
 $operation = $data['operation']; // 'verify', 'unverify', 'delete'
 $user_ids = $data['user_ids']; // Array of user IDs
@@ -8,7 +10,6 @@ if (empty($user_ids) || !is_array($user_ids)) {
     echo json_encode(array("message" => "User IDs array is required", "status" => false));
     exit;
 }
-
 
 $user_ids_str = implode(',', array_map('intval', $user_ids));
 $success_count = 0;

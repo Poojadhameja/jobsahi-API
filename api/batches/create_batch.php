@@ -1,5 +1,7 @@
 <?php
-require '../cors.php';
+// create_batch.php - Create new batch (Admin, Institute access) & List batches based on admin_action
+require_once '../cors.php';
+
 try {
     // Authenticate JWT for multiple roles
     $decoded = authenticateJWT(['admin', 'institute']); // returns array with role info
@@ -16,7 +18,7 @@ try {
             $stmt = $conn->prepare($sql);
         } else {
             // Other roles see only approved batches
-            $sql = "SELECT * FROM batches WHERE admin_action = 'approval'";
+            $sql = "SELECT * FROM batches WHERE admin_action = 'approved'";
             $stmt = $conn->prepare($sql);
         }
 
@@ -55,7 +57,7 @@ try {
         $start_date    = isset($data['start_date']) ? $data['start_date'] : null;
         $end_date      = isset($data['end_date']) ? $data['end_date'] : null;
         $instructor_id = isset($data['instructor_id']) ? (int)$data['instructor_id'] : null;
-        $admin_action  = "pending"; // default value
+        $admin_action  = "approved"; // default value
 
         // Validate course exists
         $check = $conn->prepare("SELECT id FROM courses WHERE id = ?");

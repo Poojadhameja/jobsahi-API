@@ -1,19 +1,6 @@
 <?php
 // get_plan_template_by_id.php - Get plan template by ID (JWT required)
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 // ✅ Authenticate JWT (any valid user can access plan templates)
 $decoded = authenticateJWT(); // returns array
@@ -63,11 +50,11 @@ try {
     // ✅ Role-based filtering for admin_action
     $adminActionCondition = "";
     if ($userRole === 'ADMIN') {
-        // ADMIN can see all (pending + approval)
-        $adminActionCondition = "({$adminActionColumn} = 'pending' OR {$adminActionColumn} = 'approval')";
+        // ADMIN can see all (pending + approved)
+        $adminActionCondition = "({$adminActionColumn} = 'pending' OR {$adminActionColumn} = 'approved')";
     } else {
-        // Recruiter, Institute, Student → can see only approval
-        $adminActionCondition = "({$adminActionColumn} = 'approval')";
+        // Recruiter, Institute, Student → can see only approved
+        $adminActionCondition = "({$adminActionColumn} = 'approved')";
     }
 
     // Build the query with correct column names matching the actual schema

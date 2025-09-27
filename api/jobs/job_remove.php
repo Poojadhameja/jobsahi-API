@@ -1,24 +1,8 @@
 <?php
 // remove_saved_job.php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
-
-// Handle preflight (CORS) requests
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit(0);
-}
-
-// Only allow DELETE requests
-if ($_SERVER['REQUEST_METHOD'] !== 'DELETE') {
-    echo json_encode(["message" => "Only DELETE requests allowed", "status" => false]);
-    exit;
-}
+require_once '../cors.php';
 
 // ---- JWT Authentication ----
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
 
 // ✅ Authenticate student only
 $decoded = authenticateJWT('student');

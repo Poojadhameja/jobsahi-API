@@ -1,7 +1,6 @@
 <?php
 // get_users_by_role.php - Get users by role
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
+require_once '../cors.php';
 
 $data = json_decode(file_get_contents('php://input'), true);
 $role = isset($data['role']) ? $data['role'] : '';

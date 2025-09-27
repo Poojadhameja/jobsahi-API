@@ -1,5 +1,7 @@
 <?php
-require '../cors.php';
+// get_reports.php - Get platform analytics reports (Admin access only)
+require_once '../cors.php';
+
 // ✅ Authenticate JWT and allow admin role only
 $decoded = authenticateJWT(['admin']); // returns array
 

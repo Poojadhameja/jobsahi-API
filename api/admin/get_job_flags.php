@@ -1,5 +1,7 @@
 <?php
-require '../cors.php';
+// get_job_flags.php - Get all flagged job postings (Admin access only)
+require_once '../cors.php';
+
 // ✅ Authenticate JWT and allow admin role only
 $decoded = authenticateJWT(['admin']); // returns array
 

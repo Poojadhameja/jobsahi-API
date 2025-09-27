@@ -1,12 +1,5 @@
 <?php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-header('Access-Control-Allow-Methods: GET, PUT');
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-include "../db.php";
+require_once '../cors.php';
 
 // Authenticate user (admin, student)
 $user = authenticateJWT(['admin', 'student']);
@@ -25,6 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
     $skills = $input['skills'] ?? "";
     $education = $input['education'] ?? "";
     $resume = $input['resume'] ?? "";
+    $certificates = $input['certificates'] ?? "";
     $portfolio_link = $input['portfolio_link'] ?? "";
     $linkedin_url = $input['linkedin_url'] ?? "";
     $dob = $input['dob'] ?? "";
@@ -34,15 +28,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
     $location = $input['location'] ?? "";
 
     $sql = "UPDATE student_profiles SET 
-                skills = ?, education = ?, resume = ?, portfolio_link = ?, linkedin_url = ?,
+                skills = ?, education = ?, resume = ?, certificates = ?,portfolio_link = ?, linkedin_url = ?,
                 dob = ?, gender = ?, job_type = ?, trade = ?, location = ?, modified_at = NOW()
             WHERE id = ? AND deleted_at IS NULL";
 
     $stmt = mysqli_prepare($conn, $sql);
     mysqli_stmt_bind_param(
         $stmt,
-        "ssssssssssi",
-        $skills, $education, $resume, $portfolio_link, $linkedin_url,
+        "sssssssssssi",
+        $skills, $education, $resume, $certificates, $portfolio_link, $linkedin_url,
         $dob, $gender, $job_type, $trade, $location, $id
     );
 
@@ -74,11 +68,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
 // ===================== GET REQUEST: Fetch Applications =====================
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     // Base query
-    $sql = "SELECT * FROM applications WHERE deleted_at IS NULL AND admin_action = 'approval'";
+    $sql = "SELECT * FROM applications WHERE deleted_at IS NULL AND admin_action = 'approved'";
 
     // If admin, also include pending
     if ($role === 'admin') {
-        $sql = "SELECT * FROM applications WHERE deleted_at IS NULL AND (admin_action = 'approval' OR admin_action = 'pending')";
+        $sql = "SELECT * FROM applications WHERE deleted_at IS NULL AND (admin_action = 'approved' OR admin_action = 'pending')";
     }
 
     $result = mysqli_query($conn, $sql);

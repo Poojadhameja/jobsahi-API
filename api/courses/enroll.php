@@ -1,13 +1,6 @@
 <?php
 // enroll.php - Enroll a student into a course & fetch enrollments based on role
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-require_once '../db.php';
+require_once '../cors.php';
 
 // Authenticate user and get their role
 $user = authenticateJWT(['admin', 'student']); // Returns decoded JWT payload
@@ -93,9 +86,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     // Build SQL query with role-based admin_action filter
     if ($user_role === 'admin') {
-        $sql = "SELECT * FROM student_course_enrollments WHERE admin_action IN ('pending','approval')";
+        $sql = "SELECT * FROM student_course_enrollments WHERE admin_action IN ('pending','approved')";
     } else {
-        $sql = "SELECT * FROM student_course_enrollments WHERE admin_action = 'approval'";
+        $sql = "SELECT * FROM student_course_enrollments WHERE admin_action = 'approved'";
     }
 
     $result = mysqli_query($conn, $sql);

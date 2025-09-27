@@ -1,11 +1,6 @@
 <?php
 // get_all_users.php - Get all users (Admin only)
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 // Authenticate and check for admin role
 authenticateJWT('admin');

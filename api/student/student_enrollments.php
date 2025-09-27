@@ -1,13 +1,6 @@
 <?php
 // student_enrollments.php - List student enrolled courses with admin_action filter
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php'; // JWT helper
-require_once '../auth/auth_middleware.php'; // middleware
+require_once '../cors.php';
 
 // Authenticate user for all roles
 $decoded = authenticateJWT(['admin', 'student']); 
@@ -44,7 +37,7 @@ try {
 
     // Append admin_action filter for non-admins
     if ($user_role !== 'admin') {
-        $sql .= " AND c.admin_action = 'approval'";
+        $sql .= " AND c.admin_action = 'approved'";
     }
 
     if ($stmt = $conn->prepare($sql)) {

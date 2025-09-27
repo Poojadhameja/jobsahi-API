@@ -1,30 +1,12 @@
 <?php
-// apply_job.php - Apply for a Job (Student only)
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// job_apply.php - Apply for a Job (Student only)
+require_once '../cors.php';
 
 // ✅ Authenticate and allow only "student" role
 $decoded = authenticateJWT('student');  // decoded JWT payload
 
 // Only allow POST requests
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(["message" => "Only POST requests allowed", "status" => false]);
-    exit;
-}
 
-include "../db.php"; 
-
-if (!$conn) {
-    http_response_code(500);
-    echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
-    exit;
-}
 
 // Read POST JSON
 $input = json_decode(file_get_contents('php://input'), true);
@@ -46,13 +28,34 @@ if ($job_id <= 0) {
     exit;
 }
 
-// ✅ Student ID from JWT payload
-$student_id = $decoded['id'] ?? $decoded['user_id'] ?? $decoded['student_id'] ?? null;
+// ✅ Get student_profile_id from users.id
+$user_id = $decoded['id'] ?? $decoded['user_id'] ?? null;
 
-if (!$student_id) {
+if (!$user_id) {
     http_response_code(401);
     echo json_encode([
-        "message" => "Invalid token: student ID missing",
+        "message" => "Invalid token: user ID missing",
+        "status" => false
+    ]);
+    exit;
+}
+
+$student_profile_id = null;
+$profile_query = "SELECT id FROM student_profiles WHERE user_id = ?";
+$stmt = $conn->prepare($profile_query);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$res = $stmt->get_result();
+if ($res->num_rows > 0) {
+    $row = $res->fetch_assoc();
+    $student_profile_id = $row['id'];
+}
+$stmt->close();
+
+if (!$student_profile_id) {
+    http_response_code(404);
+    echo json_encode([
+        "message" => "Student profile not found for this user",
         "status" => false
     ]);
     exit;
@@ -100,7 +103,7 @@ if (!empty($job['application_deadline']) && strtotime($job['application_deadline
 // ✅ Check if already applied
 $check_application_sql = "SELECT id FROM applications WHERE job_id = ? AND student_id = ?";
 $check_app_stmt = mysqli_prepare($conn, $check_application_sql);
-mysqli_stmt_bind_param($check_app_stmt, "ii", $job_id, $student_id);
+mysqli_stmt_bind_param($check_app_stmt, "ii", $job_id, $student_profile_id);
 mysqli_stmt_execute($check_app_stmt);
 $app_result = mysqli_stmt_get_result($check_app_stmt);
 
@@ -128,7 +131,7 @@ mysqli_stmt_bind_param(
     $insert_stmt,
     "iiss",
     $job_id,
-    $student_id,
+    $student_profile_id,
     $input['cover_letter'],
     $resume_link
 );

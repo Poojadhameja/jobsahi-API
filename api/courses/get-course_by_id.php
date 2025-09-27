@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $sql = "SELECT id, institute_id, title, description, duration, fee, admin_action
                 FROM courses
                 WHERE id = ? AND admin_action = ?";
-        $params = [$course_id, 'approved']; // Changed from 'approval' to 'approved'
+        $params = [$course_id, 'approved']; // Changed from 'approved' to 'approved'
         $param_types = "is";
     }
 

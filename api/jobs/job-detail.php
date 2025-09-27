@@ -1,26 +1,11 @@
 <?php
 // job-detail.php - Single Job Detail API
-
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
-header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Access-Control-Allow-Methods, Authorization, X-Requested-With');
-
-// Include JWT helper & middleware
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 // ✅ Authenticate roles (students, recruiters, admins)
 $decodedToken = authenticateJWT(['student', 'recruiter', 'admin']);
 $user_role = $decodedToken['role']; // role from JWT
 
-// ✅ Check request method
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    echo json_encode(["message" => "Only GET requests allowed", "status" => false]);
-    exit;
-}
-
-include "../db.php";
 
 // ✅ Check DB connection
 if (!$conn) {
@@ -38,12 +23,12 @@ if ($job_id <= 0) {
 
 /**
  * ✅ SQL CONDITION BASED ON ROLE:
- * - Admin can see both 'pending' and 'approval'
- * - Others can only see 'approval'
+ * - Admin can see both 'pending' and 'approved'
+ * - Others can only see 'approved'
  */
 $visibilityCondition = ($user_role === 'admin') 
-    ? "j.admin_action IN ('pending', 'approval')" 
-    : "j.admin_action = 'approval'";
+    ? "j.admin_action IN ('pending', 'approved')" 
+    : "j.admin_action = 'approved'";
 
 // ✅ Main job query with recruiter info & stats
 $sql = "SELECT 
@@ -142,8 +127,8 @@ $formatted_job = [
 // ✅ Optional: Get similar jobs (only approved ones visible to non-admins)
 if (isset($_GET['include_similar']) && $_GET['include_similar'] === 'true') {
     $similarVisibilityCondition = ($user_role === 'admin') 
-        ? "j.admin_action IN ('pending', 'approval')" 
-        : "j.admin_action = 'approval'";
+        ? "j.admin_action IN ('pending', 'approved')" 
+        : "j.admin_action = 'approved'";
 
     $similar_sql = "SELECT 
                         j.id,

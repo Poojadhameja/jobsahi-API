@@ -1,19 +1,6 @@
 <?php
 // certificates.php - Issue & Fetch student certificates (Admin, Institute)
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 // POST request → Issue certificate
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -27,7 +14,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $course_id    = isset($data['course_id']) ? intval($data['course_id']) : 0;
     $file_url     = isset($data['file_url']) ? trim($data['file_url']) : '';
     $issue_date   = isset($data['issue_date']) ? $data['issue_date'] : date('Y-m-d');
-    $admin_action = isset($data['admin_action']) ? $data['admin_action'] : 'pending';
+    $admin_action = isset($data['admin_action']) ? $data['admin_action'] : 'approved';
+    $created_at   = isset($data['created_at']) ? $data['created_at'] : date('Y-m-d H:i:s');
+    $modified_at  = isset($data['modified_at']) ? $data['modified_at'] : date('Y-m-d H:i:s');
 
     if ($student_id <= 0 || $course_id <= 0) {
         echo json_encode([
@@ -90,10 +79,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit();
         }
 
-        // Insert certificate
-        $stmt = $conn->prepare("INSERT INTO certificates (student_id, course_id, file_url, issue_date, admin_action) 
-                                VALUES (?, ?, ?, ?, ?)");
-        $stmt->bind_param("iisss", $student_id, $course_id, $file_url, $issue_date, $admin_action);
+        // Insert certificate with created_at & modified_at
+        $stmt = $conn->prepare("INSERT INTO certificates 
+            (student_id, course_id, file_url, issue_date, admin_action, created_at, modified_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("iisssss", $student_id, $course_id, $file_url, $issue_date, $admin_action, $created_at, $modified_at);
 
         if ($stmt->execute()) {
             echo json_encode([

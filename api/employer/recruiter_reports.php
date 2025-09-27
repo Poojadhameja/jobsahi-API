@@ -26,7 +26,7 @@ try {
         $stmt = $conn->prepare("SELECT * FROM reports ORDER BY generated_at DESC");
     } else {
         // Other roles see only approved records
-        $stmt = $conn->prepare("SELECT * FROM reports WHERE admin_action = 'approval' ORDER BY generated_at DESC");
+        $stmt = $conn->prepare("SELECT * FROM reports WHERE admin_action = 'approved' ORDER BY generated_at DESC");
     }
 
     if ($stmt->execute()) {

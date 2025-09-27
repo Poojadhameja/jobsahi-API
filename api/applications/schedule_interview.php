@@ -1,9 +1,10 @@
 <?php
-require '../cors.php';
+// schedule_interview.php - Schedule interview for candidate (Admin, Recruiter access with role-based visibility)
+require_once '../cors.php';
+
 // ✅ Authenticate JWT and allow multiple roles
 $decoded = authenticateJWT(['admin', 'recruiter']); 
 $user_id = $decoded['user_id'];
-$user_role = $decoded['role'];
 
 // Get application ID from URL parameter
 $application_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
@@ -37,17 +38,17 @@ if (empty($scheduled_at)) {
 try {
     // ✅ Visibility filter using admin_action
     if ($user_role === 'admin') {
-        // Admin can see pending & approval
+        // Admin can see pending & approved
         $check_sql = "SELECT a.id, a.admin_action 
                       FROM applications a
                       WHERE a.id = ?";
         $check_stmt = $conn->prepare($check_sql);
         $check_stmt->bind_param("i", $application_id);
     } else {
-        // Recruiter, Institute, Student → Only see if admin_action = 'approval'
+        // Recruiter, Institute, Student → Only see if admin_action = 'approved'
         $check_sql = "SELECT a.id, a.admin_action 
                       FROM applications a
-                      WHERE a.id = ? AND a.admin_action = 'approval'";
+                      WHERE a.id = ? AND a.admin_action = 'approved'";
         $check_stmt = $conn->prepare($check_sql);
         $check_stmt->bind_param("i", $application_id);
     }

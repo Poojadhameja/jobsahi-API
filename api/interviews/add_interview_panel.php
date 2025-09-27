@@ -121,7 +121,7 @@ try {
         FROM interview_panel ip
         JOIN interviews i ON ip.interview_id = i.id
         WHERE ip.interview_id = ? AND (
-            i.admin_action = 'approval' OR (? = 'admin' AND i.admin_action = 'pending')
+            i.admin_action = 'approved' OR (? = 'admin' AND i.admin_action = 'pending')
         )
     ");
     $panel_stmt->bind_param("is", $interview_id, $user_role);
