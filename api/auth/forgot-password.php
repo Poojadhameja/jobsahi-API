@@ -1,20 +1,5 @@
 <?php
-// forgot-password.php - Send password reset OTP/email
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST');
-header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Access-Control-Allow-Methods, Authorization, X-Requested-With');
-
-require_once __DIR__ . '/../db.php';
-require_once '../helpers/email_helper.php';
-require_once '../helpers/otp_helper.php'; // use helper only, no duplicate generateOTP
-
-// Check if request method is POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(["message" => "Only POST requests allowed", "status" => false]);
-    exit;
-}
+require '../cors.php';
 
 // Get and decode JSON data
 $json_input = file_get_contents('php://input');

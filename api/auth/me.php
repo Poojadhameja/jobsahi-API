@@ -1,20 +1,5 @@
 <?php
-// me.php - Fetch current logged-in user with role-aware profiles
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-// Check if request method is GET
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    http_response_code(405);
-    echo json_encode(array("message" => "Only GET requests allowed", "status" => false));
-    exit;
-}
-
-require_once '../jwt_token/jwt_helper.php';
-require_once __DIR__ . '/../db.php';
-
+require '../cors.php';
 // Get JWT token from Authorization header
 $headers = getallheaders();
 $authHeader = isset($headers['Authorization']) ? $headers['Authorization'] : '';

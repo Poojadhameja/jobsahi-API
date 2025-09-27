@@ -1,10 +1,5 @@
 <?php
-// bulk_operations.php - Bulk operations for users
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, PUT, DELETE');
-header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Access-Control-Allow-Methods, Authorization, X-Requested-With');
-
+require '../cors.php';
 $data = json_decode(file_get_contents('php://input'), true);
 $operation = $data['operation']; // 'verify', 'unverify', 'delete'
 $user_ids = $data['user_ids']; // Array of user IDs
@@ -14,7 +9,6 @@ if (empty($user_ids) || !is_array($user_ids)) {
     exit;
 }
 
-include "../db.php";
 
 $user_ids_str = implode(',', array_map('intval', $user_ids));
 $success_count = 0;

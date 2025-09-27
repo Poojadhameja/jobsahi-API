@@ -2,12 +2,7 @@
 // resend-otp.php - Fixed version
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
-
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
+require '../cors.php';
 // Response function
 function send_response($success, $message, $data = [], $code = 200) {
     http_response_code($success ? 200 : $code);
