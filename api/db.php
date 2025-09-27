@@ -1,10 +1,9 @@
 <?php
 require_once __DIR__ . '/../vendor/autoload.php';
 
-require_once __DIR__ . '/cors.php';
 // Database Configuration
 $dbHost = '127.0.0.1';
-$dbPort = '3307';
+$dbPort = '3306';
 $dbName = 'jobsahi_database';
 $dbUser = 'root';
 $dbPass = '';
