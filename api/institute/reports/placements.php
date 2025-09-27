@@ -1,30 +1,6 @@
 <?php
 // placements.php - Placement analytics report with role-based access (JWT required)
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
-// Only allow GET requests
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    http_response_code(405);
-    echo json_encode([
-        "status" => false,
-        "message" => "Method not allowed. Only GET requests are supported."
-    ]);
-    exit();
-}
-
-// Include required files
-include __DIR__ . "/../../db.php";
-require_once __DIR__ . "/../../jwt_token/jwt_helper.php";
-require_once __DIR__ . "/../../auth/auth_middleware.php";
+require_once(__DIR__ . '/../../cors.php');
 
 // Authenticate JWT - returns decoded payload
 $decoded = authenticateJWT(['admin', 'recruiter', 'institute', 'student']); 
