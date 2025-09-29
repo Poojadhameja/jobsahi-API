@@ -1,98 +1,126 @@
 <?php
 require '../cors.php';
 
-// Function to debug response
-function debug_response($message, $data = [], $status = false, $code = 400) {
-    http_response_code($code);
-    echo json_encode([
-        "message" => $message,
-        "status" => $status,
-        "debug_data" => $data,
-        "timestamp" => date('Y-m-d H:i:s')
-    ]);
-    exit;
-}
-
-// Only allow POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    debug_response("Only POST requests allowed", [], false, 405);
-}
-
-// Read JSON input
+// Get and decode JSON data
 $json_input = file_get_contents('php://input');
 $data = json_decode($json_input, true);
 
 if (json_last_error() !== JSON_ERROR_NONE) {
-    debug_response("Invalid JSON data", ["json_error" => json_last_error_msg()], false, 400);
+    http_response_code(400);
+    echo json_encode(["message" => "Invalid JSON data", "status" => false]);
+    exit;
 }
 
-// Validate fields
-if (!isset($data['user_id'], $data['otp'], $data['purpose'])) {
-    debug_response("Missing parameters", [
-        "has_user_id" => isset($data['user_id']),
-        "has_otp" => isset($data['otp']),
-        "has_purpose" => isset($data['purpose']),
-        "received_keys" => array_keys($data)
+// Validate required fields
+if (!isset($data['user_id']) || !isset($data['otp'])) {
+    http_response_code(400);
+    echo json_encode([
+        "message" => "User ID and OTP are required", 
+        "status" => false
     ]);
+    exit;
 }
 
 $user_id = intval($data['user_id']);
 $otp = trim($data['otp']);
-$purpose = trim($data['purpose']);
 
-if (empty($otp) || empty($purpose)) {
-    debug_response("OTP and purpose validation failed", [
-        "otp_empty" => empty($otp),
-        "purpose_empty" => empty($purpose),
-        "otp_value" => $otp,
-        "purpose_value" => $purpose
+// Validate inputs
+if ($user_id <= 0 || empty($otp)) {
+    http_response_code(400);
+    echo json_encode([
+        "message" => "Valid User ID and OTP are required", 
+        "status" => false
     ]);
+    exit;
 }
 
-// Test database connection
-if (!$conn) {
-    debug_response("Database connection failed", ["error" => mysqli_connect_error()]);
-}
+// ✅ Step 1: Check if user exists
+$user_sql = "SELECT id FROM users WHERE id = ?";
+if ($user_stmt = mysqli_prepare($conn, $user_sql)) {
+    mysqli_stmt_bind_param($user_stmt, "i", $user_id);
+    mysqli_stmt_execute($user_stmt);
+    $user_result = mysqli_stmt_get_result($user_stmt);
 
-// Check if table exists
-$table_check = mysqli_query($conn, "DESCRIBE otp_requests");
-if (!$table_check) {
-    debug_response("Table otp_requests does not exist", ["error" => mysqli_error($conn)]);
-}
-
-// Get table structure
-$columns = [];
-while ($column = mysqli_fetch_assoc($table_check)) {
-    $columns[] = $column;
-}
-
-// Check what's in the database for this user
-$debug_sql = "SELECT * FROM otp_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 5";
-if ($debug_stmt = mysqli_prepare($conn, $debug_sql)) {
-    mysqli_stmt_bind_param($debug_stmt, "i", $user_id);
-    mysqli_stmt_execute($debug_stmt);
-    $debug_result = mysqli_stmt_get_result($debug_stmt);
-    
-    $all_otps = [];
-    while ($debug_row = mysqli_fetch_assoc($debug_result)) {
-        $all_otps[] = $debug_row;
+    if (mysqli_num_rows($user_result) === 0) {
+        mysqli_stmt_close($user_stmt);
+        http_response_code(400);
+        echo json_encode([
+            "message" => "Invalid user_id. Please enter correct user_id",
+            "status" => false
+        ]);
+        exit;
     }
-    mysqli_stmt_close($debug_stmt);
+    mysqli_stmt_close($user_stmt);
+}
+
+// ✅ Step 2: Verify OTP for that user
+$otp_sql = "SELECT id, otp_code, expires_at, is_used 
+            FROM otp_requests 
+            WHERE user_id = ? 
+            AND is_used = 0 
+            ORDER BY created_at DESC 
+            LIMIT 1";
+
+if ($otp_stmt = mysqli_prepare($conn, $otp_sql)) {
+    mysqli_stmt_bind_param($otp_stmt, "i", $user_id);
+    mysqli_stmt_execute($otp_stmt);
+    $otp_result = mysqli_stmt_get_result($otp_stmt);
     
-    // THIS will now run and return status: true
-    debug_response("Database query successful", [
-        // "table_structure" => $columns,
-        "search_params" => [
-            "user_id" => $user_id,
-            "otp" => $otp,
-            "purpose" => $purpose
-        ],
+    if (mysqli_num_rows($otp_result) > 0) {
+        $otp_record = mysqli_fetch_assoc($otp_result);
         
-        // "found_otps" => $all_otps,
-        // "total_otps_found" => count($all_otps)
-    ], true, 200);
+        // Check expiry
+        $current_time = date('Y-m-d H:i:s');
+        if ($current_time > $otp_record['expires_at']) {
+            mysqli_stmt_close($otp_stmt);
+            http_response_code(400);
+            echo json_encode([
+                "message" => "User id is invalid. Pls enter correct user_id", 
+                "status" => false,
+                "expired" => true
+            ]);
+            exit;
+        }
+        
+        // Match OTP
+        if ($otp_record['otp_code'] === $otp) {
+            // Mark OTP used
+            $update_sql = "UPDATE otp_requests SET is_used = 1 WHERE id = ?";
+            if ($update_stmt = mysqli_prepare($conn, $update_sql)) {
+                mysqli_stmt_bind_param($update_stmt, "i", $otp_record['id']);
+                mysqli_stmt_execute($update_stmt);
+                mysqli_stmt_close($update_stmt);
+            }
+            
+            mysqli_stmt_close($otp_stmt);
+            http_response_code(200);
+            echo json_encode([
+                "message" => "OTP verified successfully",
+                "status" => true,
+                "user_id" => $user_id
+            ]);
+        } else {
+            mysqli_stmt_close($otp_stmt);
+            http_response_code(400);
+            echo json_encode([
+                "message" => "Invalid OTP or Purpose. Please check and try again", 
+                "status" => false
+            ]);
+        }
+    } else {
+        mysqli_stmt_close($otp_stmt);
+        http_response_code(400);
+        echo json_encode([
+            "message" => "No valid OTP found. Please request a new one", 
+            "status" => false
+        ]);
+    }
 } else {
-    debug_response("Database prepare failed", ["error" => mysqli_error($conn)]);
+    http_response_code(500);
+    echo json_encode([
+        "message" => "Database error", 
+        "status" => false
+    ]);
 }
 
 mysqli_close($conn);
