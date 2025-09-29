@@ -1,117 +1,107 @@
 <?php
-// login_phone.php - User authentication with JWT using phone number
+// phone-login.php - Send OTP for phone login
 require_once '../cors.php';
+require_once '../db.php'; // ✅ make sure this has $conn
+require_once '../helpers/otp_helper.php';
 
-// Get phone number from URL path
-$request_uri = $_SERVER['REQUEST_URI'];
-$path_parts = explode('/', trim($request_uri, '/'));
-
-// Extract phone_number from URL - get the last segment
-$phone_number = null;
-if (count($path_parts) > 0) {
-    $last_segment = end($path_parts);
-    // Check if last segment is a number (phone number)
-    if (is_numeric($last_segment) && strlen($last_segment) >= 10) {
-        $phone_number = trim($last_segment);
-    }
-}
-
-if (empty($phone_number)) {
-    http_response_code(400);
-    echo json_encode(array("message" => "Phone number is required in URL", "status" => false));
+// ✅ Allow only POST
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(["message" => "Method not allowed", "status" => false]);
     exit;
 }
 
-// Get and decode JSON data for password
+// ✅ Get and decode JSON data
 $json_input = file_get_contents('php://input');
 $data = json_decode($json_input, true);
 
 if (json_last_error() !== JSON_ERROR_NONE) {
     http_response_code(400);
-    echo json_encode(array("message" => "Invalid JSON data", "status" => false));
+    echo json_encode(["message" => "Invalid JSON data", "status" => false]);
     exit;
 }
 
-// Validate password field
-if (!isset($data['password'])) {
+// ✅ Validate required fields
+if (!isset($data['phone_number'])) {
     http_response_code(400);
-    echo json_encode(array("message" => "Password is required", "status" => false));
+    echo json_encode(["message" => "Phone number is required", "status" => false]);
     exit;
 }
 
-$password = trim($data['password']);
+$phone = trim($data['phone_number']);
 
-if (empty($password)) {
+if (empty($phone)) {
     http_response_code(400);
-    echo json_encode(array("message" => "Password cannot be empty", "status" => false));
+    echo json_encode(["message" => "Phone number cannot be empty", "status" => false]);
     exit;
 }
 
-// Use prepared statements - Added status field
-$sql = "SELECT id, user_name, email, role, phone_number, is_verified, status, password 
-        FROM users 
-        WHERE phone_number = ?";
+// ✅ Validate phone format (basic validation - adjust as needed)
+if (!preg_match('/^[0-9]{10,15}$/', $phone)) {
+    http_response_code(400);
+    echo json_encode(["message" => "Invalid phone number format", "status" => false]);
+    exit;
+}
 
+// ✅ Check if user exists with this phone number
+$sql = "SELECT id, user_name, phone_number FROM users WHERE phone_number = ?";
 if ($stmt = mysqli_prepare($conn, $sql)) {
-    mysqli_stmt_bind_param($stmt, "s", $phone_number);
+    mysqli_stmt_bind_param($stmt, "s", $phone);
     mysqli_stmt_execute($stmt);
     $result = mysqli_stmt_get_result($stmt);
-    
+
     if (mysqli_num_rows($result) > 0) {
         $user = mysqli_fetch_assoc($result);
-        
-        // Check if account is active
-        if ($user['status'] !== 'active') {
-            http_response_code(403);
-            echo json_encode(array("message" => "Account is not active", "status" => false));
-            mysqli_stmt_close($stmt);
-            mysqli_close($conn);
-            exit;
+        $user_id = $user['id'];
+
+        // ✅ Generate OTP
+        $otp = generateOTP();
+        $purpose = 'phone_login';
+        $expires_at = date('Y-m-d H:i:s', time() + 300); // 5 minutes expiry
+
+        // ✅ Delete any existing OTP requests for this user and purpose
+        $delete_sql = "DELETE FROM otp_requests WHERE user_id = ? AND purpose = ?";
+        if ($delete_stmt = mysqli_prepare($conn, $delete_sql)) {
+            mysqli_stmt_bind_param($delete_stmt, "is", $user_id, $purpose);
+            mysqli_stmt_execute($delete_stmt);
+            mysqli_stmt_close($delete_stmt);
         }
-        
-        if (password_verify($password, $user['password'])) {
-            if ($user['is_verified'] == 1) {
-                // Create JWT payload
-                $payload = [
-                    'user_id' => $user['id'],
-                    'email' => $user['email'],
-                    'name' => $user['user_name'],
-                    'role' => $user['role'],
-                    'phone_number' => $user['phone_number'],
-                    'iat' => time(),
-                    'exp' => time() + JWT_EXPIRY
-                ];
-                
-                $jwt_token = JWTHelper::generateJWT($payload, JWT_SECRET);
-                
-                // Remove password from response
-                unset($user['password']);
-                
+
+        // ✅ Insert new OTP request
+        $insert_sql = "INSERT INTO otp_requests (user_id, otp_code, purpose, is_used, created_at, expires_at) 
+                       VALUES (?, ?, ?, 0, NOW(), ?)";
+        if ($insert_stmt = mysqli_prepare($conn, $insert_sql)) {
+            mysqli_stmt_bind_param($insert_stmt, "isss", $user_id, $otp, $purpose, $expires_at);
+
+            if (mysqli_stmt_execute($insert_stmt)) {
+                // ✅ Send SMS with OTP (implement later)
                 http_response_code(200);
-                echo json_encode(array(
-                    "message" => "Login successful", 
-                    "status" => true, 
-                    "user" => $user,
-                    "token" => $jwt_token,
-                    "expires_in" => JWT_EXPIRY
-                ));
+                echo json_encode([
+                    "message"    => "OTP sent to your phone",
+                    "status"     => true,
+                    "expires_in" => 300
+                ]);
             } else {
-                http_response_code(403);
-                echo json_encode(array("message" => "Account not verified", "status" => false));
+                http_response_code(500);
+                echo json_encode(["message" => "Failed to generate OTP", "status" => false]);
             }
+            mysqli_stmt_close($insert_stmt);
         } else {
-            http_response_code(401);
-            echo json_encode(array("message" => "Invalid credentials", "status" => false));
+            http_response_code(500);
+            echo json_encode(["message" => "Database error (insert prepare failed)", "status" => false]);
         }
     } else {
-        http_response_code(401);
-        echo json_encode(array("message" => "Invalid credentials", "status" => false));
+        // ✅ Security: don't reveal if phone exists
+        http_response_code(200);
+        echo json_encode([
+            "message" => "The phone number don't exists, an OTP not has been sent",
+            "status"  => false
+        ]);
     }
-    
     mysqli_stmt_close($stmt);
 } else {
     http_response_code(500);
-    echo json_encode(array("message" => "Database query failed", "status" => false));
+    echo json_encode(["message" => "Database query failed", "status" => false]);
 }
 
 mysqli_close($conn);
