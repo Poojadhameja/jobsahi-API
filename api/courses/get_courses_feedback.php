@@ -1,30 +1,16 @@
 <?php
 // get_courses_feedback.php - Fetch feedback for a course with role-based visibility
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-require_once '../db.php';  // DB connection
+require_once '../cors.php';
 
 // Authenticate and get user info (admin, student)
 $user = authenticateJWT(['admin','student']); 
 $user_role = $user['role'] ?? null;
 
-// Check if request method is GET
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    http_response_code(405);
-    echo json_encode([
-        "status" => false,
-        "message" => "Only GET method is allowed"
-    ]);
-    exit();
-}
+// GET THE COURSE ID FROM REQUEST - THIS WAS MISSING!
+$course_id = isset($_GET['id']) ? intval($_GET['id']) : null;
 
 // Validate course_id
-if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
+if (!$course_id || $course_id <= 0) {
     http_response_code(400);
     echo json_encode([
         "status" => false,
@@ -32,8 +18,6 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
     ]);
     exit();
 }
-
-$course_id = intval($_GET['id']);
 
 // Optional pagination/filter params
 $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
@@ -166,20 +150,7 @@ echo json_encode([
     "status" => true,
     "data" => [
         "course_id" => $course_id,
-        "feedback" => $feedback_list,
-        "summary" => [
-            "total_feedback" => intval($total_feedback),
-            "average_rating" => $avg_rating ? round(floatval($avg_rating), 2) : null,
-            "rating_distribution" => $rating_distribution
-        ],
-        "pagination" => [
-            "current_page" => $page,
-            "total_pages" => $total_pages,
-            "total_items" => intval($total_feedback),
-            "items_per_page" => $limit,
-            "has_next_page" => $page < $total_pages,
-            "has_previous_page" => $page > 1
-        ]
+        "feedback" => $feedback_list
     ]
 ]);
 ?>

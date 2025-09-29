@@ -1,98 +1,71 @@
 <?php
 // get-course.php - Fetch course details by ID with role-based visibility
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
-header('Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With');
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-require_once '../db.php'; // database connection
+require_once '../cors.php';
 
 // Authenticate user and get role
-$user = authenticateJWT(['admin','student']); // Returns user info with 'role'
+$user = authenticateJWT(['admin','student']); 
+$role = $user['role'];  // ✅ Fix: define $role
 
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    if (!isset($_GET['id']) || empty($_GET['id'])) {
-        http_response_code(400);
-        echo json_encode([
-            "status" => false,
-            "message" => "Course ID is required"
-        ]);
-        exit;
-    }
+// Get course ID from query string
+$course_id = isset($_GET['id']) ? intval($_GET['id']) : 0;  // ✅ Fix: define $course_id
 
-    $course_id = intval($_GET['id']);
-    $role = $user['role'];
+if ($role === 'admin') {
+    // Admin can see all courses
+    $sql = "SELECT id, institute_id, title, description, duration, fee, admin_action
+            FROM courses
+            WHERE id = ?";
+    $params = [$course_id];
+    $param_types = "i";
+} else {
+    // Students can see only approved courses
+    $sql = "SELECT id, institute_id, title, description, duration, fee, admin_action
+            FROM courses
+            WHERE id = ? AND admin_action = ?";
+    $params = [$course_id, 'approved'];
+    $param_types = "is";
+}
 
-    // Build role-based query
+if ($stmt = mysqli_prepare($conn, $sql)) {
+    // Bind parameters dynamically
     if ($role === 'admin') {
-        // Admin can see all courses (pending, approved, rejected, etc.)
-        $sql = "SELECT id, institute_id, title, description, duration, fee, admin_action
-                FROM courses
-                WHERE id = ?";
-        $params = [$course_id];
-        $param_types = "i";
+        mysqli_stmt_bind_param($stmt, $param_types, $params[0]);
     } else {
-        // Students and other roles can see only approved courses
-        $sql = "SELECT id, institute_id, title, description, duration, fee, admin_action
-                FROM courses
-                WHERE id = ? AND admin_action = ?";
-        $params = [$course_id, 'approved']; // Changed from 'approved' to 'approved'
-        $param_types = "is";
+        mysqli_stmt_bind_param($stmt, $param_types, $params[0], $params[1]);
     }
 
-    if ($stmt = mysqli_prepare($conn, $sql)) {
-        // Bind parameters dynamically based on role
-        if ($role === 'admin') {
-            mysqli_stmt_bind_param($stmt, $param_types, $params[0]);
-        } else {
-            mysqli_stmt_bind_param($stmt, $param_types, $params[0], $params[1]);
-        }
+    if (mysqli_stmt_execute($stmt)) {
+        $result = mysqli_stmt_get_result($stmt);
 
-        if (mysqli_stmt_execute($stmt)) {
-            $result = mysqli_stmt_get_result($stmt);
-
-            if ($row = mysqli_fetch_assoc($result)) {
-                http_response_code(200);
-                echo json_encode([
-                    "status" => true,
-                    "course" => $row
-                ]);
-            } else {
-                // More specific error messages based on role
-                if ($role === 'admin') {
-                    $message = "Course not found";
-                } else {
-                    $message = "Course not found or not approved yet";
-                }
-                
-                http_response_code(404);
-                echo json_encode([
-                    "status" => false,
-                    "message" => $message
-                ]);
-            }
+        if ($row = mysqli_fetch_assoc($result)) {
+            http_response_code(200);
+            echo json_encode([
+                "status" => true,
+                "course" => $row
+            ]);
         } else {
-            http_response_code(500);
+            $message = $role === 'admin'
+                ? "Course not found"
+                : "Course not found or not approved yet";
+
+            http_response_code(404);
             echo json_encode([
                 "status" => false,
-                "message" => "Query execution failed: " . mysqli_error($conn)
+                "message" => $message
             ]);
         }
-        mysqli_stmt_close($stmt);
     } else {
         http_response_code(500);
         echo json_encode([
             "status" => false,
-            "message" => "Failed to prepare statement: " . mysqli_error($conn)
+            "message" => "Query execution failed: " . mysqli_error($conn)
         ]);
     }
+    mysqli_stmt_close($stmt);
 } else {
-    http_response_code(405);
+    http_response_code(500);
     echo json_encode([
         "status" => false,
-        "message" => "Method not allowed"
+        "message" => "Failed to prepare statement: " . mysqli_error($conn)
     ]);
 }
 
