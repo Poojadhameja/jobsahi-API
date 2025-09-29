@@ -41,8 +41,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         mysqli_stmt_close($stmt);
     }
 
-    // Check if already enrolled
-    $check_enroll = "SELECT id FROM student_course_enrollments WHERE student_id = ? AND course_id = ?";
+    // Check if already enrolled (excluding deleted enrollments)
+    $check_enroll = "SELECT id FROM student_course_enrollments 
+                     WHERE student_id = ? AND course_id = ? AND deleted_at IS NULL";
     if ($stmt = mysqli_prepare($conn, $check_enroll)) {
         mysqli_stmt_bind_param($stmt, "ii", $student_id, $course_id);
         mysqli_stmt_execute($stmt);
@@ -56,10 +57,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         mysqli_stmt_close($stmt);
     }
 
-    // Insert enrollment
+    // Insert enrollment with admin_action defaulted to 'approved'
     $sql = "INSERT INTO student_course_enrollments 
             (student_id, course_id, enrollment_date, status, admin_action, created_at, modified_at) 
-            VALUES (?, ?, NOW(), 'enrolled', 'pending', NOW(), NOW())";
+            VALUES (?, ?, NOW(), 'enrolled', 'approved', NOW(), NOW())";
 
     if ($stmt = mysqli_prepare($conn, $sql)) {
         mysqli_stmt_bind_param($stmt, "ii", $student_id, $course_id);
@@ -84,11 +85,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // -------- FETCH ENROLLMENTS (GET) --------
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
-    // Build SQL query with role-based admin_action filter
+    // Build SQL query with role-based admin_action filter (exclude deleted records)
     if ($user_role === 'admin') {
-        $sql = "SELECT * FROM student_course_enrollments WHERE admin_action IN ('pending','approved')";
+        $sql = "SELECT * FROM student_course_enrollments 
+                WHERE admin_action IN ('pending','approved') AND deleted_at IS NULL 
+                ORDER BY id DESC";
     } else {
-        $sql = "SELECT * FROM student_course_enrollments WHERE admin_action = 'approved'";
+        $sql = "SELECT * FROM student_course_enrollments 
+                WHERE admin_action = 'approved' AND deleted_at IS NULL 
+                ORDER BY id DESC";
     }
 
     $result = mysqli_query($conn, $sql);

@@ -36,7 +36,6 @@ if (json_last_error() !== JSON_ERROR_NONE) {
     exit;
 }
 
-include "../db.php";
 
 if (!$conn) {
     echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
