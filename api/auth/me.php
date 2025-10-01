@@ -1,11 +1,15 @@
 <?php
 <<<<<<< HEAD
+<<<<<<< HEAD
 // me.php - Fetch current logged-in user with role-aware profiles
 require_once '../cors.php';
 
 =======
 require '../cors.php';
 >>>>>>> dfdb9388f97f0ad9898e04e43042129728ce7246
+=======
+require '../cors.php';
+>>>>>>> fdb6ce0277ac46e48dd041ab5ec6de47b5826ee1
 // Get JWT token from Authorization header
 $headers = getallheaders();
 $authHeader = isset($headers['Authorization']) ? $headers['Authorization'] : '';
