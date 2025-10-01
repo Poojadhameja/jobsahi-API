@@ -1,6 +1,10 @@
 <?php
+<<<<<<< HEAD
 // verify-otp.php - Verify OTP (for any purpose)
 require_once '../cors.php';
+=======
+require '../cors.php';
+>>>>>>> dfdb9388f97f0ad9898e04e43042129728ce7246
 
 // Get and decode JSON data
 $json_input = file_get_contents('php://input');
@@ -104,7 +108,11 @@ if ($otp_stmt = mysqli_prepare($conn, $otp_sql)) {
             mysqli_stmt_close($otp_stmt);
             http_response_code(400);
             echo json_encode([
+<<<<<<< HEAD
                 "message" => "Invalid OTP. Please check and try again", 
+=======
+                "message" => "Invalid OTP or Purpose. Please check and try again", 
+>>>>>>> dfdb9388f97f0ad9898e04e43042129728ce7246
                 "status" => false
             ]);
         }

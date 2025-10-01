@@ -3,7 +3,11 @@
 require_once '../cors.php';
 
 // ✅ Authenticate JWT and allow admin role only
+<<<<<<< HEAD
 $decoded = authenticateJWT(['admin','recruiter', 'institute']); // returns array
+=======
+$decoded = authenticateJWT(['admin','institute','recruiter']); // returns array
+>>>>>>> dfdb9388f97f0ad9898e04e43042129728ce7246
 
 try {
     // Get JSON input

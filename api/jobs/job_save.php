@@ -23,14 +23,27 @@ if (!$student_id) {
     ]);
     exit;
 }
+// ✅ Authenticate JWT (only student can access)
+$decoded = authenticateJWT('student'); 
 
-include "../db.php";
-
-if (!$conn) {
-    echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
-    exit;
+// Handle different key names from JWT payload safely
+$student_id = null;
+if (isset($decoded['id'])) {
+    $student_id = $decoded['id'];
+} elseif (isset($decoded['user_id'])) {
+    $student_id = $decoded['user_id'];
+} elseif (isset($decoded['student_id'])) {
+    $student_id = $decoded['student_id'];
 }
 
+if (!$student_id) {
+    echo json_encode([
+        "message" => "Invalid token payload: student id missing",
+        "status"  => false,
+        "decoded" => $decoded
+    ]);
+    exit;
+}
 // Get input data - Handle both JSON and form data
 $input = null;
 $job_id = null;

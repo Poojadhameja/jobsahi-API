@@ -1,5 +1,6 @@
 <?php
 // login.php - User authentication with JWT
+
 require_once '../cors.php';
 
 // Get and decode JSON data

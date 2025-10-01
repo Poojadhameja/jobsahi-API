@@ -1,5 +1,6 @@
 <?php
 // change_password.php - Change user password
+
 require_once '../cors.php';
 
 // Get JWT token from Authorization header
@@ -21,6 +22,25 @@ if (!$decoded_token) {
 }
 
 $user_id = $decoded_token['user_id'];
+// Get JWT token from Authorization header
+// $jwt_token = JWTHelper::getJWTFromHeader();
+
+// if (!$jwt_token) {
+//     http_response_code(401);
+//     echo json_encode(array("message" => "Authorization token required", "status" => false));
+//     exit;
+// }
+
+// Verify JWT token
+// $decoded_token = JWTHelper::validateJWT($jwt_token, JWT_SECRET);
+
+// if (!$decoded_token) {
+//     http_response_code(401);
+//     echo json_encode(array("message" => "Invalid or expired token", "status" => false));
+//     exit;
+// }
+
+// $user_id = $decoded_token['user_id'];
 
 // Get and decode JSON data
 $json_input = file_get_contents('php://input');
@@ -33,18 +53,19 @@ if (json_last_error() !== JSON_ERROR_NONE) {
 }
 
 // Validate required fields
-if (!isset($data['current_password']) || !isset($data['new_password'])) {
+if (!isset($data['user_id'])  || !isset($data['new_password'])) {
     http_response_code(400);
-    echo json_encode(array("message" => "Current password and new password are required", "status" => false));
+    echo json_encode(array("message" => "User Id and new password are required", "status" => false));
     exit;
 }
 
-$current_password = trim($data['current_password']);
+$user_id = intval($data['user_id']);
+// $current_password = trim($data['current_password']);
 $new_password = trim($data['new_password']);
 
-if (empty($current_password) || empty($new_password)) {
+if (empty($user_id) || empty($new_password)) {
     http_response_code(400);
-    echo json_encode(array("message" => "Current password and new password cannot be empty", "status" => false));
+    echo json_encode(array("message" => "User Id and new password cannot be empty", "status" => false));
     exit;
 }
 
@@ -56,11 +77,11 @@ if (strlen($new_password) < 6) {
 }
 
 // Check if new password is same as current password
-if ($current_password === $new_password) {
-    http_response_code(400);
-    echo json_encode(array("message" => "New password must be different from current password", "status" => false));
-    exit;
-}
+// if ($current_password === $new_password) {
+//     http_response_code(400);
+//     echo json_encode(array("message" => "New password must be different from current password", "status" => false));
+//     exit;
+// }
 
 // Fetch current user and verify current password
 $user_sql = "SELECT id, password FROM users WHERE id = ?";
@@ -82,12 +103,12 @@ if ($user_stmt = mysqli_prepare($conn, $user_sql)) {
     mysqli_stmt_close($user_stmt);
     
     // Verify current password
-    if (!password_verify($current_password, $user_data['password'])) {
-        http_response_code(401);
-        echo json_encode(array("message" => "Current password is incorrect", "status" => false));
-        mysqli_close($conn);
-        exit;
-    }
+    // if (!password_verify($current_password, $user_data['password'])) {
+    //     http_response_code(401);
+    //     echo json_encode(array("message" => "Current password is incorrect", "status" => false));
+    //     mysqli_close($conn);
+    //     exit;
+    // }
     
     // Hash new password
     $new_password_hash = password_hash($new_password, PASSWORD_DEFAULT);

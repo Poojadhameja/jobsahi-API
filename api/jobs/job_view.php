@@ -29,6 +29,34 @@ if ($user_role === 'admin') {
                       FROM jobs 
                       WHERE id = ? AND admin_action = 'approved'";
 }
+// ✅ Authenticate (student + admin)
+$decoded = authenticateJWT(['student', 'admin']); 
+
+
+// ✅ Get job_id ONLY from URL (?id=...)
+$job_id = isset($_GET['id']) && is_numeric($_GET['id']) ? (int)$_GET['id'] : null;
+if (!$job_id) {
+    echo json_encode(["message" => "Job ID missing in URL", "status" => false]);
+    exit;
+}
+
+// ✅ Extract student_id from JWT
+$student_id = isset($decoded['id']) ? (int)$decoded['id'] : (int)$decoded['user_id'];
+$user_role  = $decoded['role'] ?? null;
+
+if (empty($student_id)) {
+    echo json_encode(["message" => "❌ JWT missing user ID", "status" => false]);
+    exit;
+}
+
+// ---- JOB VISIBILITY RULE ----
+if ($user_role === 'admin') {
+    $check_job_sql = "SELECT id, title, status, admin_action FROM jobs WHERE id = ?";
+} else {
+    $check_job_sql = "SELECT id, title, status, admin_action 
+                      FROM jobs 
+                      WHERE id = ? AND admin_action = 'approval'";
+}
 
 $check_stmt = mysqli_prepare($conn, $check_job_sql);
 mysqli_stmt_bind_param($check_stmt, "i", $job_id);

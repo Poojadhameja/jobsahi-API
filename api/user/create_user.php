@@ -175,7 +175,7 @@ try {
             "user_name" => $user_name,
             "email" => $email,
             "is_verified" => $is_verified,
-            "status" => $status
+            //"status" => $status
         );
         
         // Only include profile_id if it exists

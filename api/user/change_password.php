@@ -7,7 +7,6 @@ $user_id = $data['uid'];
 $current_password = $data['current_password'];
 $new_password = $data['new_password'];
 
-// Verify current password
 $check_sql = "SELECT password FROM users WHERE id = {$user_id}";
 $check_result = mysqli_query($conn, $check_sql);
 

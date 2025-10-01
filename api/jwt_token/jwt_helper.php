@@ -1,5 +1,5 @@
 <?php
-
+// jwt_helper.php - JWT Helper Functions
 class JWTHelper {
     private static function base64UrlEncode($data) {
         return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');

@@ -22,27 +22,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Extract fields
-    $student_id    = (int)$data['student_id'];
+    $student_id    = $data['student_id'];
     $test_platform = $data['test_platform'];
     $test_name     = $data['test_name'];
-    $score         = (int)$data['score'];
-    $max_score     = (int)$data['max_score'];
-    $completed_at  = $data['completed_at']; // Expected format: "2025-09-30 18:10:42"
-    $badge_awarded = (int)$data['badge_awarded']; // 0 or 1
-    $passed        = (int)$data['passed']; // 0 or 1
+    $score         = $data['score'];
+    $max_score     = $data['max_score'];
+    $completed_at  = $data['completed_at'];
+    $badge_awarded = $data['badge_awarded'];
+    $passed        = $data['passed'];
     $admin_action  = $data['admin_action']; // pending/approved
-
-    // Validate completed_at format (YYYY-MM-DD HH:MM:SS)
-    if (!preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $completed_at)) {
-        echo json_encode(["status"=>false,"message"=>"Invalid completed_at format. Expected: YYYY-MM-DD HH:MM:SS"]);
-        exit;
-    }
-
-    // Validate admin_action values
-    if (!in_array($admin_action, ['pending', 'approved'])) {
-        echo json_encode(["status"=>false,"message"=>"Invalid admin_action. Must be 'pending' or 'approved'"]);
-        exit;
-    }
 
     try {
         $stmt = $conn->prepare("
@@ -50,19 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             (student_id, test_platform, test_name, score, max_score, completed_at, badge_awarded, passed, admin_action, created_at, modified_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
         ");
-        
-        // Corrected binding: i=integer, s=string, i=integer for badge_awarded and passed
-        $stmt->bind_param("issiisiis", 
-            $student_id,      // i - integer
-            $test_platform,   // s - string
-            $test_name,       // s - string
-            $score,           // i - integer
-            $max_score,       // i - integer
-            $completed_at,    // s - string (datetime)
-            $badge_awarded,   // i - integer (0 or 1)
-            $passed,          // i - integer (0 or 1)
-            $admin_action     // s - string
-        );
+        $stmt->bind_param("issiiissi", $student_id, $test_platform, $test_name, $score, $max_score, $completed_at, $badge_awarded, $passed, $admin_action);
 
         if ($stmt->execute()) {
             echo json_encode([
@@ -71,15 +47,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 "insert_id"=>$stmt->insert_id
             ]);
         } else {
-            echo json_encode(["status"=>false,"message"=>"Failed to submit skill test: " . $stmt->error]);
+            echo json_encode(["status"=>false,"message"=>"Failed to submit skill test"]);
         }
-        $stmt->close();
     } catch (Exception $e) {
-        echo json_encode(["status"=>false,"message"=>"Error: " . $e->getMessage()]);
+        echo json_encode(["status"=>false,"message"=>$e->getMessage()]);
+    }
+    exit;
+}
+
+// ----------------------
+// GET: Fetch Skill Tests
+// ----------------------
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    try {
+        if ($user_role === 'admin') {
+            // Admin sees all records
+            $query = "SELECT * FROM skill_tests ORDER BY created_at DESC";
+        } else {
+            // Other roles see only approved tests
+            $query = "SELECT * FROM skill_tests WHERE admin_action='approved' ORDER BY created_at DESC";
+        }
+
+        $result = $conn->query($query);
+        $tests = [];
+        while ($row = $result->fetch_assoc()) {
+            $tests[] = $row;
+        }
+
+        echo json_encode(["status"=>true,"data"=>$tests]);
+    } catch (Exception $e) {
+        echo json_encode(["status"=>false,"message"=>$e->getMessage()]);
     }
     exit;
 }
 
 // Invalid method
 echo json_encode(["status"=>false,"message"=>"Only POST and GET requests are allowed"]);
-?>

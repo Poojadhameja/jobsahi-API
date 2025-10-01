@@ -21,14 +21,23 @@ if (isset($decoded['id'])) {
     echo json_encode(["message" => "Student ID not found in token payload", "status" => false, "decoded" => $decoded]);
     exit;
 }
+// ✅ Authenticate student only
+$decoded = authenticateJWT('student');
 
-include "../db.php";
-
-if (!$conn) {
-    echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
+// --- Fix: Extract student_id safely ---
+// Common cases: "id", "student_id", "user_id", or nested inside "data"
+if (isset($decoded['id'])) {
+    $student_id = $decoded['id'];
+} elseif (isset($decoded['student_id'])) {
+    $student_id = $decoded['student_id'];
+} elseif (isset($decoded['user_id'])) {
+    $student_id = $decoded['user_id'];
+} elseif (isset($decoded['data']['id'])) {
+    $student_id = $decoded['data']['id'];
+} else {
+    echo json_encode(["message" => "Student ID not found in token payload", "status" => false, "decoded" => $decoded]);
     exit;
 }
-
 // --- Get input data ---
 $job_id = null;
 $input = [];

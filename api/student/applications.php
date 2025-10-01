@@ -5,9 +5,14 @@ require_once '../cors.php';
 // ✅ Authenticate JWT (allow both admin & student roles)
 $current_user = authenticateJWT(['admin', 'student']);
 
+// ✅ Authenticate JWT (allow both admin & student roles)
+$current_user = authenticateJWT(['admin', 'student']);
 
-
-
+// Only allow GET requests
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    echo json_encode(["message" => "Only GET requests allowed", "status" => false]);
+    exit;
+}
 // ---- Fetch Filters from Query Params ----
 $student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : null;
 $status     = isset($_GET['status']) ? trim($_GET['status']) : null; // pending, accepted, rejected

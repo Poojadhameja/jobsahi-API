@@ -79,6 +79,7 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
                 echo json_encode([
                     "message"    => "OTP sent to your phone",
                     "status"     => true,
+                    "user_id" => $user_id,
                     "expires_in" => 300
                 ]);
             } else {
