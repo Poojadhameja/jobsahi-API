@@ -1,27 +1,10 @@
 <?php
 // referrals.php
-
-declare(strict_types=1);
-error_reporting(E_ALL);
-ini_set('display_errors', '0');
-
 require_once '../cors.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['status' => false, 'message' => 'Only POST allowed']);
-    exit;
-}
-
-require_once __DIR__ . '/../jwt_token/jwt_helper.php';
-require_once __DIR__ . '/../auth/auth_middleware.php';
 
 // Authenticate and allow both admin , recruiter and student roles
 authenticateJWT(['admin', 'student', 'recruiter']);
 
-require_once __DIR__ . '/../db.php'; // make sure this defines $conn = new mysqli(...)
-
-mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 try {
     if (!isset($conn) || !($conn instanceof mysqli)) {

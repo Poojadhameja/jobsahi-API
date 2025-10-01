@@ -3,7 +3,7 @@
 require_once '../cors.php';
 
 // Authenticate JWT and get user role
-$current_user = authenticateJWT(['admin', 'student']);
+$current_user = authenticateJWT(['admin', 'student','recruiter']);
 $user_role = $current_user['role'] ?? '';
 
 // ----------------------

@@ -1,9 +1,11 @@
 <?php
-// get_notification_template_show.php - Get a single notification template by ID (JWT required)
+// get_notification_template_show.php - Get a single notification template by ID with role-based access
 require_once '../cors.php';
 
-// ✅ Authenticate JWT (any valid user can access notification templates)
-$decoded = authenticateJWT(); // returns array
+// ✅ Authenticate JWT and get user info
+$decoded = authenticateJWT(['admin','institute','recruiter']); // returns array
+$user_id = intval($decoded['user_id']);
+$user_role = $decoded['role'];
 
 try {
     // --- Get {id} from query or REST-style path ---
@@ -57,9 +59,10 @@ try {
     $typeColumn      = in_array('type',       $notificationTemplatesColumns) ? 'type'       : 'NULL';
     $subjectColumn   = in_array('subject',    $notificationTemplatesColumns) ? 'subject'    : 'NULL';
     $bodyColumn      = in_array('body',       $notificationTemplatesColumns) ? 'body'       : 'NULL';
+    $roleColumn      = in_array('role',       $notificationTemplatesColumns) ? 'role'       : 'NULL';
     $createdAtColumn = in_array('created_at', $notificationTemplatesColumns) ? 'created_at' : 'NULL';
 
-    // Build query
+    // ✅ Build query with role-based WHERE clause
     $sql = "
         SELECT
             {$idColumn} as id,
@@ -67,18 +70,51 @@ try {
             {$typeColumn} as type,
             {$subjectColumn} as subject,
             {$bodyColumn} as body,
+            {$roleColumn} as role,
             {$createdAtColumn} as created_at
         FROM notifications_templates
         WHERE {$idColumn} = ?
-        LIMIT 1
     ";
 
-    $stmt = $conn->prepare($sql);
-    if (!$stmt) {
-        throw new Exception("Prepare failed: " . $conn->error);
+    // ✅ Add role-based filtering
+    if ($user_role === 'admin') {
+        // Admin can see all templates - no additional WHERE clause needed
+        $sql .= " LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        if (!$stmt) {
+            throw new Exception("Prepare failed: " . $conn->error);
+        }
+        $stmt->bind_param($paramType, $boundId);
+        
+    } elseif ($user_role === 'recruiter') {
+        // Recruiter can only see their own templates
+        $sql .= " AND {$roleColumn} = ? LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        if (!$stmt) {
+            throw new Exception("Prepare failed: " . $conn->error);
+        }
+        if ($paramType === 'i') {
+            $stmt->bind_param("is", $boundId, $user_role);
+        } else {
+            $stmt->bind_param("ss", $boundId, $user_role);
+        }
+        
+    } elseif ($user_role === 'institute') {
+        // Institute can see their own templates and admin templates
+        $sql .= " AND ({$roleColumn} = ? OR {$roleColumn} = 'admin') LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        if (!$stmt) {
+            throw new Exception("Prepare failed: " . $conn->error);
+        }
+        if ($paramType === 'i') {
+            $stmt->bind_param("is", $boundId, $user_role);
+        } else {
+            $stmt->bind_param("ss", $boundId, $user_role);
+        }
+        
+    } else {
+        throw new Exception("Invalid user role");
     }
-
-    $stmt->bind_param($paramType, $boundId);
 
     if (!$stmt->execute()) {
         throw new Exception("Execution failed: " . $stmt->error);
@@ -91,8 +127,8 @@ try {
     } else {
         // Fallback: bind_result
         $stmt->store_result();
-        $id = $name = $type = $subject = $body = $created_at = null;
-        $stmt->bind_result($id, $name, $type, $subject, $body, $created_at);
+        $id = $name = $type = $subject = $body = $role = $created_at = null;
+        $stmt->bind_result($id, $name, $type, $subject, $body, $role, $created_at);
         $template = null;
         if ($stmt->num_rows > 0 && $stmt->fetch()) {
             $template = [
@@ -101,6 +137,7 @@ try {
                 'type'       => $type,
                 'subject'    => $subject,
                 'body'       => $body,
+                'role'       => $role,
                 'created_at' => $created_at
             ];
         }
@@ -115,7 +152,7 @@ try {
     } else {
         echo json_encode([
             "status"  => false,
-            "message" => "Notification template not found"
+            "message" => "Notification template not found or you don't have permission to view it"
         ]);
     }
 

@@ -15,29 +15,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
 
     $input = json_decode(file_get_contents("php://input"), true);
 
-    $skills = $input['skills'] ?? "";
-    $education = $input['education'] ?? "";
-    $resume = $input['resume'] ?? "";
-    $certificates = $input['certificates'] ?? "";
-    $portfolio_link = $input['portfolio_link'] ?? "";
-    $linkedin_url = $input['linkedin_url'] ?? "";
-    $dob = $input['dob'] ?? "";
-    $gender = $input['gender'] ?? "";
-    $job_type = $input['job_type'] ?? "";
-    $trade = $input['trade'] ?? "";
-    $location = $input['location'] ?? "";
+    $skills = $input['skills'] ?? null;
+    $education = $input['education'] ?? null;
+    $resume = $input['resume'] ?? null;
+    $certificates = $input['certificates'] ?? null;
+    $portfolio_link = $input['portfolio_link'] ?? null;
+    $linkedin_url = $input['linkedin_url'] ?? null;
+    $dob = $input['dob'] ?? null;
+    $gender = $input['gender'] ?? null;
+    $job_type = $input['job_type'] ?? null;
+    $trade = $input['trade'] ?? null;
+    $location = $input['location'] ?? null;
+    $bio = $input['bio'] ?? null;
+    $experience = $input['experience'] ?? null;
+    $graduation_year = $input['graduation_year'] ?? null;
+    $cgpa = $input['cgpa'] ?? null;
 
+    // Build UPDATE query with all fields
     $sql = "UPDATE student_profiles SET 
-                skills = ?, education = ?, resume = ?, certificates = ?,portfolio_link = ?, linkedin_url = ?,
-                dob = ?, gender = ?, job_type = ?, trade = ?, location = ?, modified_at = NOW()
+                skills = ?, 
+                education = ?, 
+                resume = ?, 
+                certificates = ?,
+                portfolio_link = ?, 
+                linkedin_url = ?,
+                dob = ?, 
+                gender = ?, 
+                job_type = ?, 
+                trade = ?, 
+                location = ?,
+                bio = ?,
+                experience = ?,
+                graduation_year = ?,
+                cgpa = ?,
+                modified_at = NOW()
             WHERE id = ? AND deleted_at IS NULL";
 
     $stmt = mysqli_prepare($conn, $sql);
     mysqli_stmt_bind_param(
         $stmt,
-        "sssssssssssi",
-        $skills, $education, $resume, $certificates, $portfolio_link, $linkedin_url,
-        $dob, $gender, $job_type, $trade, $location, $id
+        "ssssssssssssssdi",
+        $skills, 
+        $education, 
+        $resume, 
+        $certificates, 
+        $portfolio_link, 
+        $linkedin_url,
+        $dob, 
+        $gender, 
+        $job_type, 
+        $trade, 
+        $location,
+        $bio,
+        $experience,
+        $graduation_year,
+        $cgpa,
+        $id
     );
 
     if (mysqli_stmt_execute($stmt)) {

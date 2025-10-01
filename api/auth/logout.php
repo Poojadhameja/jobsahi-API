@@ -2,7 +2,6 @@
 // logout.php - JWT-based logout (client-side token removal)
 require_once '../cors.php';
 
-
 // Verify token exists and is valid
 $current_user = authenticateJWT();
 

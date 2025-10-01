@@ -77,4 +77,5 @@ require_once __DIR__ . '/jwt_token/jwt_helper.php';
 // Include Auth Middleware
 require_once __DIR__ . '/auth/auth_middleware.php';
 
+require_once __DIR__ . '/helpers/otp_helper.php';
 ?> 

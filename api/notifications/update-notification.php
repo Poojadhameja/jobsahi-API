@@ -3,17 +3,8 @@
 require_once '../cors.php';
 
 // Authenticate JWT for both admin and student roles
-authenticateJWT(['admin', 'recruiter','institute' , 'student']);
+authenticateJWT(['admin', 'recruiter','institute']);
 
-// Check request method
-if ($_SERVER['REQUEST_METHOD'] !== 'PATCH') {
-    http_response_code(405);
-    echo json_encode([
-        "status" => false,
-        "message" => "Only PATCH requests are allowed"
-    ]);
-    exit;
-}
 
 // Get notification ID from URL
 if (!isset($_GET['id']) || empty($_GET['id'])) {
