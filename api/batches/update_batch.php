@@ -1,8 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// update_batch.php - Update batch details (Admin, Recruiter access)
+require_once '../cors.php';
 
 // Authenticate JWT and allow only admin and recruiter
 $decoded = authenticateJWT(['admin', 'recruiter']);
@@ -46,7 +44,7 @@ try {
 
     $batch = $result->fetch_assoc();
 
-    // Only admin can change 'admin_action' from 'pending' to 'approval'
+    // Only admin can change 'admin_action' from 'pending' to 'approved'
     if (isset($data['admin_action']) && $user_role !== 'admin') {
         echo json_encode([
             "status" => false,

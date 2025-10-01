@@ -1,8 +1,6 @@
 <?php
 // delete_user.php - Soft delete user by setting status to inactive (Admin only or own account)
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'DELETE') {
     http_response_code(405);

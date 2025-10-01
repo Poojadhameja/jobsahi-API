@@ -1,6 +1,6 @@
 <?php
-include '../CORS.php';
-include "../db.php";
+// get_user_stats.php - Get user statistics
+require_once '../cors.php';
 
 $stats_sql = "
     SELECT 

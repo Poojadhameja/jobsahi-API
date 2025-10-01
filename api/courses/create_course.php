@@ -1,9 +1,6 @@
 <?php
 // create_course.php - Create new course (Admin, Institute access)
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 // Authenticate JWT and allow multiple roles
 $decoded = authenticateJWT(['admin', 'institute']); 
@@ -75,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $sql = "SELECT * FROM courses";
         } else {
             // Other roles see only approved courses
-            $sql = "SELECT * FROM courses WHERE admin_action = 'approval'";
+            $sql = "SELECT * FROM courses WHERE admin_action = 'approved'";
         }
 
         $result = $conn->query($sql);

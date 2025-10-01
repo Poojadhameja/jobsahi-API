@@ -1,11 +1,9 @@
 <?php
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// create_update_notifications_templates.php - Create/update notification templates (Admin access only)
+require_once '../cors.php';
 
 // ✅ Authenticate JWT and allow admin role only
-$decoded = authenticateJWT(['admin']); // returns array
+$decoded = authenticateJWT(['admin','institute','recruiter']); // returns array
 
 try {
     // Get JSON input

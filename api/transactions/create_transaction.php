@@ -1,14 +1,6 @@
 <?php
-include '../CORS.php';
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// create_transaction.php - Create new transaction (Admin, Institute access)
+require_once '../cors.php';
 
 // Authenticate JWT and allow multiple roles
 $decoded = authenticateJWT(); // returns array

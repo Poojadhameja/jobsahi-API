@@ -1,5 +1,14 @@
 <?php
-include '../CORS.php';
+
+require_once '../cors.php';
+
+// update_user.php - Update user with JWT authentication
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: PUT, POST');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+
+// Include config first to define constants
 require_once '../db.php';
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
@@ -11,8 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'PUT' && $_SERVER['REQUEST_METHOD'] !== 'POST
 }
 
 // Debug: Check if Authorization header exists
-$headers = getallheaders();
-if (!isset($headers['Authorization']) && !isset($headers['authorization'])) {
+$headers = getallheaders();if (!isset($headers['Authorization']) && !isset($headers['authorization'])) {
     http_response_code(401);
     echo json_encode(array(
         "message" => "Authorization header missing", 
@@ -60,7 +68,7 @@ foreach ($required_fields as $field) {
 }
 
 $id = intval($data['uid']);
-$name = trim($data['uname']);
+$user_name = trim($data['uname']);
 $email = trim($data['uemail']);
 $password = isset($data['upassword']) ? trim($data['upassword']) : null;
 $role = trim($data['urole']);
@@ -74,9 +82,9 @@ error_log("Target user ID: " . $id);
 
 
 // Validate input data
-if (empty($name) || empty($email) || empty($role) || empty($phone_number)) {
+if (empty($user_name) || empty($email) || empty($role) || empty($phone_number)) {
     http_response_code(400);
-    echo json_encode(array("message" => "Name, email, role, and phone number cannot be empty", "status" => false));
+    echo json_encode(array("message" => "User_Name, email, role, and phone number cannot be empty", "status" => false));
     exit;
 }
 
@@ -135,16 +143,16 @@ if (!empty($password)) {
     }
     
     $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-    $sql = "UPDATE users SET name = ?, email = ?, password = ?, role = ?, phone_number = ?, is_verified = ? WHERE id = ?";
+    $sql = "UPDATE users SET user_name = ?, email = ?, password = ?, role = ?, phone_number = ?, is_verified = ? WHERE id = ?";
     
     if ($stmt = mysqli_prepare($conn, $sql)) {
-        mysqli_stmt_bind_param($stmt, "sssssii", $name, $email, $hashed_password, $role, $phone_number, $is_verified, $id);
+        mysqli_stmt_bind_param($stmt, "sssssii", $user_name, $email, $hashed_password, $role, $phone_number, $is_verified, $id);
     }
 } else {
-    $sql = "UPDATE users SET name = ?, email = ?, role = ?, phone_number = ?, is_verified = ? WHERE id = ?";
+    $sql = "UPDATE users SET user_name = ?, email = ?, role = ?, phone_number = ?, is_verified = ? WHERE id = ?";
     
     if ($stmt = mysqli_prepare($conn, $sql)) {
-        mysqli_stmt_bind_param($stmt, "ssssii", $name, $email, $role, $phone_number, $is_verified, $id);
+        mysqli_stmt_bind_param($stmt, "ssssii", $user_name, $email, $role, $phone_number, $is_verified, $id);
     }
 }
 

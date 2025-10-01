@@ -1,19 +1,8 @@
 <?php
-include '../CORS.php';
-// Handle preflight (CORS) requests
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit(0);
-}
-
-// Only allow DELETE requests
-if ($_SERVER['REQUEST_METHOD'] !== 'DELETE') {
-    echo json_encode(["message" => "Only DELETE requests allowed", "status" => false]);
-    exit;
-}
+// remove_saved_job.php
+require_once '../cors.php';
 
 // ---- JWT Authentication ----
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
 
 // ✅ Authenticate student only
 $decoded = authenticateJWT('student');

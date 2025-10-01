@@ -1,9 +1,5 @@
 <?php
-// get_activity_logs.php - Get all system activity logs (JWT required)
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require '../cors.php';
 
 // ✅ Authenticate JWT (any valid user can access activity logs)
 $decoded = authenticateJWT(['admin','student','institute','recruiter']); // returns array

@@ -1,53 +1,126 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
+require_once '../db.php'; // ✅ make sure DB connection is included
 
-// Authenticate and allow both admin, recruiter, institute and student roles
-authenticateJWT(['admin', 'student','recruiter','institute']);
-
-include "../db.php";
-
-// Only allow POST requests
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    echo json_encode(["status" => false, "message" => "Only POST requests allowed"]);
-    exit;
-}
+// Authenticate and allow admin, recruiter, institute, and student roles
+$decoded = authenticateJWT(['admin', 'student', 'recruiter', 'institute']);
+$sender_id = intval($decoded['user_id']); // ✅ Sender is the logged-in user
+$sender_role = $decoded['role']; // ✅ Get sender role from JWT
 
 // Get raw POST body
 $input = json_decode(file_get_contents("php://input"), true);
 
-// Validate input
-if (!isset($input['sender_id'], $input['receiver_id'], $input['message'], $input['type'])) {
+// Validate required input fields
+if (!isset($input['receiver_id'], $input['message'])) {
     echo json_encode([
         "status" => false,
-        "message" => "Missing required fields: sender_id, receiver_id, message, type"
+        "message" => "Missing required fields: receiver_id, message"
     ]);
     exit;
 }
 
-$sender_id   = intval($input['sender_id']);
 $receiver_id = intval($input['receiver_id']);
-$message     = trim($input['message']);
-$type        = trim($input['type']); // e.g., 'text', 'image', etc.
+$message = trim($input['message']);
+
+// Handle optional fields with defaults
+$type = isset($input['type']) ? trim($input['type']) : 'text';
+$attachment_url = isset($input['attachment_url']) ? trim($input['attachment_url']) : NULL;
+$attachment_type = isset($input['attachment_type']) ? trim($input['attachment_type']) : NULL;
+$receiver_role = isset($input['receiver_role']) ? trim($input['receiver_role']) : NULL;
+
+// Validate ENUM values
+$valid_types = ['text', 'file', 'system'];
+$valid_attachment_types = ['image', 'pdf', 'doc', 'other'];
+$valid_roles = ['student', 'recruiter', 'institute', 'admin'];
+
+if (!in_array($type, $valid_types)) {
+    echo json_encode([
+        "status" => false,
+        "message" => "Invalid type. Must be one of: " . implode(', ', $valid_types)
+    ]);
+    exit;
+}
+
+if ($attachment_type && !in_array($attachment_type, $valid_attachment_types)) {
+    echo json_encode([
+        "status" => false,
+        "message" => "Invalid attachment_type. Must be one of: " . implode(', ', $valid_attachment_types)
+    ]);
+    exit;
+}
+
+if ($receiver_role && !in_array($receiver_role, $valid_roles)) {
+    echo json_encode([
+        "status" => false,
+        "message" => "Invalid receiver_role. Must be one of: " . implode(', ', $valid_roles)
+    ]);
+    exit;
+}
 
 try {
-    $sql = "INSERT INTO messages (sender_id, receiver_id, message, type, created_at)
-            VALUES (?, ?, ?, ?, NOW())";
+    // If receiver_role is not provided, try to fetch it from the database
+    if (!$receiver_role) {
+        $role_query = "
+            SELECT 'student' AS role FROM students WHERE id = ? 
+            UNION ALL 
+            SELECT 'recruiter' AS role FROM recruiters WHERE id = ? 
+            UNION ALL 
+            SELECT 'institute' AS role FROM institutes WHERE id = ? 
+            UNION ALL 
+            SELECT 'admin' AS role FROM admins WHERE id = ?
+            LIMIT 1
+        ";
+
+        $role_stmt = $conn->prepare($role_query);
+        $role_stmt->bind_param("iiii", $receiver_id, $receiver_id, $receiver_id, $receiver_id);
+        $role_stmt->execute();
+        $role_result = $role_stmt->get_result();
+
+        if ($role_result->num_rows > 0) {
+            $role_row = $role_result->fetch_assoc();
+            $receiver_role = $role_row['role'];
+        } else {
+            echo json_encode([
+                "status" => false,
+                "message" => "Receiver not found or invalid receiver_id"
+            ]);
+            exit;
+        }
+    }
+
+    // Insert message with all required and optional fields
+    $sql = "INSERT INTO messages 
+            (sender_id, sender_role, receiver_id, receiver_role, message, attachment_url, attachment_type, type, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("iiss", $sender_id, $receiver_id, $message, $type);
+    // ✅ FIXED bind_param types (was wrong before)
+    $stmt->bind_param("isisssss",
+        $sender_id,        // i = int
+        $sender_role,      // s = string
+        $receiver_id,      // i = int
+        $receiver_role,    // s = string
+        $message,          // s = string
+        $attachment_url,   // s = string (nullable)
+        $attachment_type,  // s = string (nullable)
+        $type              // s = string
+    );
 
     if ($stmt->execute()) {
         echo json_encode([
             "status" => true,
             "message" => "Message sent successfully",
             "data" => [
-                "id"          => $stmt->insert_id,
-                "sender_id"   => $sender_id,
+                "id" => $stmt->insert_id,
+                "sender_id" => $sender_id,
+                "sender_role" => $sender_role,
                 "receiver_id" => $receiver_id,
-                "message"     => $message,
-                "type"        => $type,
-                "created_at"  => date("Y-m-d H:i:s")
+                "receiver_role" => $receiver_role,
+                "message" => $message,
+                "attachment_url" => $attachment_url,
+                "attachment_type" => $attachment_type,
+                "type" => $type,
+                "created_at" => date("Y-m-d H:i:s")
             ]
         ]);
     } else {

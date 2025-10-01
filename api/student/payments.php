@@ -1,8 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-require_once '../db.php';
+// student/payments.php - Get student course payments history
+require_once '../cors.php';
 
 // ✅ Authenticate and get user data
 $current_user = authenticateJWT(['admin', 'student']);

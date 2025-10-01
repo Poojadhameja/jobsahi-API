@@ -1,19 +1,6 @@
 <?php
-include '../../CORS.php';
-// Only allow GET requests
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    http_response_code(405);
-    echo json_encode([
-        "status" => false,
-        "message" => "Method not allowed. Only GET requests are supported."
-    ]);
-    exit();
-}
-
-// Include required files
-include __DIR__ . "/../../db.php";
-require_once __DIR__ . "/../../jwt_token/jwt_helper.php";
-require_once __DIR__ . "/../../auth/auth_middleware.php";
+// placements.php - Placement analytics report with role-based access (JWT required)
+require_once(__DIR__ . '/../../cors.php');
 
 // Authenticate JWT - returns decoded payload
 $decoded = authenticateJWT(['admin', 'recruiter', 'institute', 'student']); 

@@ -1,8 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// get_job_applications.php - List job applicants (Role-based visibility)
+require_once '../cors.php';
 
 // ✅ Authenticate JWT (allow admin, recruiter)
 $decoded = authenticateJWT(['admin', 'recruiter']); 
@@ -22,13 +20,13 @@ if ($job_id <= 0) {
 try {
     // ✅ Build query conditionally based on role
     if ($user_role === 'admin') {
-        // Admin sees ALL (pending + approval)
+        // Admin sees ALL (pending + approved)
         $query = "SELECT * FROM applications WHERE job_id = ? ORDER BY applied_at DESC";
         $stmt = $conn->prepare($query);
         $stmt->bind_param("i", $job_id);
     } else {
         // Recruiter, Institute, Students → Only approved applications
-        $query = "SELECT * FROM applications WHERE job_id = ? AND admin_action = 'approval' ORDER BY applied_at DESC";
+        $query = "SELECT * FROM applications WHERE job_id = ? AND admin_action = 'approved' ORDER BY applied_at DESC";
         $stmt = $conn->prepare($query);
         $stmt->bind_param("i", $job_id);
     }

@@ -1,5 +1,7 @@
 <?php
-include '../CORS.php';
+// update-notification.php - Mark a notification as read
+require_once '../cors.php';
+
 // TEMPORARY: Test if file is accessible
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     echo json_encode([

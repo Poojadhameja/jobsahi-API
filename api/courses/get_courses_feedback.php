@@ -1,25 +1,16 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-require_once '../db.php';  // DB connection
+// get_courses_feedback.php - Fetch feedback for a course with role-based visibility
+require_once '../cors.php';
 
 // Authenticate and get user info (admin, student)
 $user = authenticateJWT(['admin','student']); 
 $user_role = $user['role'] ?? null;
 
-// Check if request method is GET
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    http_response_code(405);
-    echo json_encode([
-        "status" => false,
-        "message" => "Only GET method is allowed"
-    ]);
-    exit();
-}
+// GET THE COURSE ID FROM REQUEST - THIS WAS MISSING!
+$course_id = isset($_GET['id']) ? intval($_GET['id']) : null;
 
 // Validate course_id
-if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
+if (!$course_id || $course_id <= 0) {
     http_response_code(400);
     echo json_encode([
         "status" => false,
@@ -27,8 +18,6 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
     ]);
     exit();
 }
-
-$course_id = intval($_GET['id']);
 
 // Optional pagination/filter params
 $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
@@ -71,11 +60,11 @@ if ($rating_filter !== null && $rating_filter >= 1 && $rating_filter <= 5) {
 
 // Role-based admin_action filter
 if ($user_role === 'admin') {
-    // Admin sees all: pending + approval
-    $where_conditions[] = "(admin_action = 'approval' OR admin_action = 'pending')";
+    // Admin sees all: pending + approved
+    $where_conditions[] = "(admin_action = 'approved' OR admin_action = 'pending')";
 } else {
-    // Others see only approval
-    $where_conditions[] = "admin_action = 'approval'";
+    // Others see only approved
+    $where_conditions[] = "admin_action = 'approved'";
 }
 
 $where_clause = implode(" AND ", $where_conditions);
@@ -130,7 +119,7 @@ mysqli_stmt_close($stmt);
 $total_pages = ceil($total_feedback / $limit);
 
 // Average rating
-$avg_sql = "SELECT AVG(rating) as avg_rating FROM course_feedback WHERE course_id = ? AND " . ($user_role === 'admin' ? "(admin_action = 'approval' OR admin_action = 'pending')" : "admin_action = 'approval'");
+$avg_sql = "SELECT AVG(rating) as avg_rating FROM course_feedback WHERE course_id = ? AND " . ($user_role === 'admin' ? "(admin_action = 'approved' OR admin_action = 'pending')" : "admin_action = 'approved'");
 $avg_stmt = mysqli_prepare($conn, $avg_sql);
 mysqli_stmt_bind_param($avg_stmt, "i", $course_id);
 mysqli_stmt_execute($avg_stmt);
@@ -141,7 +130,7 @@ mysqli_stmt_close($avg_stmt);
 // Rating distribution
 $dist_sql = "SELECT rating, COUNT(*) as count 
              FROM course_feedback 
-             WHERE course_id = ? AND " . ($user_role === 'admin' ? "(admin_action = 'approval' OR admin_action = 'pending')" : "admin_action = 'approval'") . " 
+             WHERE course_id = ? AND " . ($user_role === 'admin' ? "(admin_action = 'approved' OR admin_action = 'pending')" : "admin_action = 'approved'") . " 
              GROUP BY rating ORDER BY rating DESC";
 $rating_distribution = [];
 $dist_stmt = mysqli_prepare($conn, $dist_sql);
@@ -161,20 +150,7 @@ echo json_encode([
     "status" => true,
     "data" => [
         "course_id" => $course_id,
-        "feedback" => $feedback_list,
-        "summary" => [
-            "total_feedback" => intval($total_feedback),
-            "average_rating" => $avg_rating ? round(floatval($avg_rating), 2) : null,
-            "rating_distribution" => $rating_distribution
-        ],
-        "pagination" => [
-            "current_page" => $page,
-            "total_pages" => $total_pages,
-            "total_items" => intval($total_feedback),
-            "items_per_page" => $limit,
-            "has_next_page" => $page < $total_pages,
-            "has_previous_page" => $page > 1
-        ]
+        "feedback" => $feedback_list
     ]
 ]);
 ?>

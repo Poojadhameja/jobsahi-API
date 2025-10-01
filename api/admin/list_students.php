@@ -1,9 +1,6 @@
 <?php
-include '../CORS.php';
-
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// list_students.php - List/manage all students
+require_once '../cors.php';
 
 // ✅ Authenticate JWT and allow only admin access
 $decoded = authenticateJWT(['admin']); // Only admin can access this endpoint

@@ -1,143 +1,73 @@
 <?php
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// update_job_admin_action.php - Update only admin_action (Admin access only)
+require_once '../cors.php';
 
-// ✅ Authenticate JWT and allow admin role only
+// Authenticate JWT and allow admin role only
 $decoded = authenticateJWT(['admin']); // returns array
 
 try {
     // Get job ID from URL parameter
     $job_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-    
     if ($job_id <= 0) {
         throw new Exception("Invalid job ID provided");
     }
-    
+
     // Get JSON input
     $input = json_decode(file_get_contents('php://input'), true);
-    
-    if (!$input || !isset($input['status'])) {
-        throw new Exception("Status is required");
+    if (!$input || !isset($input['admin_action'])) {
+        throw new Exception("admin_action is required");
     }
+
+    $admin_action = trim($input['admin_action']);
     
-    $new_status = trim($input['status']);
-    $admin_notes = isset($input['admin_notes']) ? trim($input['admin_notes']) : '';
-    
-    // Validate status values
-    $allowed_statuses = ['approved', 'rejected', 'pending'];
-    if (!in_array($new_status, $allowed_statuses)) {
-        throw new Exception("Invalid status. Allowed values: " . implode(', ', $allowed_statuses));
+    // Optional: validate allowed admin_action values
+    $allowed_actions = ['approved', 'rejected', 'pending']; // customize as needed
+    if (!in_array($admin_action, $allowed_actions)) {
+        throw new Exception("Invalid admin_action. Allowed values: " . implode(', ', $allowed_actions));
     }
-    
-    // First, let's check what columns exist in jobs table
-    $checkJobs = $conn->query("DESCRIBE jobs");
-    
-    if (!$checkJobs) {
-        throw new Exception("Cannot access jobs table structure");
-    }
-    
-    // Get column names for jobs table
-    $jobColumns = [];
-    while ($row = $checkJobs->fetch_assoc()) {
-        $jobColumns[] = $row['Field'];
-    }
-    
-    // Determine the correct job ID column name
-    $jobIdColumn = 'id'; // default
-    if (in_array('job_id', $jobColumns)) {
-        $jobIdColumn = 'job_id';
-    } elseif (in_array('id', $jobColumns)) {
-        $jobIdColumn = 'id';
-    }
-    
-    // Check if required columns exist in jobs table
-    $statusColumn = in_array('status', $jobColumns) ? 'status' : (in_array('job_status', $jobColumns) ? 'job_status' : 'status');
-    $notesColumn = in_array('admin_notes', $jobColumns) ? 'admin_notes' : (in_array('notes', $jobColumns) ? 'notes' : null);
-    $updatedAtColumn = in_array('updated_at', $jobColumns) ? 'updated_at' : (in_array('modified_at', $jobColumns) ? 'modified_at' : null);
-    
-    // Check if job exists first
-    $checkStmt = $conn->prepare("SELECT {$jobIdColumn} FROM jobs WHERE {$jobIdColumn} = ?");
+
+    // Check if job exists
+    $checkStmt = $conn->prepare("SELECT id FROM jobs WHERE id = ?");
     $checkStmt->bind_param("i", $job_id);
     $checkStmt->execute();
     $checkResult = $checkStmt->get_result();
-    
+
     if ($checkResult->num_rows === 0) {
         throw new Exception("Job not found");
     }
-    
-    // Build the update query dynamically based on available columns
-    $updateFields = ["{$statusColumn} = ?"];
-    $params = [$new_status];
-    $types = "s";
-    
-    if ($notesColumn && !empty($admin_notes)) {
-        $updateFields[] = "{$notesColumn} = ?";
-        $params[] = $admin_notes;
-        $types .= "s";
-    }
-    
-    if ($updatedAtColumn) {
-        $updateFields[] = "{$updatedAtColumn} = NOW()";
-    }
-    
-    $updateQuery = "UPDATE jobs SET " . implode(', ', $updateFields) . " WHERE {$jobIdColumn} = ?";
-    $params[] = $job_id;
-    $types .= "i";
-    
-    $stmt = $conn->prepare($updateQuery);
-    $stmt->bind_param($types, ...$params);
-    
+
+    // Update only admin_action
+    $stmt = $conn->prepare("UPDATE jobs SET admin_action = ? WHERE id = ?");
+    $stmt->bind_param("si", $admin_action, $job_id);
+
     if ($stmt->execute()) {
         if ($stmt->affected_rows > 0) {
-            // Get updated job details
-            $selectFields = [
-                "j.{$jobIdColumn} as job_id",
-                "j.{$statusColumn} as status"
-            ];
-            
-            if ($notesColumn) {
-                $selectFields[] = "j.{$notesColumn} as admin_notes";
-            }
-            
-            if ($updatedAtColumn) {
-                $selectFields[] = "j.{$updatedAtColumn} as updated_at";
-            }
-            
-            // Add other common job fields if they exist
-            $commonFields = ['title', 'company_name', 'job_title', 'description'];
-            foreach ($commonFields as $field) {
-                if (in_array($field, $jobColumns)) {
-                    $selectFields[] = "j.{$field}";
-                }
-            }
-            
-            $selectQuery = "SELECT " . implode(', ', $selectFields) . " FROM jobs j WHERE j.{$jobIdColumn} = ?";
-            $selectStmt = $conn->prepare($selectQuery);
+            // Return updated job details
+            $selectStmt = $conn->prepare("SELECT id as job_id, admin_action FROM jobs WHERE id = ?");
             $selectStmt->bind_param("i", $job_id);
             $selectStmt->execute();
             $result = $selectStmt->get_result();
             $updatedJob = $result->fetch_assoc();
-            
+
             echo json_encode([
                 "status" => true,
-                "message" => "Job status updated successfully",
+                "message" => "admin_action updated successfully",
                 "data" => $updatedJob
             ]);
         } else {
             echo json_encode([
                 "status" => false,
-                "message" => "No changes made to job status"
+                "message" => "No changes made to admin_action"
             ]);
         }
     } else {
         echo json_encode([
             "status" => false,
-            "message" => "Failed to update job status",
+            "message" => "Failed to update admin_action",
             "error" => $stmt->error
         ]);
     }
+
 } catch (Exception $e) {
     echo json_encode([
         "status" => false,

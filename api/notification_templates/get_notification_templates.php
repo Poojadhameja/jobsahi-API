@@ -1,8 +1,7 @@
 <?php
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// get_notification_templates.php - Get all notification templates (JWT required)
+require_once '../cors.php';
+
 // ✅ Authenticate JWT (any valid user can access notification templates)
 $decoded = authenticateJWT(); // returns array
 try {

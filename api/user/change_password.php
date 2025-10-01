@@ -1,12 +1,11 @@
 <?php
-include '../CORS.php';
+// change_password.php - Change user password
+require_once '../cors.php';
 
 $data = json_decode(file_get_contents('php://input'), true);
 $user_id = $data['uid'];
 $current_password = $data['current_password'];
 $new_password = $data['new_password'];
-
-include "../db.php";
 
 // Verify current password
 $check_sql = "SELECT password FROM users WHERE id = {$user_id}";

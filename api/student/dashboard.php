@@ -1,7 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// dashboard.php - Student Dashboard Counters API
+require_once '../cors.php';
 
 // ✅ Authenticate as student role
 $decoded = authenticateJWT(['admin', 'student']);
@@ -25,8 +24,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-include "../db.php";
-echo "✅ Database connected successfully";
 
 // Verify student exists
 $verify_sql = "SELECT id FROM users WHERE id = ? AND role = 'student'";

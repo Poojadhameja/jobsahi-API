@@ -1,8 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// send_notifications.php - Send broadcast/system notifications (JWT required)
+require_once '../cors.php';
 
 // ✅ Authenticate JWT (any valid user can send notifications)
 $decoded = authenticateJWT(); // returns array

@@ -1,5 +1,16 @@
 <?php
-include '../CORS.php';
+// update_interview.php - Update/reschedule interview (Admin, Recruiter access) - PUT API
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: PUT, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+
+// Handle preflight OPTIONS request
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
 // Only allow PUT method
 if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
     echo json_encode([
@@ -51,12 +62,12 @@ try {
     // Role-based visibility query for admin_action
     if ($user_role === 'admin') {
         // Admin sees all, including 'pending'
-        $check_sql = "SELECT * FROM interviews WHERE id = ? AND (admin_action = 'pending' OR admin_action = 'approval')";
+        $check_sql = "SELECT * FROM interviews WHERE id = ? AND (admin_action = 'pending' OR admin_action = 'approved')";
         $check_stmt = $conn->prepare($check_sql);
         $check_stmt->bind_param("i", $interview_id);
     } else {
         // Non-admin (recruiter, institute, student) sees only approved interviews
-        $check_sql = "SELECT * FROM interviews WHERE id = ? AND admin_action = 'approval'";
+        $check_sql = "SELECT * FROM interviews WHERE id = ? AND admin_action = 'approved'";
         $check_stmt = $conn->prepare($check_sql);
         $check_stmt->bind_param("i", $interview_id);
     }

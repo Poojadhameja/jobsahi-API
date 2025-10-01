@@ -1,8 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// get_jobs_by_role.php - List jobs/applications based on admin_action and user role
+require_once '../cors.php';
 
 // ✅ Authenticate JWT and allow all roles
 $decoded = authenticateJWT(['admin', 'recruiter']); // returns array
@@ -20,7 +18,7 @@ try {
         // Others only see approved jobs
         $sql = "SELECT id, recruiter_id, title, description, location, skills_required, salary_min, salary_max, job_type, experience_required, application_deadline, is_remote, no_of_vacancies, status, admin_action, created_at
                 FROM jobs
-                WHERE admin_action = 'approval'
+                WHERE admin_action = 'approved'
                 ORDER BY created_at DESC";
         $stmt = $conn->prepare($sql);
     }

@@ -1,14 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(array("message" => "Only POST requests allowed", "status" => false));
-    exit;
-}
-
+// logout.php - JWT-based logout (client-side token removal)
+require '../cors.php';
 // Verify token exists and is valid
 $current_user = authenticateJWT();
 

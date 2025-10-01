@@ -1,13 +1,6 @@
 <?php
-include '../CORS.php';
-// Only allow POST requests
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    echo json_encode(["message" => "Only POST requests allowed", "status" => false]);
-    exit;
-}
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// save_job.php - Save job to student's bookmarks (JWT required)
+require_once '../cors.php';
 
 // ✅ Authenticate JWT (only student can access)
 $decoded = authenticateJWT('student'); 

@@ -1,14 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../db.php';
-
-// Check if request method is POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(array("message" => "Only POST requests allowed", "status" => false));
-    exit;
-}
+// login.php - User authentication with JWT
+require_once '../cors.php';
 
 // Get and decode JSON data
 $json_input = file_get_contents('php://input');
@@ -37,7 +29,7 @@ if (empty($email) || empty($password)) {
 }
 
 // Use prepared statements
-$sql = "SELECT id, name, email, role, phone_number, is_verified, password 
+$sql = "SELECT id, user_name, email, role, phone_number, is_verified, password 
         FROM users 
         WHERE email = ?";
 
@@ -55,7 +47,7 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
                 $payload = [
                     'user_id' => $user['id'],
                     'email' => $user['email'],
-                    'name' => $user['name'],
+                    'name' => $user['user_name'],
                     'role' => $user['role'],
                     'phone_number' => $user['phone_number'],
                     'iat' => time(),
@@ -91,7 +83,7 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
     mysqli_stmt_close($stmt);
 } else {
     http_response_code(500);
-    // echo json_encode(array("message" => "Database query failed", "status" => false));
+    echo json_encode(array("message" => "Database query failed", "status" => false));
 }
 
 mysqli_close($conn);

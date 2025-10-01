@@ -1,5 +1,16 @@
 <?php
-include '../CORS.php';
+// update_recruiter_profile_id.php - Update recruiter/company profile by id
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: PUT, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+
+// Handle preflight requests
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
 // Only allow PUT method
 if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
     http_response_code(405);
@@ -94,7 +105,7 @@ if ($affected_rows > 0) {
 
     // Role-based filtering: if user is not admin, only fetch approved records
     if ($user_role !== 'admin') {
-        $fetch_sql .= " AND admin_action = 'approval'";
+        $fetch_sql .= " AND admin_action = 'approved'";
     }
 
     $fetch_stmt = mysqli_prepare($conn, $fetch_sql);
