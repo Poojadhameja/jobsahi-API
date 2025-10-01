@@ -1,33 +1,42 @@
 <?php
-// get-notifications.php 
 require_once '../cors.php';
 
-// Authenticate and allow both admin and student roles
-authenticateJWT(['admin', 'recruiter','institute' , 'student']);
-
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    echo json_encode(["status" => false, "message" => "Only GET requests allowed"]);
-    exit;
-}
+// Get logged-in user info
+$decoded = authenticateJWT(['admin', 'recruiter','institute' , 'student']);
+$user_id = intval($decoded['user_id']);
+$user_role = $decoded['role']; // assume JWT returns role
 
 try {
-    // Adjust columns based on your table structure
-    $sql = "SELECT id, message, created_at, is_read 
-            FROM notifications 
-            ORDER BY created_at DESC";
+    // Base query: notifications that should be visible to this user
+    // Assuming notifications table has: user_id (sender), message, type, is_read, created_at
+    // And users table has: id, role
+    $sql = "SELECT n.id, n.user_id as sender_id, u.role as sender_role, n.message, n.created_at, n.is_read
+            FROM notifications n
+            JOIN users u ON n.user_id = u.id
+            WHERE
+                (
+                    (u.role = 'recruiter' AND ? IN ('admin','institute','student')) OR
+                    (u.role = 'institute' AND ? = 'student') OR
+                    (u.role = 'admin' AND ? IN ('institute','student'))
+                )
+            ORDER BY n.created_at DESC";
 
-    $result = $conn->query($sql);
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("sss", $user_role, $user_role, $user_role);
+    $stmt->execute();
+    $result = $stmt->get_result();
 
-    if ($result && $result->num_rows > 0) {
-        $notifications = [];
-        while ($row = $result->fetch_assoc()) {
-            $notifications[] = $row;
-        }
-
-        echo json_encode(["status" => true, "data" => $notifications]);
-    } else {
-        echo json_encode(["status" => true, "data" => [], "message" => "No notifications found"]);
+    $notifications = [];
+    while ($row = $result->fetch_assoc()) {
+        $notifications[] = $row;
     }
+
+    echo json_encode([
+        "status" => true,
+        "data" => $notifications,
+        "message" => empty($notifications) ? "No notifications found" : ""
+    ]);
+
 } catch (Exception $e) {
     echo json_encode([
         "status" => false,
@@ -37,5 +46,4 @@ try {
 }
 
 $conn->close();
-
 ?>

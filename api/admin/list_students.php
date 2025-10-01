@@ -13,32 +13,34 @@ try {
     $stmt = $conn->prepare("
         SELECT 
             u.id as user_id,
-            u.username,
+            u.user_name,
             u.email,
-            u.first_name,
-            u.last_name,
             u.phone_number,
-            u.date_of_birth,
-            u.gender,
-            u.address,
-            u.is_active,
-            u.created_at as user_created_at,
+
             sp.id as profile_id,
+            sp.skills,
             sp.education,
             sp.resume,
             sp.certificates,
             sp.portfolio_link,
             sp.linkedin_url,
-            sp.skills,
+            sp.dob,
+            sp.gender,
             sp.job_type,
-            sp.experience,
+            sp.trade,
             sp.location,
+            sp.admin_action,
+            sp.bio,
+            sp.experience,
+            sp.graduation_year,
+            sp.cgpa,
             sp.created_at as profile_created_at,
-            sp.updated_at as profile_updated_at
+            sp.modified_at as profile_modified_at,
+            sp.deleted_at as profile_deleted_at
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
         WHERE u.role = 'student'
-        ORDER BY u.created_at DESC
+        ORDER BY u.id DESC
     ");
 
     if ($stmt->execute()) {
@@ -49,30 +51,31 @@ try {
             $students[] = [
                 'user_info' => [
                     'user_id' => $row['user_id'],
-                    'username' => $row['username'],
+                    'user_name' => $row['user_name'],
                     'email' => $row['email'],
-                    'first_name' => $row['first_name'],
-                    'last_name' => $row['last_name'],
                     'phone_number' => $row['phone_number'],
-                    'date_of_birth' => $row['date_of_birth'],
-                    'gender' => $row['gender'],
-                    'address' => $row['address'],
-                    'is_active' => $row['is_active'],
-                    'created_at' => $row['user_created_at']
                 ],
                 'profile_info' => [
                     'profile_id' => $row['profile_id'],
+                    'skills' => $row['skills'],
                     'education' => $row['education'],
                     'resume' => $row['resume'],
                     'certificates' => $row['certificates'],
                     'portfolio_link' => $row['portfolio_link'],
                     'linkedin_url' => $row['linkedin_url'],
-                    'skills' => $row['skills'],
+                    'dob' => $row['dob'],
+                    'gender' => $row['gender'],
                     'job_type' => $row['job_type'],
-                    'experience' => $row['experience'],
+                    'trade' => $row['trade'],
                     'location' => $row['location'],
+                    'admin_action' => $row['admin_action'],
+                    'bio' => $row['bio'],
+                    'experience' => $row['experience'],
+                    'graduation_year' => $row['graduation_year'],
+                    'cgpa' => $row['cgpa'],
                     'created_at' => $row['profile_created_at'],
-                    'updated_at' => $row['profile_updated_at']
+                    'modified_at' => $row['profile_modified_at'],
+                    'deleted_at' => $row['profile_deleted_at']
                 ]
             ];
         }

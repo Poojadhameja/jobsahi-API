@@ -16,34 +16,9 @@ try {
         ]);
         exit();
     }
-    
-    // First, let's check what columns exist in job_flags table
-    $checkJobFlags = $conn->query("DESCRIBE job_flags");
-    
-    if (!$checkJobFlags) {
-        throw new Exception("Cannot access job_flags table structure");
-    }
-    
-    // Get column names for job_flags table
-    $jobFlagsColumns = [];
-    while ($row = $checkJobFlags->fetch_assoc()) {
-        $jobFlagsColumns[] = $row['Field'];
-    }
-    
-    // Determine the correct ID column name
-    $idColumn = 'id'; // default
-    if (in_array('flag_id', $jobFlagsColumns)) {
-        $idColumn = 'flag_id';
-    } elseif (in_array('id', $jobFlagsColumns)) {
-        $idColumn = 'id';
-    }
-    
-    // Check if required columns exist in job_flags table based on the actual schema
-    $reviewedColumn = in_array('reviewed', $jobFlagsColumns) ? 'reviewed' : 'NULL';
-    $updatedAtColumn = in_array('updated_at', $jobFlagsColumns) ? 'updated_at' : 'NULL';
-    
+
     // Check if the job flag exists
-    $checkStmt = $conn->prepare("SELECT {$idColumn} FROM job_flags WHERE {$idColumn} = ?");
+    $checkStmt = $conn->prepare("SELECT id FROM job_flags WHERE id = ?");
     $checkStmt->bind_param("i", $flag_id);
     $checkStmt->execute();
     $checkResult = $checkStmt->get_result();
@@ -55,35 +30,25 @@ try {
         ]);
         exit();
     }
-    
-    // Build the update query with correct column names
-    $updateFields = [];
-    $updateFields[] = "{$reviewedColumn} = 1";
-    if ($updatedAtColumn !== 'NULL') {
-        $updateFields[] = "{$updatedAtColumn} = NOW()";
-    }
-    
-    $updateQuery = "UPDATE job_flags SET " . implode(', ', $updateFields) . " WHERE {$idColumn} = ?";
+
+    // ✅ Update reviewed + admin_action
+    $updateQuery = "UPDATE job_flags 
+                    SET reviewed = 1, admin_action = 'resolved' 
+                    WHERE id = ?";
     $stmt = $conn->prepare($updateQuery);
-    
-    if ($stmt->bind_param("i", $flag_id) && $stmt->execute()) {
-        if ($stmt->affected_rows > 0) {
-            echo json_encode([
-                "status" => true,
-                "message" => "Job flag resolved successfully",
-                "flag_id" => $flag_id
-            ]);
-        } else {
-            echo json_encode([
-                "status" => false,
-                "message" => "No changes made to job flag"
-            ]);
-        }
+    $stmt->bind_param("i", $flag_id);
+    $stmt->execute();
+
+    if ($stmt->affected_rows > 0) {
+        echo json_encode([
+            "status" => true,
+            "message" => "Job flag resolved successfully",
+            "flag_id" => $flag_id
+        ]);
     } else {
         echo json_encode([
             "status" => false,
-            "message" => "Failed to resolve job flag",
-            "error" => $stmt->error
+            "message" => "No changes made to job flag"
         ]);
     }
 } catch (Exception $e) {

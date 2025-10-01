@@ -1,23 +1,9 @@
 <?php
 // referrals.php
 require_once '../cors.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    http_response_code(405);
-    echo json_encode(['status' => false, 'message' => 'Only GET allowed']);
-    exit;
-}
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-
 // Authenticate and allow multiple roles
 $decoded = authenticateJWT(['admin', 'student']);
 $user_role = $decoded->role ?? ''; // role from JWT
-
-require_once __DIR__ . '/../db.php'; // $conn = new mysqli(...)
-
-mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 try {
     if (!isset($conn) || !($conn instanceof mysqli)) {
