@@ -1,15 +1,7 @@
 <?php
-<<<<<<< HEAD
-<<<<<<< HEAD
 // me.php - Fetch current logged-in user with role-aware profiles
 require_once '../cors.php';
 
-=======
-require '../cors.php';
->>>>>>> dfdb9388f97f0ad9898e04e43042129728ce7246
-=======
-require '../cors.php';
->>>>>>> fdb6ce0277ac46e48dd041ab5ec6de47b5826ee1
 // Get JWT token from Authorization header
 $headers = getallheaders();
 $authHeader = isset($headers['Authorization']) ? $headers['Authorization'] : '';
@@ -78,7 +70,6 @@ if ($user_stmt = mysqli_prepare($conn, $user_sql)) {
     
     // Fetch role-specific profile data
     switch ($user_data['role']) {
-<<<<<<< HEAD
      case 'student':
     $profile_sql = "SELECT sp.*, u.user_name as user_name 
                    FROM student_profiles sp 
@@ -141,71 +132,6 @@ break;
         mysqli_stmt_close($profile_stmt);
     }
     break;
-=======
-        case 'student':
-            $profile_sql = "SELECT sp.*, u.user_name as user_name 
-                           FROM student_profiles sp 
-                           JOIN users u ON sp.user_id = u.id 
-                           WHERE sp.user_id = ?";
-            
-            if ($profile_stmt = mysqli_prepare($conn, $profile_sql)) {
-                mysqli_stmt_bind_param($profile_stmt, "i", $user_id);
-                mysqli_stmt_execute($profile_stmt);
-                $profile_result = mysqli_stmt_get_result($profile_stmt);
-                
-                if (mysqli_num_rows($profile_result) > 0) {
-                    $profile_data = mysqli_fetch_assoc($profile_result);
-                    $response['data']['profile'] = [
-                        "id" => (int)($profile_data['id'] ?? 0),
-                        "bio" => $profile_data['bio'] ?? null,
-                        "skills" => isset($profile_data['skills']) ? json_decode($profile_data['skills'], true) : [],
-                        "education" => $profile_data['education'] ?? null,
-                        "experience" => $profile_data['experience'] ?? null,
-                        "portfolio_link" => $profile_data['portfolio_link'] ?? null,
-                        "resume" => $profile_data['resume'] ?? null,
-                        "location" => $profile_data['location'] ?? null,
-                        "graduation_year" => isset($profile_data['graduation_year']) ? (int)$profile_data['graduation_year'] : null,
-                        "cgpa" => isset($profile_data['cgpa']) ? (float)$profile_data['cgpa'] : null,
-                        "created_at" => $profile_data['created_at'] ?? null,
-                        "modified_at" => $profile_data['modified_at'] ?? null
-                    ];
-                }
-                mysqli_stmt_close($profile_stmt);
-            }
-            break;
-            
-        case 'recruiter':
-            $profile_sql = "SELECT rp.*, u.user_name as user_name 
-                           FROM recruiter_profiles rp 
-                           JOIN users u ON rp.user_id = u.id 
-                           WHERE rp.user_id = ?";
-            
-            if ($profile_stmt = mysqli_prepare($conn, $profile_sql)) {
-                mysqli_stmt_bind_param($profile_stmt, "i", $user_id);
-                mysqli_stmt_execute($profile_stmt);
-                $profile_result = mysqli_stmt_get_result($profile_stmt);
-                
-                if (mysqli_num_rows($profile_result) > 0) {
-                    $profile_data = mysqli_fetch_assoc($profile_result);
-                    $response['data']['profile'] = [
-                        "id" => (int)($profile_data['id'] ?? 0),
-                        "company_name" => $profile_data['company_name'] ?? null,
-                        "company_website" => $profile_data['company_website'] ?? null,
-                        "company_description" => $profile_data['company_description'] ?? null,
-                        "position" => $profile_data['position'] ?? null,
-                        "department" => $profile_data['department'] ?? null,
-                        "linkedin_url" => $profile_data['linkedin_url'] ?? null,
-                        "company_size" => $profile_data['company_size'] ?? null,
-                        "industry" => $profile_data['industry'] ?? null,
-                        "location" => $profile_data['location'] ?? null,
-                        "created_at" => $profile_data['created_at'] ?? null,
-                        "updated_at" => $profile_data['updated_at'] ?? null
-                    ];
-                }
-                mysqli_stmt_close($profile_stmt);
-            }
-            break;
->>>>>>> dfdb9388f97f0ad9898e04e43042129728ce7246
             
         case 'institute':
             $profile_sql = "SELECT ip.*, u.user_name as user_name 
@@ -236,13 +162,9 @@ break;
                         "accreditation" => $profile_data['accreditation'] ?? null,
                         "established_year" => isset($profile_data['established_year']) ? (int)$profile_data['established_year'] : null,
                         "created_at" => $profile_data['created_at'] ?? null,
-<<<<<<< HEAD
                         "modified_at" => $profile_data['modified_at'] ?? null,
                         "deleted_at" => $profile_data['deleted_at'] ?? null,
                         "admin_action" => $profile_data['admin_action'] ?? null
-=======
-                        "updated_at" => $profile_data['updated_at'] ?? null
->>>>>>> dfdb9388f97f0ad9898e04e43042129728ce7246
                     ];
                 }
                 mysqli_stmt_close($profile_stmt);
