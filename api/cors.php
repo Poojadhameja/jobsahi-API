@@ -1,4 +1,10 @@
 <?php 
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+$BASE_DIR = dirname(__DIR__);
+require_once $BASE_DIR . "/vendor/autoload.php";
+
 header('Content-Type: application/json');
 
 // Allow specific prod origins
@@ -61,5 +67,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 // Add request logging for debugging (remove in production)
 error_log("API Request from: " . $origin . " - Method: " . $_SERVER['REQUEST_METHOD']);
+
+// Include database connection
+require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/jwt_token/jwt_helper.php';
+require_once __DIR__ . '/auth/auth_middleware.php';
+require_once __DIR__ . '/helpers/email_helper.php';
+require_once __DIR__ . '/helpers/otp_helper.php';
 
 ?>
