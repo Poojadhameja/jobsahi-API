@@ -3,13 +3,7 @@ header('Content-Type: application/json');
 
 // Allow specific prod origins
 $strictAllowed = [
-  // 'https://beige-jaguar-560051.hostingersite.com', // Uncomment when deploying to production
-  'http://localhost:3000', // Add your localhost port here
-  'http://localhost:8080', // Add your localhost port here
-  'http://localhost:4200', // Add your localhost port here
-  'http://127.0.0.1:3000', // Add your localhost port here
-  'http://127.0.0.1:8080', // Add your localhost port here
-  'http://127.0.0.1:4200', // Add your localhost port here
+  'https://beige-jaguar-560051.hostingersite.com',
 ];
 
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
@@ -55,27 +49,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-// if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-//   http_response_code(405);
-//   echo json_encode([
-//     "status"  => false,
-//     "message" => "Only POST requests allowed",
-//     "code"    => "METHOD_NOT_ALLOWED"
-//   ]);
-//   exit;
-// }
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+  http_response_code(405);
+  echo json_encode([
+    "status"  => false,
+    "message" => "Only POST requests allowed",
+    "code"    => "METHOD_NOT_ALLOWED"
+  ]);
+  exit;
+}
 
 // Add request logging for debugging (remove in production)
 error_log("API Request from: " . $origin . " - Method: " . $_SERVER['REQUEST_METHOD']);
 
-// Include database connection
-require_once __DIR__ . '/db.php';
-
-// Include JWT Helper
-require_once __DIR__ . '/jwt_token/jwt_helper.php';
-
-// Include Auth Middleware
-require_once __DIR__ . '/auth/auth_middleware.php';
-
-require_once __DIR__ . '/helpers/otp_helper.php';
-?> 
+?>
