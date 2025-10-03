@@ -55,15 +55,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+if (!in_array($_SERVER['REQUEST_METHOD'], ['POST','GET'])) {
   http_response_code(405);
   echo json_encode([
     "status"  => false,
-    "message" => "Only POST requests allowed",
+    "message" => "Only POST/GET requests allowed",
     "code"    => "METHOD_NOT_ALLOWED"
   ]);
   exit;
 }
+
 
 // Add request logging for debugging (remove in production)
 error_log("API Request from: " . $origin . " - Method: " . $_SERVER['REQUEST_METHOD']);
