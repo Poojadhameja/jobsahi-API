@@ -7,11 +7,11 @@ $decodedToken = authenticateJWT(['student', 'recruiter', 'admin']);
 $user_role = $decodedToken['role']; // role from JWT
 
 
-// ✅ Check DB connection
-if (!$conn) {
-    echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
-    exit;
-}
+// ✅ Authenticate roles (students, recruiters, admins)
+$decodedToken = authenticateJWT(['student', 'recruiter', 'admin']);
+$user_role = $decodedToken['role']; // role from JWT
+
+
 
 // ✅ Validate job ID
 $job_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
@@ -21,14 +21,13 @@ if ($job_id <= 0) {
     exit;
 }
 
-/**
- * ✅ SQL CONDITION BASED ON ROLE:
- * - Admin can see both 'pending' and 'approved'
- * - Others can only see 'approved'
- */
 $visibilityCondition = ($user_role === 'admin') 
     ? "j.admin_action IN ('pending', 'approved')" 
     : "j.admin_action = 'approved'";
+
+$visibilityCondition = ($user_role === 'admin') 
+    ? "j.admin_action IN ('pending', 'approval')" 
+    : "j.admin_action = 'approval'";
 
 // ✅ Main job query with recruiter info & stats
 $sql = "SELECT 
@@ -129,7 +128,6 @@ if (isset($_GET['include_similar']) && $_GET['include_similar'] === 'true') {
     $similarVisibilityCondition = ($user_role === 'admin') 
         ? "j.admin_action IN ('pending', 'approved')" 
         : "j.admin_action = 'approved'";
-
     $similar_sql = "SELECT 
                         j.id,
                         j.title,

@@ -80,3 +80,4 @@ if (!function_exists('cleanExpiredOTPs')) {
         return mysqli_query($conn, $sql);
     }
 }
+?>

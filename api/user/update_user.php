@@ -1,14 +1,5 @@
 <?php
-// update_user.php - Update user with JWT authentication
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: PUT, POST');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-// Include config first to define constants
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'PUT' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -79,7 +70,7 @@ error_log("Target user ID: " . $id);
 
 
 // Validate input data
-if (empty($name) || empty($email) || empty($role) || empty($phone_number)) {
+if (empty($user_name) || empty($email) || empty($role) || empty($phone_number)) {
     http_response_code(400);
     echo json_encode(array("message" => "User_Name, email, role, and phone number cannot be empty", "status" => false));
     exit;

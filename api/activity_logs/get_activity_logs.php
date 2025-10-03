@@ -1,4 +1,5 @@
 <?php
+// get_activity_logs.php - Get all system activity logs (JWT required)
 require_once '../cors.php';
 
 // ✅ Authenticate JWT (any valid user can access activity logs)

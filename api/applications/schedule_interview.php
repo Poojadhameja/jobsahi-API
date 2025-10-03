@@ -1,4 +1,5 @@
 <?php
+
 // schedule_interview.php - Schedule or Update interview for candidate (Admin, Recruiter access with role-based visibility)
 require_once '../cors.php';
 
@@ -22,10 +23,10 @@ if ($application_id <= 0) {
 $data = json_decode(file_get_contents("php://input"), true);
 
 $scheduled_at = isset($data['scheduled_at']) ? $data['scheduled_at'] : '';
-$mode         = isset($data['mode']) ? $data['mode'] : 'online'; // online, offline, phone
-$location     = isset($data['location']) ? $data['location'] : '';
-$status       = isset($data['status']) ? $data['status'] : 'scheduled';
-$feedback     = isset($data['feedback']) ? $data['feedback'] : '';
+$mode = isset($data['mode']) ? $data['mode'] : 'online'; // online, offline, phone
+$location = isset($data['location']) ? $data['location'] : '';
+$status = isset($data['status']) ? $data['status'] : 'scheduled';
+$feedback = isset($data['feedback']) ? $data['feedback'] : '';
 
 // Validate required fields
 if (empty($scheduled_at)) {

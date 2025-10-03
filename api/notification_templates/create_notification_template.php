@@ -2,10 +2,21 @@
 // create_update_notifications_templates.php - Create/update notification templates
 require_once '../cors.php';
 
-// ✅ Authenticate JWT and get user info
-$decoded = authenticateJWT(['admin','institute','recruiter']);
-$user_id = intval($decoded['user_id']);
-$user_role = $decoded['role'];
+// ✅ Authenticate JWT and allow admin role only
+$decoded = authenticateJWT(['admin','institute','recruiter']); // returns array
+
+// ✅ Extract user_role from decoded JWT
+$user_role = $decoded['role'] ?? null;
+$user_id = $decoded['user_id'] ?? $decoded['id'] ?? null;
+
+if (!$user_role) {
+    http_response_code(403);
+    echo json_encode([
+        "status" => false,
+        "message" => "Invalid token: role not found"
+    ]);
+    exit;
+}
 
 try {
     // Get JSON input

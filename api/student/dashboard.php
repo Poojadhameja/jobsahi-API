@@ -24,7 +24,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-
 // Verify student exists
 $verify_sql = "SELECT id FROM users WHERE id = ? AND role = 'student'";
 if ($verify_stmt = mysqli_prepare($conn, $verify_sql)) {

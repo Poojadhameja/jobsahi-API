@@ -10,7 +10,6 @@ if (empty($user_ids) || !is_array($user_ids)) {
     echo json_encode(array("message" => "User IDs array is required", "status" => false));
     exit;
 }
-
 $user_ids_str = implode(',', array_map('intval', $user_ids));
 $success_count = 0;
 

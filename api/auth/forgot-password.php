@@ -83,6 +83,7 @@ ON DUPLICATE KEY UPDATE
                         "message"    => "OTP sent successfully for $purpose",
                         "status"     => true,
                         "purpose"    => $purpose,
+                        "user_id"    => $user_id,
                         "expires_in" => 300
                     ]);
                 } else {
@@ -107,3 +108,4 @@ ON DUPLICATE KEY UPDATE
 }
 
 mysqli_close($conn);
+?>

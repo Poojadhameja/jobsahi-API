@@ -1,4 +1,5 @@
 <?php
+
 require '../cors.php';
 // Authenticate user (any role)
 $current_user = authenticateJWT();
