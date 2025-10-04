@@ -1,5 +1,16 @@
 <?php
-include '../CORS.php';
+// reports.php - Get reports with role-based access
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+
+// Handle preflight OPTIONS request
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
 require_once '../db.php';
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
@@ -15,7 +26,7 @@ try {
         $stmt = $conn->prepare("SELECT * FROM reports ORDER BY generated_at DESC");
     } else {
         // Other roles see only approved records
-        $stmt = $conn->prepare("SELECT * FROM reports WHERE admin_action = 'approval' ORDER BY generated_at DESC");
+        $stmt = $conn->prepare("SELECT * FROM reports WHERE admin_action = 'approved' ORDER BY generated_at DESC");
     }
 
     if ($stmt->execute()) {

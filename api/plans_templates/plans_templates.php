@@ -1,14 +1,6 @@
 <?php
-include '../CORS.php';
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// plans_templates.php - Create new plan template (Admin, Recruiter access)
+require_once '../cors.php';
 
 // ✅ Authenticate JWT (only Admin & Recruiter allowed to create)
 $decoded = authenticateJWT(['admin', 'recruiter']);
@@ -43,7 +35,7 @@ try {
             // Other roles → only if approved
             $sql = "SELECT id, plan_name, type, price, duration_days, features, admin_action 
                     FROM plan_templates 
-                    WHERE id = ? AND admin_action = 'approval'";
+                    WHERE id = ? AND admin_action = 'approved'";
         }
 
         $checkStmt = $conn->prepare($sql);

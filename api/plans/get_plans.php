@@ -1,14 +1,6 @@
 <?php
-include '../CORS.php';
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// get_plans.php - Get subscription plans (POST, JWT required)
+require_once '../cors.php';
 
 // ✅ Authenticate JWT (any valid user can access plans)
 $decoded = authenticateJWT(); // returns array with 'role'
@@ -42,11 +34,11 @@ try {
     $whereCondition = "";
     if ($adminActionColumn !== 'NULL') {
         if ($userRole === 'admin') {
-            // Admin sees both pending + approval
-            $whereCondition = "WHERE {$adminActionColumn} IN ('pending', 'approval')";
+            // Admin sees both pending + approved
+            $whereCondition = "WHERE {$adminActionColumn} IN ('pending', 'approved')";
         } else {
-            // Recruiter, Institute, Student see only approval
-            $whereCondition = "WHERE {$adminActionColumn} = 'approval'";
+            // Recruiter, Institute, Student see only approved
+            $whereCondition = "WHERE {$adminActionColumn} = 'approved'";
         }
     }
 

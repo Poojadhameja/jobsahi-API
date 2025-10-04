@@ -1,7 +1,5 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
 
 // ✅ Authenticate JWT (allowed roles: admin, student)
 $current_user = authenticateJWT(['admin', 'student']); 

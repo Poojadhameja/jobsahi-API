@@ -4,7 +4,15 @@
 declare(strict_types=1);
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
-include '../CORS.php';
+
+require_once '../cors.php';
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['status' => false, 'message' => 'Only POST allowed']);
+    exit;
+}
+
 require_once __DIR__ . '/../jwt_token/jwt_helper.php';
 require_once __DIR__ . '/../auth/auth_middleware.php';
 

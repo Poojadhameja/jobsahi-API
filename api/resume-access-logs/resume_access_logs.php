@@ -1,5 +1,10 @@
 <?php
-include '../CORS.php';
+// resume_access_logs.php - Track resume views (GET /api/v1/resume-access-logs)
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+
 // Handle preflight OPTIONS request
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
@@ -22,8 +27,8 @@ try {
         // ✅ Admin can see all logs
         $stmt = $conn->prepare("
             SELECT ral.id, ral.recruiter_id, ral.student_id, ral.viewed_at,
-                   r.name AS recruiter_name, r.email AS recruiter_email,
-                   s.name AS student_name, s.email AS student_email
+                   r.user_name AS recruiter_name, r.email AS recruiter_email,
+                   s.user_name AS student_name, s.email AS student_email
             FROM resume_access_logs ral
             LEFT JOIN users r ON ral.recruiter_id = r.id
             LEFT JOIN users s ON ral.student_id = s.id
@@ -35,7 +40,7 @@ try {
         // ✅ Recruiter can only see logs they created
         $stmt = $conn->prepare("
             SELECT ral.id, ral.recruiter_id, ral.student_id, ral.viewed_at,
-                   s.name AS student_name, s.email AS student_email
+                   s.user_name AS student_name, s.email AS student_email
             FROM resume_access_logs ral
             LEFT JOIN users s ON ral.student_id = s.id
             WHERE ral.recruiter_id = ?
@@ -48,7 +53,7 @@ try {
         // ✅ Student can only see who viewed their resume
         $stmt = $conn->prepare("
             SELECT ral.id, ral.recruiter_id, ral.student_id, ral.viewed_at,
-                   r.name AS recruiter_name, r.email AS recruiter_email
+                   r.user_name AS recruiter_name, r.email AS recruiter_email
             FROM resume_access_logs ral
             LEFT JOIN users r ON ral.recruiter_id = r.id
             WHERE ral.student_id = ?

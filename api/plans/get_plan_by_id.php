@@ -1,14 +1,6 @@
 <?php
-include '../CORS.php';
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// get_plan_by_id.php - Get subscription plan by ID (GET, JWT required)
+require_once '../cors.php';
 
 // ✅ Authenticate JWT (any valid user can access plans)
 $decoded = authenticateJWT(); // returns array with user_id, role etc.
@@ -39,7 +31,7 @@ try {
         FROM plans
         WHERE id = ?
           AND (
-                (admin_action = 'approval')
+                (admin_action = 'approved')
                 OR (admin_action = 'pending' AND ? = 'ADMIN')
               )
     ";

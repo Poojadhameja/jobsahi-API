@@ -1,23 +1,37 @@
 <?php
-include '../CORS.php';
-// Include JWT helper & middleware
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// job_view.php - Record Job View API
+require_once '../cors.php';
 
+// ✅ Authenticate (student + admin)
+$decoded = authenticateJWT(['student', 'admin','recruiter','institute']); // decoded JWT payload
+
+// ✅ Get job_id ONLY from URL (?id=...)
+$job_id = isset($_GET['id']) && is_numeric($_GET['id']) ? (int)$_GET['id'] : null;
+if (!$job_id) {
+    echo json_encode(["message" => "Job ID missing in URL", "status" => false]);
+    exit;
+}
+
+// ✅ Extract student_id from JWT
+$student_id = isset($decoded['id']) ? (int)$decoded['id'] : (int)$decoded['user_id'];
+$user_role  = $decoded['role'] ?? null;
+
+if (empty($student_id)) {
+    echo json_encode(["message" => "❌ JWT missing user ID", "status" => false]);
+    exit;
+}
+
+// ---- JOB VISIBILITY RULE ----
+if ($user_role === 'admin') {
+    $check_job_sql = "SELECT id, title, status, admin_action FROM jobs WHERE id = ?";
+} else {
+    $check_job_sql = "SELECT id, title, status, admin_action 
+                      FROM jobs 
+                      WHERE id = ? AND admin_action = 'approved'";
+}
 // ✅ Authenticate (student + admin)
 $decoded = authenticateJWT(['student', 'admin']); 
 
-include "../db.php";
-if (!$conn) {
-    echo json_encode(["message" => "❌ DB connection failed: " . mysqli_connect_error(), "status" => false]);
-    exit;
-}
-
-// Allow only POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    echo json_encode(["message" => "Only POST requests allowed", "status" => false]);
-    exit;
-}
 
 // ✅ Get job_id ONLY from URL (?id=...)
 $job_id = isset($_GET['id']) && is_numeric($_GET['id']) ? (int)$_GET['id'] : null;
@@ -80,7 +94,7 @@ if ($job_data['status'] !== 'open') {
 mysqli_stmt_close($check_stmt);
 
 // ---- USER CHECK ----
-$check_student_sql = "SELECT id, name, email, role FROM users WHERE id = ?";
+$check_student_sql = "SELECT id, user_name, email, role FROM users WHERE id = ?";
 $student_stmt = mysqli_prepare($conn, $check_student_sql);
 mysqli_stmt_bind_param($student_stmt, "i", $student_id);
 mysqli_stmt_execute($student_stmt);
@@ -140,8 +154,9 @@ if (mysqli_stmt_execute($insert_stmt)) {
             "job_id" => $job_id,
             "student_id" => $student_id,
             "job_title" => $job_data['title'],
-            "student_name" => $student_data['name'],
+            "student_name" => $student_data['user_name'],
             "role" => $student_data['role'],
+            "status" => $job_data['status'],
             "admin_action" => $job_data['admin_action'],
             "viewed_at" => $current_datetime
         ],

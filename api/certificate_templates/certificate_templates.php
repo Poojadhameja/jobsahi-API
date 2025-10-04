@@ -1,8 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// certificate_templates.php - List certificate templates with role-based admin_action
+require_once '../cors.php';
 
 // ✅ Authenticate JWT and get user role
 $decoded = authenticateJWT(['admin', 'recruiter', 'institute', 'student']); // returns array with 'role'
@@ -33,7 +31,7 @@ try {
             ORDER BY created_at DESC
         ";
     } else {
-        // Other roles see only 'approval' templates
+        // Other roles see only 'approved' templates
         $sql = "
             SELECT 
                 id, 
@@ -51,7 +49,7 @@ try {
                 deleted_at, 
                 admin_action
             FROM certificate_templates
-            WHERE is_active = 1 AND admin_action = 'approval'
+            WHERE is_active = 1 AND admin_action = 'approved'
             ORDER BY created_at DESC
         ";
     }

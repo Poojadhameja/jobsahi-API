@@ -1,8 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// skill-tests.php - List attempts & results for skill tests with admin_action filter
+require_once '../cors.php';
 
 // Authenticate JWT and get user info
 $current_user = authenticateJWT(['admin', 'student']); 
@@ -40,10 +38,10 @@ try {
 
     // Role-based filter
     if ($current_user['role'] !== 'admin') {
-        // Non-admin users can only see 'approval' records
-        $sql .= " AND admin_action = 'approval'";
+        // Non-admin users can only see 'approved' records
+        $sql .= " AND admin_action = 'approved'";
     } else {
-        // Admin can see everything (pending + approval)
+        // Admin can see everything (pending + approved)
         if ($student_id) {
             $sql .= " AND student_id = ?";
             $types = "i";

@@ -1,8 +1,9 @@
 <?php
-include '../CORS.php';
-// Include JWT helper & middleware
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// applications.php - Fetch all applications with optional filters
+require_once '../cors.php';
+
+// ✅ Authenticate JWT (allow both admin & student roles)
+$current_user = authenticateJWT(['admin', 'student']);
 
 // ✅ Authenticate JWT (allow both admin & student roles)
 $current_user = authenticateJWT(['admin', 'student']);
@@ -12,14 +13,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     echo json_encode(["message" => "Only GET requests allowed", "status" => false]);
     exit;
 }
-
-include "../db.php";
-
-if (!$conn) {
-    echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
-    exit;
-}
-
 // ---- Fetch Filters from Query Params ----
 $student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : null;
 $status     = isset($_GET['status']) ? trim($_GET['status']) : null; // pending, accepted, rejected

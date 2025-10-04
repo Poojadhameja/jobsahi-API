@@ -1,7 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// interview_detail.php - Get Interview by ID with Panel (with admin_action logic)
+require_once '../cors.php';
 
 // ✅ Authenticate (allow all roles but restrict visibility later)
 $decoded = authenticateJWT(['admin', 'student']);  

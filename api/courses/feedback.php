@@ -1,8 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-require_once '../db.php';  // DB connection
+// courses_feedback.php - Submit and fetch course feedback with role-based visibility
+require_once '../cors.php';
 
 // Parse request method
 $method = $_SERVER['REQUEST_METHOD'];
@@ -97,7 +95,7 @@ if ($method === 'POST') {
         $sql = "SELECT * FROM course_feedback WHERE course_id = ?";
     } else {
         // Others see only approved feedback
-        $sql = "SELECT * FROM course_feedback WHERE course_id = ? AND admin_action = 'approval'";
+        $sql = "SELECT * FROM course_feedback WHERE course_id = ? AND admin_action = 'approved'";
     }
 
     if ($stmt = mysqli_prepare($conn, $sql)) {
