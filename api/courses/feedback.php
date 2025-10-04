@@ -1,15 +1,14 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-require_once '../db.php';  // DB connection
+// courses_feedback.php - Submit and fetch course feedback with role-based visibility
+require_once '../cors.php';
 
 // Parse request method
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'POST') {
     // Authenticate and check for student role
-    authenticateJWT('student');
+    $decoded = authenticateJWT('student');
+    $user_id = $decoded['user_id']; // Get user_id from JWT token (array access)
 
     // Validate course_id from URL: /api/v1/courses/{id}/feedback
     if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
@@ -25,16 +24,15 @@ if ($method === 'POST') {
     // Parse JSON body
     $data = json_decode(file_get_contents("php://input"), true);
 
-    if (!$data || !isset($data['student_id']) || !isset($data['rating']) || !isset($data['feedback'])) {
+    if (!$data || !isset($data['rating']) || !isset($data['feedback'])) {
         http_response_code(400);
         echo json_encode([
             "status" => false,
-            "message" => "Required fields: student_id, rating, feedback"
+            "message" => "Required fields: rating, feedback"
         ]);
         exit();
     }
 
-    $student_id = intval($data['student_id']);
     $rating = intval($data['rating']);
     $feedback = trim($data['feedback']);
 
@@ -45,6 +43,37 @@ if ($method === 'POST') {
             "status" => false,
             "message" => "Rating must be between 1 and 5"
         ]);
+        exit();
+    }
+
+    // Get student_id from student_profiles table based on user_id
+    $sql_student = "SELECT id FROM student_profiles WHERE user_id = ?";
+    
+    if ($stmt_student = mysqli_prepare($conn, $sql_student)) {
+        mysqli_stmt_bind_param($stmt_student, "i", $user_id);
+        mysqli_stmt_execute($stmt_student);
+        $result_student = mysqli_stmt_get_result($stmt_student);
+        
+        if ($row = mysqli_fetch_assoc($result_student)) {
+            $student_id = $row['id'];
+        } else {
+            http_response_code(404);
+            echo json_encode([
+                "status" => false,
+                "message" => "Student profile not found for this user"
+            ]);
+            mysqli_stmt_close($stmt_student);
+            mysqli_close($conn);
+            exit();
+        }
+        mysqli_stmt_close($stmt_student);
+    } else {
+        http_response_code(500);
+        echo json_encode([
+            "status" => false,
+            "message" => "Failed to fetch student profile: " . mysqli_error($conn)
+        ]);
+        mysqli_close($conn);
         exit();
     }
 
@@ -76,6 +105,7 @@ if ($method === 'POST') {
             "message" => "Failed to prepare statement: " . mysqli_error($conn)
         ]);
     }
+    
 } elseif ($method === 'GET') {
     // Authenticate any role (admin, student, recruiter, institute)
     $user_role = authenticateJWT(['admin', 'student', 'recruiter', 'institute']);
@@ -97,7 +127,7 @@ if ($method === 'POST') {
         $sql = "SELECT * FROM course_feedback WHERE course_id = ?";
     } else {
         // Others see only approved feedback
-        $sql = "SELECT * FROM course_feedback WHERE course_id = ? AND admin_action = 'approval'";
+        $sql = "SELECT * FROM course_feedback WHERE course_id = ? AND admin_action = 'approved'";
     }
 
     if ($stmt = mysqli_prepare($conn, $sql)) {
@@ -124,6 +154,7 @@ if ($method === 'POST') {
             "message" => "Failed to fetch feedback: " . mysqli_error($conn)
         ]);
     }
+    
 } else {
     http_response_code(405);
     echo json_encode([

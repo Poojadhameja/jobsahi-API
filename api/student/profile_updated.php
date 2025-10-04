@@ -1,8 +1,5 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-include "../db.php";
+require_once '../cors.php';
 
 // Authenticate user (admin, student)
 $user = authenticateJWT(['admin', 'student']);
@@ -18,28 +15,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
 
     $input = json_decode(file_get_contents("php://input"), true);
 
-    $skills = $input['skills'] ?? "";
-    $education = $input['education'] ?? "";
-    $resume = $input['resume'] ?? "";
-    $portfolio_link = $input['portfolio_link'] ?? "";
-    $linkedin_url = $input['linkedin_url'] ?? "";
-    $dob = $input['dob'] ?? "";
-    $gender = $input['gender'] ?? "";
-    $job_type = $input['job_type'] ?? "";
-    $trade = $input['trade'] ?? "";
-    $location = $input['location'] ?? "";
+    $skills = $input['skills'] ?? null;
+    $education = $input['education'] ?? null;
+    $resume = $input['resume'] ?? null;
+    $certificates = $input['certificates'] ?? null;
+    $portfolio_link = $input['portfolio_link'] ?? null;
+    $linkedin_url = $input['linkedin_url'] ?? null;
+    $dob = $input['dob'] ?? null;
+    $gender = $input['gender'] ?? null;
+    $job_type = $input['job_type'] ?? null;
+    $trade = $input['trade'] ?? null;
+    $location = $input['location'] ?? null;
+    $bio = $input['bio'] ?? null;
+    $experience = $input['experience'] ?? null;
+    $graduation_year = $input['graduation_year'] ?? null;
+    $cgpa = $input['cgpa'] ?? null;
 
+    // Build UPDATE query with all fields
     $sql = "UPDATE student_profiles SET 
-                skills = ?, education = ?, resume = ?, portfolio_link = ?, linkedin_url = ?,
-                dob = ?, gender = ?, job_type = ?, trade = ?, location = ?, modified_at = NOW()
+                skills = ?, 
+                education = ?, 
+                resume = ?, 
+                certificates = ?,
+                portfolio_link = ?, 
+                linkedin_url = ?,
+                dob = ?, 
+                gender = ?, 
+                job_type = ?, 
+                trade = ?, 
+                location = ?,
+                bio = ?,
+                experience = ?,
+                graduation_year = ?,
+                cgpa = ?,
+                modified_at = NOW()
             WHERE id = ? AND deleted_at IS NULL";
 
     $stmt = mysqli_prepare($conn, $sql);
     mysqli_stmt_bind_param(
         $stmt,
-        "ssssssssssi",
-        $skills, $education, $resume, $portfolio_link, $linkedin_url,
-        $dob, $gender, $job_type, $trade, $location, $id
+        "ssssssssssssssdi",
+        $skills, 
+        $education, 
+        $resume, 
+        $certificates, 
+        $portfolio_link, 
+        $linkedin_url,
+        $dob, 
+        $gender, 
+        $job_type, 
+        $trade, 
+        $location,
+        $bio,
+        $experience,
+        $graduation_year,
+        $cgpa,
+        $id
     );
 
     if (mysqli_stmt_execute($stmt)) {
@@ -70,11 +101,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
 // ===================== GET REQUEST: Fetch Applications =====================
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     // Base query
-    $sql = "SELECT * FROM applications WHERE deleted_at IS NULL AND admin_action = 'approval'";
+    $sql = "SELECT * FROM applications WHERE deleted_at IS NULL AND admin_action = 'approved'";
 
     // If admin, also include pending
     if ($role === 'admin') {
-        $sql = "SELECT * FROM applications WHERE deleted_at IS NULL AND (admin_action = 'approval' OR admin_action = 'pending')";
+        $sql = "SELECT * FROM applications WHERE deleted_at IS NULL AND (admin_action = 'approved' OR admin_action = 'pending')";
     }
 
     $result = mysqli_query($conn, $sql);

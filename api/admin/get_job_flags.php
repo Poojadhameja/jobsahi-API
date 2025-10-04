@@ -1,8 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// get_job_flags.php - Get all flagged job postings (Admin access only)
+require_once '../cors.php';
 
 // ✅ Authenticate JWT and allow admin role only
 $decoded = authenticateJWT(['admin']); // returns array

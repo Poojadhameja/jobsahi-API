@@ -47,7 +47,7 @@ function sendPasswordResetOTPWithPHPMailer($toEmail, $toName, $otp) {
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
         $mail->Username = 'simranjn54@gmail.com'; // Replace with your Gmail
-        $mail->Password = 'ixpk mawa dpzo iwhw'; // Replace with your Gmail App Password
+        $mail->Password = 'nzcr ucms asum hjur'; // Replace with your Gmail App Password
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         
@@ -137,7 +137,7 @@ function sendPasswordResetOTPWithDebug($toEmail, $toName, $otp, $debug = false) 
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
         $mail->Username = 'simranjn54@gmail.com';
-        $mail->Password = 'ixpk mawa dpzo iwhw';
+        $mail->Password = 'nzcr ucms asum hjur';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->Timeout = 60; // Increase timeout

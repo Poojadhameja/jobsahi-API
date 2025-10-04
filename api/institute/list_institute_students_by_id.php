@@ -1,8 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// list_institute_students_by_id.php - List all students of institute by ID
+require_once '../cors.php';
 
 // ✅ Authenticate JWT for multiple roles
 $decoded = authenticateJWT(['admin', 'institute']); // decoded JWT payload
@@ -34,9 +32,9 @@ INNER JOIN institute_profiles ist
 WHERE ist.id = ?
 ";
 
-// Only admin sees 'pending', others only see 'approval'
+// Only admin sees 'pending', others only see 'approved'
 if ($user_role !== 'admin') {
-    $sql .= " AND sp.admin_action = 'approval'";
+    $sql .= " AND sp.admin_action = 'approved'";
 }
 
 $sql .= " ORDER BY sp.created_at DESC";

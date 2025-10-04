@@ -3,7 +3,11 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-include '../CORS.php';
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+
 // Response function
 function send_response($success, $message, $data = [], $code = 200) {
     http_response_code($success ? 200 : $code);
@@ -89,7 +93,7 @@ if (!$has_email_column && !$has_user_id_column) {
 }
 
 // Check if user exists
-$sql = "SELECT id, name, email FROM users WHERE email = ?";
+$sql = "SELECT id, user_name, email FROM users WHERE email = ?";
 $stmt = mysqli_prepare($conn, $sql);
 
 if (!$stmt) {
@@ -158,7 +162,7 @@ mysqli_stmt_close($insert_stmt);
 
 // Send OTP email
 try {
-    $email_sent = sendPasswordResetOTP($email, $user['name'], $otp);
+    $email_sent = sendPasswordResetOTP($email, $user['user_name'], $otp);
     
     if ($email_sent) {
         send_response(true, "New OTP sent successfully to your email", [

@@ -1,30 +1,10 @@
 <?php
-include '../CORS.php';
-// TEMPORARY: Test if file is accessible
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    echo json_encode([
-        "status" => true,
-        "message" => "File is accessible! Use PATCH method with proper authentication."
-    ]);
-    exit;
-}
-
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-require_once '../db.php';
+// update-notification.php - Mark a notification as read
+require_once '../cors.php';
 
 // Authenticate JWT for both admin and student roles
-authenticateJWT(['admin', 'recruiter','institute' , 'student']);
+authenticateJWT(['admin', 'recruiter','institute']);
 
-// Check request method
-if ($_SERVER['REQUEST_METHOD'] !== 'PATCH') {
-    http_response_code(405);
-    echo json_encode([
-        "status" => false,
-        "message" => "Only PATCH requests are allowed"
-    ]);
-    exit;
-}
 
 // Get notification ID from URL
 if (!isset($_GET['id']) || empty($_GET['id'])) {

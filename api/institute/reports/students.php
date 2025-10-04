@@ -1,11 +1,6 @@
 <?php
-include '../../CORS.php';
-
-// Include required files
-include __DIR__ . "/../../db.php";
-require_once __DIR__ . "/../../jwt_token/jwt_helper.php";
-require_once __DIR__ . "/../../auth/auth_middleware.php";
-
+// reports.php - Reports list with role-based access (JWT required)
+require_once(__DIR__ . '/../../cors.php');
 // Authenticate JWT - returns decoded payload
 $decoded = authenticateJWT(['admin', 'recruiter', 'institute', 'student']); 
 
@@ -15,10 +10,10 @@ try {
     // Role-based SQL filter for admin_action
     if ($role === 'admin') {
         // Admin sees both pending and approved
-        $actionFilter = "admin_action IN ('pending', 'approval')";
+        $actionFilter = "admin_action IN ('pending', 'approved')";
     } else {
         // Other roles see only approved
-        $actionFilter = "admin_action = 'approval'";
+        $actionFilter = "admin_action = 'approved'";
     }
 
     // Get reports list from reports table
@@ -67,7 +62,7 @@ try {
             COUNT(CASE WHEN DATE(generated_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN 1 END) AS generated_this_week,
             COUNT(CASE WHEN DATE(generated_at) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 1 END) AS generated_this_month,
             COUNT(CASE WHEN admin_action='pending' THEN 1 END) AS pending_reports,
-            COUNT(CASE WHEN admin_action='approval' THEN 1 END) AS approved_reports
+            COUNT(CASE WHEN admin_action='approved' THEN 1 END) AS approved_reports
         FROM reports
         WHERE $actionFilter
     ");

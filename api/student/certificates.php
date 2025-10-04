@@ -1,21 +1,14 @@
 <?php
-include '../CORS.php';
-// ✅ JWT
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// certificates.php - Get student certificates with role-based visibility
+require_once '../cors.php';
 
 // Authenticate user (admin, student allowed)
 $current_user = authenticateJWT(['admin', 'student']);
 $role = $current_user['role'];  // role from JWT payload
 
-require_once '../db.php';
-
-// ✅ Only allow GET
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    http_response_code(405);
-    echo json_encode(["error" => "Only GET method allowed"]);
-    exit();
-}
+// Authenticate user (admin, student allowed)
+$current_user = authenticateJWT(['admin', 'student']);
+$role = $current_user['role'];  // role from JWT payload
 
 // Optional filters
 $student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : null;

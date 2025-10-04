@@ -1,8 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// list_employers.php - List/manage all employers (Admin access only)
+require_once '../cors.php';
 
 // ✅ Authenticate JWT and allow only admin role
 $decoded = authenticateJWT(['admin']); // Only admin can access

@@ -1,8 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// delete_job.php - Close/archive job posting (Admin access)
+require_once '../cors.php';
 
 // ✅ Authenticate JWT and allow multiple roles
 $decoded = authenticateJWT(['admin']); // returns array

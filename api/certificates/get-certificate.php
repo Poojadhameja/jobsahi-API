@@ -1,8 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-require_once '../db.php';
+// get-certificate.php
+require_once '../cors.php';
 
 // Authenticate and allow both admin and student roles
 authenticateJWT(['admin', 'student']);

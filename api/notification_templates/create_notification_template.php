@@ -1,11 +1,22 @@
 <?php
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// create_update_notifications_templates.php - Create/update notification templates
+require_once '../cors.php';
 
 // ✅ Authenticate JWT and allow admin role only
-$decoded = authenticateJWT(['admin']); // returns array
+$decoded = authenticateJWT(['admin','institute','recruiter']); // returns array
+
+// ✅ Extract user_role from decoded JWT
+$user_role = $decoded['role'] ?? null;
+$user_id = $decoded['user_id'] ?? $decoded['id'] ?? null;
+
+if (!$user_role) {
+    http_response_code(403);
+    echo json_encode([
+        "status" => false,
+        "message" => "Invalid token: role not found"
+    ]);
+    exit;
+}
 
 try {
     // Get JSON input
@@ -19,6 +30,37 @@ try {
     if (isset($input['id']) && !empty($input['id'])) {
         // UPDATE existing template
         $templateId = intval($input['id']);
+
+        // ✅ Check if user has permission to update this template
+        $checkSql = "SELECT role FROM notifications_templates WHERE id = ?";
+        $checkStmt = $conn->prepare($checkSql);
+        $checkStmt->bind_param("i", $templateId);
+        $checkStmt->execute();
+        $checkResult = $checkStmt->get_result();
+        
+        if ($checkResult->num_rows === 0) {
+            throw new Exception("Template not found");
+        }
+        
+        $template = $checkResult->fetch_assoc();
+        $template_role = $template['role'];
+
+        // ✅ Role-based permission check for UPDATE
+        $canUpdate = false;
+        if ($user_role === 'admin') {
+            // Admin can update all templates
+            $canUpdate = true;
+        } elseif ($user_role === 'recruiter' && $template_role === 'recruiter') {
+            // Recruiter can only update their own templates
+            $canUpdate = true;
+        } elseif ($user_role === 'institute' && $template_role === 'institute') {
+            // Institute can only update their own templates
+            $canUpdate = true;
+        }
+
+        if (!$canUpdate) {
+            throw new Exception("You don't have permission to update this template");
+        }
 
         $updateFields = [];
         $updateValues = [];
@@ -45,6 +87,13 @@ try {
         if (isset($input['body'])) {
             $updateFields[] = "body = ?";
             $updateValues[] = $input['body'];
+            $types .= "s";
+        }
+
+        // ✅ Only admin can change role field
+        if (isset($input['role']) && $user_role === 'admin') {
+            $updateFields[] = "role = ?";
+            $updateValues[] = $input['role'];
             $types .= "s";
         }
 
@@ -79,15 +128,26 @@ try {
             throw new Exception("Name and type are required");
         }
 
-        $sql = "INSERT INTO notifications_templates (name, type, subject, body, created_at) 
-                VALUES (?, ?, ?, ?, NOW())";
+        // ✅ Set role based on user's role (unless admin explicitly sets it)
+        if (isset($input['role']) && $user_role === 'admin') {
+            // Admin can set any role
+            $role = $input['role'];
+        } else {
+            // Non-admin users: template role matches their own role
+            $role = $user_role;
+        }
+
+        $sql = "INSERT INTO notifications_templates (name, type, subject, body, role, created_at) 
+                VALUES (?, ?, ?, ?, ?, NOW())";
         $stmt = $conn->prepare($sql);
+        
         $stmt->bind_param(
-            "ssss",
+            "sssss",
             $input['name'],
             $input['type'],
             $input['subject'],
-            $input['body']
+            $input['body'],
+            $role
         );
 
         if ($stmt->execute()) {

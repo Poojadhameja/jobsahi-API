@@ -1,7 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// get_user.php - Get single user by ID
+require_once '../cors.php';
 
 // Authenticate user
 $current_user = authenticateJWT();
@@ -26,9 +25,7 @@ if ($current_user['role'] !== 'admin' && $current_user['user_id'] != $user_id) {
     exit;
 }
 
-include "../db.php";
-
-$sql = "SELECT id, name, email, role, phone_number, is_verified FROM users WHERE id = ?";
+$sql = "SELECT id, user_name, email, role, phone_number, is_verified FROM users WHERE id = ?";
 if ($stmt = mysqli_prepare($conn, $sql)) {
     mysqli_stmt_bind_param($stmt, "i", $user_id);
     mysqli_stmt_execute($stmt);

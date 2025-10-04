@@ -1,7 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// interviews.php - Fetch interviews (Student/Admin)
+require_once '../cors.php';
 
 // ✅ Authenticate and allow roles
 $decoded = authenticateJWT(['admin', 'student']);  

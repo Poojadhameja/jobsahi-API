@@ -1,19 +1,8 @@
 <?php
-include '../CORS.php';
-// Handle preflight (CORS) requests
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit(0);
-}
-
-// Only allow DELETE requests
-if ($_SERVER['REQUEST_METHOD'] !== 'DELETE') {
-    echo json_encode(["message" => "Only DELETE requests allowed", "status" => false]);
-    exit;
-}
+// remove_saved_job.php
+require_once '../cors.php';
 
 // ---- JWT Authentication ----
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
 
 // ✅ Authenticate student only
 $decoded = authenticateJWT('student');
@@ -32,14 +21,23 @@ if (isset($decoded['id'])) {
     echo json_encode(["message" => "Student ID not found in token payload", "status" => false, "decoded" => $decoded]);
     exit;
 }
+// ✅ Authenticate student only
+$decoded = authenticateJWT('student');
 
-include "../db.php";
-
-if (!$conn) {
-    echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
+// --- Fix: Extract student_id safely ---
+// Common cases: "id", "student_id", "user_id", or nested inside "data"
+if (isset($decoded['id'])) {
+    $student_id = $decoded['id'];
+} elseif (isset($decoded['student_id'])) {
+    $student_id = $decoded['student_id'];
+} elseif (isset($decoded['user_id'])) {
+    $student_id = $decoded['user_id'];
+} elseif (isset($decoded['data']['id'])) {
+    $student_id = $decoded['data']['id'];
+} else {
+    echo json_encode(["message" => "Student ID not found in token payload", "status" => false, "decoded" => $decoded]);
     exit;
 }
-
 // --- Get input data ---
 $job_id = null;
 $input = [];

@@ -1,14 +1,5 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(array("message" => "Only POST requests allowed", "status" => false));
-    exit;
-}
-
+require '../cors.php';
 // Authenticate current token
 $current_user = authenticateJWT();
 

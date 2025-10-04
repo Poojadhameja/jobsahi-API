@@ -1,16 +1,20 @@
 <?php
-include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php'; // JWT helper
-require_once '../auth/auth_middleware.php'; // middleware
+// student_enrollments.php - List student enrolled courses with admin_action filter
+
+require_once '../cors.php';
 
 // Authenticate user for all roles
 $decoded = authenticateJWT(['admin', 'student']); 
 
 // Get user role from decoded token
 $user_role = isset($decoded['role']) ? $decoded['role'] : '';
+// Authenticate user for all roles
+$decoded = authenticateJWT(['admin', 'student']); 
 
-// Validate student_id from GET
+// Get user role from decoded token
+$user_role = isset($decoded['role']) ? $decoded['role'] : '';
+
+
 if (!isset($_GET['student_id']) || intval($_GET['student_id']) <= 0) {
     http_response_code(400);
     echo json_encode([
@@ -39,8 +43,8 @@ try {
 
     // Append admin_action filter for non-admins
     if ($user_role !== 'admin') {
-        $sql .= " AND c.admin_action = 'approval'";
-    }
+        $sql .= " AND c.admin_action = 'approved'";
+ }
 
     if ($stmt = $conn->prepare($sql)) {
         $stmt->bind_param("i", $student_id);

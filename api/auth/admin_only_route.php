@@ -1,7 +1,6 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+// admin_only_route.php - Example of an admin-only route
+require_once '../cors.php';
 
 // Authenticate user and require admin role
 authenticateJWT('admin');
