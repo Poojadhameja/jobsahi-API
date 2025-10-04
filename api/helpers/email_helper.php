@@ -3,12 +3,16 @@
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-function sendPasswordResetOTP($email, $name, $otp) {
-    // Use PHPMailer instead of basic mail() function
-    return sendPasswordResetOTPWithPHPMailer($email, $name, $otp);
+// Check if function already exists to prevent redeclaration
+if (!function_exists('sendPasswordResetOTP')) {
+    function sendPasswordResetOTP($email, $name, $otp) {
+        // Use PHPMailer instead of basic mail() function
+        return sendPasswordResetOTPWithPHPMailer($email, $name, $otp);
+    }
 }
 
-function sendPasswordResetOTPWithLocalSMTP($email, $name, $otp) {
+if (!function_exists('sendPasswordResetOTPWithLocalSMTP')) {
+    function sendPasswordResetOTPWithLocalSMTP($email, $name, $otp) {
     // Configure SMTP settings programmatically
     ini_set("SMTP", "smtp.gmail.com");
     ini_set("smtp_port", "587");
@@ -37,9 +41,11 @@ function sendPasswordResetOTPWithLocalSMTP($email, $name, $otp) {
     $headers .= "From: noreply@yourapp.com" . "\r\n";
     
     return mail($email, $subject, $message, $headers);
+    }
 }
 
-function sendPasswordResetOTPWithPHPMailer($toEmail, $toName, $otp) {
+if (!function_exists('sendPasswordResetOTPWithPHPMailer')) {
+    function sendPasswordResetOTPWithPHPMailer($toEmail, $toName, $otp) {
     $mail = new PHPMailer(true);
     try {
         // SMTP configuration
@@ -121,9 +127,11 @@ function sendPasswordResetOTPWithPHPMailer($toEmail, $toName, $otp) {
         error_log("Exception: " . $e->getMessage());
         return false;
     }
+    }
 }
 
-function sendPasswordResetOTPWithDebug($toEmail, $toName, $otp, $debug = false) {
+if (!function_exists('sendPasswordResetOTPWithDebug')) {
+    function sendPasswordResetOTPWithDebug($toEmail, $toName, $otp, $debug = false) {
     $mail = new PHPMailer(true);
     
     try {
@@ -195,10 +203,12 @@ function sendPasswordResetOTPWithDebug($toEmail, $toName, $otp, $debug = false) 
         }
         return false;
     }
+    }
 }
 
 // Utility function to test email configuration
-function testEmailConfiguration() {
+if (!function_exists('testEmailConfiguration')) {
+    function testEmailConfiguration() {
     $testResult = [
         'php_mail_function' => function_exists('mail'),
         'phpmailer_available' => class_exists('PHPMailer\\PHPMailer\\PHPMailer'),
@@ -210,5 +220,6 @@ function testEmailConfiguration() {
     ];
     
     return $testResult;
+    }
 }
 ?>
