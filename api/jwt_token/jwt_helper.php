@@ -72,5 +72,84 @@ class JWTHelper {
     public static function verifyJWT($jwt, $secret = null) {
         return self::validateJWT($jwt, $secret);
     }
+    
+    // ✅ Blacklist token functions
+    public static function blacklistToken($jwt, $user_id = null) {
+        global $conn;
+        
+        if (!$jwt) {
+            return false;
+        }
+        
+        // Create hash of the token for storage
+        $token_hash = hash('sha256', $jwt);
+        
+        // Get token expiration from payload
+        $payload = self::validateJWT($jwt, JWT_SECRET);
+        $expires_at = isset($payload['exp']) ? date('Y-m-d H:i:s', $payload['exp']) : null;
+        
+        // Check if token is already blacklisted
+        $check_sql = "SELECT id FROM blacklisted_tokens WHERE token_hash = ?";
+        if ($check_stmt = mysqli_prepare($conn, $check_sql)) {
+            mysqli_stmt_bind_param($check_stmt, "s", $token_hash);
+            mysqli_stmt_execute($check_stmt);
+            $result = mysqli_stmt_get_result($check_stmt);
+            
+            if (mysqli_num_rows($result) > 0) {
+                mysqli_stmt_close($check_stmt);
+                return true; // Already blacklisted
+            }
+            mysqli_stmt_close($check_stmt);
+        }
+        
+        // Insert into blacklist
+        $insert_sql = "INSERT INTO blacklisted_tokens (token_hash, user_id, expires_at) VALUES (?, ?, ?)";
+        if ($insert_stmt = mysqli_prepare($conn, $insert_sql)) {
+            mysqli_stmt_bind_param($insert_stmt, "sis", $token_hash, $user_id, $expires_at);
+            $success = mysqli_stmt_execute($insert_stmt);
+            mysqli_stmt_close($insert_stmt);
+            return $success;
+        }
+        
+        return false;
+    }
+    
+    public static function isTokenBlacklisted($jwt) {
+        global $conn;
+        
+        if (!$jwt) {
+            return true; // No token = considered blacklisted
+        }
+        
+        $token_hash = hash('sha256', $jwt);
+        
+        $sql = "SELECT id FROM blacklisted_tokens WHERE token_hash = ?";
+        if ($stmt = mysqli_prepare($conn, $sql)) {
+            mysqli_stmt_bind_param($stmt, "s", $token_hash);
+            mysqli_stmt_execute($stmt);
+            $result = mysqli_stmt_get_result($stmt);
+            
+            $is_blacklisted = mysqli_num_rows($result) > 0;
+            mysqli_stmt_close($stmt);
+            return $is_blacklisted;
+        }
+        
+        return false;
+    }
+    
+    // Clean up expired blacklisted tokens (can be called periodically)
+    public static function cleanupExpiredBlacklistedTokens() {
+        global $conn;
+        
+        $sql = "DELETE FROM blacklisted_tokens WHERE expires_at IS NOT NULL AND expires_at < NOW()";
+        if ($stmt = mysqli_prepare($conn, $sql)) {
+            mysqli_stmt_execute($stmt);
+            $affected_rows = mysqli_stmt_affected_rows($stmt);
+            mysqli_stmt_close($stmt);
+            return $affected_rows;
+        }
+        
+        return 0;
+    }
 }
 ?>

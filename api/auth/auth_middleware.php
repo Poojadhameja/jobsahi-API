@@ -1,6 +1,7 @@
 <?php
 // auth_middleware.php - JWT Authentication Middleware
 require_once __DIR__ . '/../db.php'; // Add this line to include the config file
+require_once __DIR__ . '/../jwt_token/jwt_helper.php'; // Include JWT helper
 
 function authenticateJWT($required_role = null) {
     $jwt = JWTHelper::getJWTFromHeader();
@@ -8,6 +9,13 @@ function authenticateJWT($required_role = null) {
     if (!$jwt) {
         http_response_code(401);
         echo json_encode(array("message" => "No token provided", "status" => false));
+        exit;
+    }
+    
+    // ✅ Check if token is blacklisted
+    if (JWTHelper::isTokenBlacklisted($jwt)) {
+        http_response_code(401);
+        echo json_encode(array("message" => "Token has been revoked", "status" => false));
         exit;
     }
     
