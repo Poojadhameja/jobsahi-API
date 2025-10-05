@@ -37,8 +37,8 @@ if (strlen($new_password) < 6) {
     exit;
 }
 
-// ✅ Step 1: Check if user exists
-$user_sql = "SELECT id FROM users WHERE id = ?";
+// ✅ Step 1: Check if user exists and get current password
+$user_sql = "SELECT id, password FROM users WHERE id = ?";
 if ($user_stmt = mysqli_prepare($conn, $user_sql)) {
     mysqli_stmt_bind_param($user_stmt, "i", $user_id);
     mysqli_stmt_execute($user_stmt);
@@ -51,10 +51,24 @@ if ($user_stmt = mysqli_prepare($conn, $user_sql)) {
         mysqli_close($conn);
         exit;
     }
+    
+    $user_row = mysqli_fetch_assoc($user_result);
+    $current_password_hash = $user_row['password'];
     mysqli_stmt_close($user_stmt);
 } else {
     http_response_code(500);
     echo json_encode(["message" => "Database error: " . mysqli_error($conn), "status" => false]);
+    exit;
+}
+
+// ✅ Step 1.5: Check if new password is different from current password
+if (password_verify($new_password, $current_password_hash)) {
+    http_response_code(400);
+    echo json_encode([
+        "message" => "New password must be different from your current password",
+        "status" => false
+    ]);
+    mysqli_close($conn);
     exit;
 }
 
