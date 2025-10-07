@@ -6,13 +6,6 @@ require_once '../cors.php';
 $decodedToken = authenticateJWT(['student', 'recruiter', 'admin']);
 $user_role = $decodedToken['role']; // role from JWT
 
-
-// ✅ Authenticate roles (students, recruiters, admins)
-$decodedToken = authenticateJWT(['student', 'recruiter', 'admin']);
-$user_role = $decodedToken['role']; // role from JWT
-
-
-
 // ✅ Validate job ID
 $job_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 if ($job_id <= 0) {
@@ -21,13 +14,10 @@ if ($job_id <= 0) {
     exit;
 }
 
+// ✅ Set visibility condition based on user role
 $visibilityCondition = ($user_role === 'admin') 
     ? "j.admin_action IN ('pending', 'approved')" 
     : "j.admin_action = 'approved'";
-
-$visibilityCondition = ($user_role === 'admin') 
-    ? "j.admin_action IN ('pending', 'approval')" 
-    : "j.admin_action = 'approval'";
 
 // ✅ Main job query with recruiter info & stats
 $sql = "SELECT 
@@ -125,9 +115,7 @@ $formatted_job = [
 
 // ✅ Optional: Get similar jobs (only approved ones visible to non-admins)
 if (isset($_GET['include_similar']) && $_GET['include_similar'] === 'true') {
-    $similarVisibilityCondition = ($user_role === 'admin') 
-        ? "j.admin_action IN ('pending', 'approved')" 
-        : "j.admin_action = 'approved'";
+    $similarVisibilityCondition = $visibilityCondition;
     $similar_sql = "SELECT 
                         j.id,
                         j.title,
