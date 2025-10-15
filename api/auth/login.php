@@ -51,8 +51,8 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
                     'name' => $user['user_name'],
                     'role' => $user['role'],
                     'phone_number' => $user['phone_number'],
-                    'iat' => time(),
-                    'exp' => time() + JWT_EXPIRY
+                    'iat' => time()
+                    // 'exp' => time() + JWT_EXPIRY  // Removed - tokens never expire
                 ];
                 
                 $jwt_token = JWTHelper::generateJWT($payload, JWT_SECRET);
@@ -65,8 +65,8 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
                     "message" => "Login successful", 
                     "status" => true, 
                     "user" => $user,
-                    "token" => $jwt_token,
-                    "expires_in" => JWT_EXPIRY
+                    "token" => $jwt_token
+                    // "expires_in" => JWT_EXPIRY  // Removed - tokens never expire
                 ));
             } else {
                 http_response_code(403);

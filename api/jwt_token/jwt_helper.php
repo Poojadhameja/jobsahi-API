@@ -47,10 +47,10 @@ class JWTHelper {
         
         $payload = json_decode(self::base64UrlDecode($payloadEncoded), true);
         
-        // Check expiration
-        if (isset($payload['exp']) && $payload['exp'] < time()) {
-            return false;
-        }
+        // Expiration check removed - tokens never expire based on time
+        // if (isset($payload['exp']) && $payload['exp'] < time()) {
+        //     return false;
+        // }
         
         return $payload;
     }
