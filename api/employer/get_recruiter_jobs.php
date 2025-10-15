@@ -1,5 +1,5 @@
 <?php
-// get_jobs_by_role.php - List jobs/applications based on admin_action and user role with dashboard stats
+// get_recruiter_jobs_.php - List jobs/applications based on admin_action and user role with dashboard stats
 require_once '../cors.php';
 
 // ✅ Authenticate JWT and allow all roles

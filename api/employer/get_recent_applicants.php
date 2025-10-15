@@ -45,8 +45,7 @@ try {
         INNER JOIN student_profiles sp ON sp.id = a.student_id
         INNER JOIN users u ON u.id = sp.user_id
         WHERE j.recruiter_id = ?
-        ORDER BY a.applied_at DESC
-        LIMIT 5";
+        ORDER BY a.applied_at DESC";
 
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("i", $recruiter_profile_id);

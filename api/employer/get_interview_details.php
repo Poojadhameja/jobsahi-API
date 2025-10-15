@@ -49,8 +49,7 @@ try {
         WHERE j.recruiter_id = ?
           AND i.admin_action = 'approved'
           AND i.status = 'scheduled'
-        ORDER BY i.scheduled_at DESC
-        LIMIT 1";
+        ORDER BY i.scheduled_at DESC";
 
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("i", $recruiter_profile_id);
