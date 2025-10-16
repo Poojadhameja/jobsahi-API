@@ -1,122 +1,152 @@
 <?php
-// courses.php - Get course list with proper role-based visibility
+// courses.php – Get course list with role-based visibility
 require_once '../cors.php';
 
 try {
-    // Authenticate user and get role
-    $user = authenticateJWT(['admin', 'student', 'institute']);
+    // 🔐 Authenticate user and determine role
+    $user = authenticateJWT(['admin', 'institute', 'student']);
     $user_role = $user['role'] ?? 'student';
-    $user_id = $user['user_id'] ?? ($user['id'] ?? null);
+    $user_id   = $user['user_id'] ?? ($user['id'] ?? null);
     $institute_id = null;
 
-    // Determine institute_id from token (for institute users)
+    // If logged in as institute, capture institute_id from token
     if ($user_role === 'institute') {
-        // some JWTs store institute_id separately, others just have user_id
         $institute_id = $user['institute_id'] ?? $user_id;
-
         if (!$institute_id) {
             throw new Exception("Institute ID missing in token");
         }
     }
 
-    // Base SQL
-    $sql = "SELECT id, institute_id, title, description, duration, fee, admin_action 
-            FROM courses 
-            WHERE 1=1";
+    // ---------- Base Query ----------
+    $sql = "
+        SELECT 
+            id, 
+            institute_id, 
+            course_code, 
+            title, 
+            description, 
+            course_type, 
+            level, 
+            credits, 
+            duration, 
+            fee, 
+            target_skills, 
+            teacher_name, 
+            min_students, 
+            max_students, 
+            start_date, 
+            end_date, 
+            registration_start_date, 
+            registration_end_date, 
+            grading_criteria, 
+            office_hours, 
+            office_location, 
+            exam_details, 
+            button_allowing_level, 
+            faqs, 
+            subject_title, 
+            module_description, 
+            media_path, 
+            is_certification_based, 
+            status, 
+            admin_action, 
+            created_at, 
+            updated_at
+        FROM courses 
+        WHERE 1=1
+    ";
 
     $params = [];
-    $types = "";
+    $types  = "";
 
-    // Role-based visibility
+    // ---------- Role-Based Visibility ----------
     if ($user_role === 'admin') {
-        // Admin sees all courses
+        // Admin can see all courses (no filter)
     } elseif ($user_role === 'institute') {
-        // Institute sees only their courses
+        // Institute sees only their own courses
         $sql .= " AND institute_id = ?";
         $params[] = $institute_id;
-        $types .= "i";
+        $types   .= "i";
     } else {
-        // Students/others see only approved courses
+        // Students / public can only see approved courses
         $sql .= " AND admin_action = ?";
         $params[] = 'approved';
-        $types .= "s";
+        $types   .= "s";
     }
 
-    // Optional filters (only for non-institute roles)
+    // ---------- Optional Filters ----------
     if (!empty($_GET['institute_id']) && $user_role !== 'institute') {
         $sql .= " AND institute_id = ?";
         $params[] = intval($_GET['institute_id']);
-        $types .= "i";
+        $types   .= "i";
     }
 
     if (!empty($_GET['min_fee']) && is_numeric($_GET['min_fee'])) {
         $sql .= " AND fee >= ?";
         $params[] = floatval($_GET['min_fee']);
-        $types .= "d";
+        $types   .= "d";
     }
 
     if (!empty($_GET['max_fee']) && is_numeric($_GET['max_fee'])) {
         $sql .= " AND fee <= ?";
         $params[] = floatval($_GET['max_fee']);
-        $types .= "d";
+        $types   .= "d";
     }
 
     if (!empty($_GET['duration'])) {
         $sql .= " AND duration = ?";
         $params[] = $_GET['duration'];
-        $types .= "s";
+        $types   .= "s";
     }
 
     if (!empty($_GET['q'])) {
-        $sql .= " AND (title LIKE ? OR description LIKE ?)";
+        $sql .= " AND (title LIKE ? OR description LIKE ? OR course_code LIKE ?)";
         $keyword = "%" . $_GET['q'] . "%";
         $params[] = $keyword;
         $params[] = $keyword;
-        $types .= "ss";
+        $params[] = $keyword;
+        $types   .= "sss";
     }
 
-    // Order
-    $sql .= " ORDER BY id DESC";
+    $sql .= " ORDER BY created_at DESC";
 
-    // Prepare and execute query
-    $stmt = mysqli_prepare($conn, $sql);
+    // ---------- Prepare and Execute ----------
+    $stmt = $conn->prepare($sql);
     if (!$stmt) {
-        throw new Exception("Prepare failed: " . mysqli_error($conn));
+        throw new Exception("Prepare failed: " . $conn->error);
     }
 
     if (!empty($params)) {
-        mysqli_stmt_bind_param($stmt, $types, ...$params);
+        $stmt->bind_param($types, ...$params);
     }
 
-    if (!mysqli_stmt_execute($stmt)) {
-        throw new Exception("Execute failed: " . mysqli_stmt_error($stmt));
+    if (!$stmt->execute()) {
+        throw new Exception("Execute failed: " . $stmt->error);
     }
 
-    $result = mysqli_stmt_get_result($stmt);
-    if (!$result) {
-        throw new Exception("Get result failed: " . mysqli_stmt_error($stmt));
-    }
-
+    $result = $stmt->get_result();
     $courses = [];
-    while ($row = mysqli_fetch_assoc($result)) {
+
+    while ($row = $result->fetch_assoc()) {
+        // For non-admins, hide internal moderation state
         if ($user_role !== 'admin') {
-            unset($row['admin_action']); // hide internal status
+            unset($row['admin_action']);
         }
         $courses[] = $row;
     }
 
+    // ---------- Output ----------
     echo json_encode([
         "status" => true,
         "message" => "Courses retrieved successfully",
         "courses" => $courses,
         "total_count" => count($courses),
         "user_role" => $user_role,
-        "token_user_id" => $user_id,
         "institute_id_used" => $institute_id
     ]);
 
-    mysqli_stmt_close($stmt);
-    mysqli_close($conn);
+    $stmt->close();
+    $conn->close();
 
 } catch (Exception $e) {
     http_response_code(500);
@@ -125,7 +155,8 @@ try {
         "message" => "Error retrieving courses: " . $e->getMessage(),
         "courses" => []
     ]);
-    if (isset($stmt)) mysqli_stmt_close($stmt);
-    if (isset($conn)) mysqli_close($conn);
+
+    if (isset($stmt)) $stmt->close();
+    if (isset($conn)) $conn->close();
 }
 ?>

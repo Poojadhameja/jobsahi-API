@@ -1,40 +1,66 @@
 <?php
-// update_course.php - Update existing course with role-based visibility
+// update_course.php – Update existing course (Admin / Institute access)
 require_once '../cors.php';
 
-// Authenticate JWT and allow multiple roles
-$decoded = authenticateJWT(['admin', 'institute']); // returns array with 'role' key
-$role = $decoded['role'] ?? '';
-
-// Get course ID from URL parameter
-$course_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-if ($course_id <= 0) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Invalid course ID"
-    ]);
-    exit();
-}
-
-// Get PUT data
-$data = json_decode(file_get_contents("php://input"), true);
-$title       = isset($data['title']) ? trim($data['title']) : '';
-$description = isset($data['description']) ? trim($data['description']) : '';
-$duration    = isset($data['duration']) ? trim($data['duration']) : '';
-$fee         = isset($data['fee']) ? floatval($data['fee']) : 0;
-
-// Validation
-if (empty($title) || empty($description) || empty($duration) || $fee <= 0) {
-    echo json_encode([
-        "status" => false,
-        "message" => "All fields are required"
-    ]);
-    exit();
-}
-
 try {
-    // First, check if the course exists
-    $check = $conn->prepare("SELECT admin_action FROM courses WHERE id = ?");
+    // 🔐 Authenticate JWT
+    $decoded = authenticateJWT(['admin', 'institute']);
+    $user_role = $decoded['role'] ?? '';
+    $user_id   = $decoded['user_id'] ?? 0;
+
+    // ---------- Validate Course ID ----------
+    $course_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+    if ($course_id <= 0) {
+        echo json_encode([
+            "status" => false,
+            "message" => "Invalid or missing course ID"
+        ]);
+        exit();
+    }
+
+    // ---------- Parse Input ----------
+    $data = json_decode(file_get_contents("php://input"), true);
+
+    // Collect updatable fields (based on your table structure)
+    $course_code   = $data['course_code'] ?? '';
+    $title         = $data['title'] ?? '';
+    $description   = $data['description'] ?? '';
+    $course_type   = $data['course_type'] ?? '';
+    $prerequisites = $data['prerequisites'] ?? '';
+    $level         = $data['level'] ?? '';
+    $credits       = isset($data['credits']) ? intval($data['credits']) : 0;
+    $duration      = $data['duration'] ?? '';
+    $fee           = isset($data['fee']) ? floatval($data['fee']) : 0;
+    $target_skills = $data['target_skills'] ?? '';
+    $teacher_name  = $data['teacher_name'] ?? '';
+    $min_students  = isset($data['min_students']) ? intval($data['min_students']) : 0;
+    $max_students  = isset($data['max_students']) ? intval($data['max_students']) : 0;
+    $start_date    = $data['start_date'] ?? null;
+    $end_date      = $data['end_date'] ?? null;
+    $registration_start_date = $data['registration_start_date'] ?? null;
+    $registration_end_date   = $data['registration_end_date'] ?? null;
+    $grading_criteria = $data['grading_criteria'] ?? '';
+    $office_hours   = $data['office_hours'] ?? '';
+    $office_location = $data['office_location'] ?? '';
+    $exam_details   = $data['exam_details'] ?? '';
+    $button_allowing_level = $data['button_allowing_level'] ?? '';
+    $faqs           = $data['faqs'] ?? '';
+    $subject_title  = $data['subject_title'] ?? '';
+    $module_description = $data['module_description'] ?? '';
+    $media_path     = $data['media_path'] ?? '';
+    $is_certification_based = isset($data['is_certification_based']) ? intval($data['is_certification_based']) : 0;
+
+    // Validation
+    if (empty($title) || empty($description) || empty($duration) || $fee <= 0) {
+        echo json_encode([
+            "status" => false,
+            "message" => "Title, Description, Duration, and Fee are required"
+        ]);
+        exit();
+    }
+
+    // ---------- Check if course exists ----------
+    $check = $conn->prepare("SELECT institute_id, admin_action FROM courses WHERE id = ?");
     $check->bind_param("i", $course_id);
     $check->execute();
     $result = $check->get_result();
@@ -49,46 +75,102 @@ try {
 
     $course = $result->fetch_assoc();
     $current_admin_action = $course['admin_action'];
+    $course_institute_id  = $course['institute_id'];
 
-    // Decide admin_action update based on role
-    if ($role === 'admin') {
-        // Admin can override admin_action
-        $admin_action = isset($data['admin_action']) ? trim($data['admin_action']) : $current_admin_action;
+    // ---------- Role-based permissions ----------
+    if ($user_role === 'institute' && $course_institute_id != $user_id) {
+        echo json_encode([
+            "status" => false,
+            "message" => "Unauthorized: You can only update your own courses"
+        ]);
+        exit();
+    }
+
+    // Admin can override admin_action, Institute cannot
+    if ($user_role === 'admin') {
+        $admin_action = $data['admin_action'] ?? $current_admin_action;
     } else {
-        // Institute cannot modify admin_action, keep existing value
         $admin_action = $current_admin_action;
     }
 
-    // Prepare update query
+    // ---------- Build update query ----------
     $stmt = $conn->prepare("
-        UPDATE courses 
-        SET title = ?, description = ?, duration = ?, fee = ?, admin_action = ? 
+        UPDATE courses SET
+            course_code = ?, title = ?, description = ?, course_type = ?, prerequisites = ?,
+            level = ?, credits = ?, duration = ?, fee = ?, target_skills = ?, teacher_name = ?,
+            min_students = ?, max_students = ?, start_date = ?, end_date = ?,
+            registration_start_date = ?, registration_end_date = ?, grading_criteria = ?,
+            office_hours = ?, office_location = ?, exam_details = ?, button_allowing_level = ?,
+            faqs = ?, subject_title = ?, module_description = ?, media_path = ?,
+            is_certification_based = ?, admin_action = ?, updated_at = NOW()
         WHERE id = ?
     ");
-    $stmt->bind_param("sssdsi", $title, $description, $duration, $fee, $admin_action, $course_id);
-    $stmt->execute();
 
-    if ($stmt->affected_rows > 0) {
-        echo json_encode([
-            "status" => true,
-            "message" => "Course updated successfully",
-            "course_id" => $course_id,
-            "updated_by" => $role
-        ]);
+    $stmt->bind_param(
+        "ssssssisdssiiissssssssssssiss",
+        $course_code,
+        $title,
+        $description,
+        $course_type,
+        $prerequisites,
+        $level,
+        $credits,
+        $duration,
+        $fee,
+        $target_skills,
+        $teacher_name,
+        $min_students,
+        $max_students,
+        $start_date,
+        $end_date,
+        $registration_start_date,
+        $registration_end_date,
+        $grading_criteria,
+        $office_hours,
+        $office_location,
+        $exam_details,
+        $button_allowing_level,
+        $faqs,
+        $subject_title,
+        $module_description,
+        $media_path,
+        $is_certification_based,
+        $admin_action,
+        $course_id
+    );
+
+    // ---------- Execute ----------
+    if ($stmt->execute()) {
+        if ($stmt->affected_rows > 0) {
+            echo json_encode([
+                "status" => true,
+                "message" => "Course updated successfully",
+                "course_id" => $course_id,
+                "updated_by" => $user_role
+            ]);
+        } else {
+            echo json_encode([
+                "status" => true,
+                "message" => "No changes detected (same values as before)",
+                "course_id" => $course_id,
+                "updated_by" => $user_role
+            ]);
+        }
     } else {
-        echo json_encode([
-            "status" => true,
-            "message" => "No changes made, values are same as before",
-            "course_id" => $course_id,
-            "updated_by" => $role
-        ]);
+        throw new Exception($stmt->error);
     }
+
+    $stmt->close();
+    $conn->close();
+
 } catch (Exception $e) {
+    http_response_code(500);
     echo json_encode([
         "status" => false,
-        "message" => "Error: " . $e->getMessage()
+        "message" => "Error updating course: " . $e->getMessage()
     ]);
-}
 
-$conn->close();
+    if (isset($stmt)) $stmt->close();
+    if (isset($conn)) $conn->close();
+}
 ?>

@@ -1,79 +1,126 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-require_once '../db.php'; // database connection
+// get_course_by_id.php – Fetch a single course by ID (Admin / Student visibility)
+require_once '../cors.php';
 
-// Authenticate user and get role
-$user = authenticateJWT(['admin','student']); // Returns user info with 'role'
+try {
+    // 🔐 Authenticate user and determine role
+    $user = authenticateJWT(['admin', 'student', 'institute']);
+    $user_role = $user['role'] ?? 'student';
+    $user_id   = $user['user_id'] ?? ($user['id'] ?? null);
 
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    if (!isset($_GET['id']) || empty($_GET['id'])) {
+    // ---------- Validate Request ----------
+    if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+        http_response_code(405);
+        echo json_encode([
+            "status" => false,
+            "message" => "Method not allowed. Use GET request."
+        ]);
+        exit;
+    }
+
+    if (empty($_GET['id']) || !is_numeric($_GET['id'])) {
         http_response_code(400);
         echo json_encode([
             "status" => false,
-            "message" => "Course ID is required"
+            "message" => "Valid Course ID is required."
         ]);
         exit;
     }
 
     $course_id = intval($_GET['id']);
-    $role = $user['role'];
 
-    // Build role-based query
-    if ($role === 'admin') {
-        // Admin can see all courses
-        $sql = "SELECT id, institute_id, title, description, duration, fee, admin_action 
-                FROM courses 
-                WHERE id = ? AND (admin_action = 'pending' OR admin_action = 'approval')";
+    // ---------- Role-Based SQL ----------
+    if ($user_role === 'admin') {
+        // Admin can view all (pending + approved + rejected)
+        $sql = "
+            SELECT 
+                id, institute_id, course_code, title, description, course_type, prerequisites,
+                level, credits, duration, fee, target_skills, teacher_name, min_students,
+                max_students, start_date, end_date, registration_start_date, registration_end_date,
+                grading_criteria, office_hours, office_location, exam_details, button_allowing_level,
+                faqs, subject_title, module_description, media_path, is_certification_based,
+                status, admin_action, created_at, updated_at
+            FROM courses
+            WHERE id = ?
+        ";
+    } elseif ($user_role === 'institute') {
+        // Institute can only see its own courses (any admin_action)
+        $sql = "
+            SELECT 
+                id, institute_id, course_code, title, description, course_type, prerequisites,
+                level, credits, duration, fee, target_skills, teacher_name, min_students,
+                max_students, start_date, end_date, registration_start_date, registration_end_date,
+                grading_criteria, office_hours, office_location, exam_details, button_allowing_level,
+                faqs, subject_title, module_description, media_path, is_certification_based,
+                status, admin_action, created_at, updated_at
+            FROM courses
+            WHERE id = ? AND institute_id = ?
+        ";
     } else {
-        // Other roles can see only approved courses
-        $sql = "SELECT id, institute_id, title, description, duration, fee, admin_action 
-                FROM courses 
-                WHERE id = ? AND admin_action = 'approval'";
+        // Students or public users: can see only approved courses
+        $sql = "
+            SELECT 
+                id, institute_id, course_code, title, description, course_type, prerequisites,
+                level, credits, duration, fee, target_skills, teacher_name, min_students,
+                max_students, start_date, end_date, registration_start_date, registration_end_date,
+                grading_criteria, office_hours, office_location, exam_details, button_allowing_level,
+                faqs, subject_title, module_description, media_path, is_certification_based,
+                status, created_at, updated_at
+            FROM courses
+            WHERE id = ? AND admin_action = 'approved' AND status = 'Active'
+        ";
     }
 
-    if ($stmt = mysqli_prepare($conn, $sql)) {
-        mysqli_stmt_bind_param($stmt, "i", $course_id);
+    // ---------- Prepare Statement ----------
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        throw new Exception("Prepare failed: " . $conn->error);
+    }
 
-        if (mysqli_stmt_execute($stmt)) {
-            $result = mysqli_stmt_get_result($stmt);
-
-            if ($row = mysqli_fetch_assoc($result)) {
-                http_response_code(200);
-                echo json_encode([
-                    "status" => true,
-                    "course" => $row
-                ]);
-            } else {
-                http_response_code(404);
-                echo json_encode([
-                    "status" => false,
-                    "message" => "Course not found or not visible to your role"
-                ]);
-            }
-        } else {
-            http_response_code(500);
-            echo json_encode([
-                "status" => false,
-                "message" => "Query execution failed"
-            ]);
-        }
-        mysqli_stmt_close($stmt);
+    if ($user_role === 'institute') {
+        $stmt->bind_param("ii", $course_id, $user_id);
     } else {
-        http_response_code(500);
+        $stmt->bind_param("i", $course_id);
+    }
+
+    // ---------- Execute and Fetch ----------
+    if (!$stmt->execute()) {
+        throw new Exception("Execute failed: " . $stmt->error);
+    }
+
+    $result = $stmt->get_result();
+
+    if ($result->num_rows === 0) {
+        http_response_code(404);
         echo json_encode([
             "status" => false,
-            "message" => "Failed to prepare statement"
+            "message" => "Course not found or not accessible to your role."
         ]);
+        exit;
     }
-} else {
-    http_response_code(405);
+
+    $course = $result->fetch_assoc();
+
+    // ---------- Output ----------
+    http_response_code(200);
+    echo json_encode([
+        "status" => true,
+        "message" => "Course retrieved successfully",
+        "course" => $course,
+        "user_role" => $user_role
+    ]);
+
+    $stmt->close();
+    $conn->close();
+
+} catch (Exception $e) {
+    http_response_code(500);
     echo json_encode([
         "status" => false,
-        "message" => "Method not allowed"
+        "message" => "Error fetching course: " . $e->getMessage()
     ]);
-}
 
-mysqli_close($conn);
+    if (isset($stmt)) $stmt->close();
+    if (isset($conn)) $conn->close();
+}
 ?>
