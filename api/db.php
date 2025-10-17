@@ -1,5 +1,6 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
+$BASE_DIR = dirname(__DIR__);
+require_once $BASE_DIR . "../vendor/vendor/autoload.php";
 
 // Database Configuration
 $dbHost = '127.0.0.1';

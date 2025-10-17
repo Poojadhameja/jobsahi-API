@@ -1,88 +1,92 @@
 <?php
 // courses.php - Get course list with proper role-based visibility
 require_once '../cors.php';
+// require_once '../db.php'; // ensure $conn is available
 
 try {
     // Authenticate user and get role
     $user = authenticateJWT(['admin', 'student', 'institute']);
     $user_role = $user['role'] ?? 'student';
+    $user_id = $user['user_id'] ?? ($user['id'] ?? null);
+    $institute_id = null;
 
-    // Base SQL - Select all necessary fields
-    $sql = "SELECT id, institute_id, title, description, duration, fee, admin_action FROM courses WHERE 1=1";
-    
-    // Role-based visibility logic
+    // Determine institute_id from token (for institute users)
+    if ($user_role === 'institute') {
+        // some JWTs store institute_id separately, others just have user_id
+        $institute_id = $user['institute_id'] ?? $user_id;
+
+        if (!$institute_id) {
+            throw new Exception("Institute ID missing in token");
+        }
+    }
+
+    // Base SQL
+    $sql = "SELECT id, institute_id, title, description, duration, fee, admin_action 
+            FROM courses 
+            WHERE 1=1";
+
     $params = [];
     $types = "";
 
+    // Role-based visibility
     if ($user_role === 'admin') {
-        // Admin sees all courses (pending, approved, rejected)
-        // No additional WHERE condition needed
+        // Admin sees all courses
     } elseif ($user_role === 'institute') {
-        // Institute sees their own courses (all statuses)
-        $institute_id = $user['institute_id'] ?? $user['id']; // depending on your user structure
+        // Institute sees only their courses
         $sql .= " AND institute_id = ?";
         $params[] = $institute_id;
         $types .= "i";
     } else {
-        // Students and other roles see only approved courses
+        // Students/others see only approved courses
         $sql .= " AND admin_action = ?";
-        $params[] = 'approved'; // Changed from 'approved' to 'approved'
+        $params[] = 'approved';
         $types .= "s";
     }
 
-    // Optional filters
-
-    // Filter by institute_id (only if user is not already filtered by institute)
+    // Optional filters (only for non-institute roles)
     if (!empty($_GET['institute_id']) && $user_role !== 'institute') {
         $sql .= " AND institute_id = ?";
         $params[] = intval($_GET['institute_id']);
         $types .= "i";
     }
 
-    // Filter by min_fee
     if (!empty($_GET['min_fee']) && is_numeric($_GET['min_fee'])) {
         $sql .= " AND fee >= ?";
         $params[] = floatval($_GET['min_fee']);
         $types .= "d";
     }
 
-    // Filter by max_fee
     if (!empty($_GET['max_fee']) && is_numeric($_GET['max_fee'])) {
         $sql .= " AND fee <= ?";
         $params[] = floatval($_GET['max_fee']);
         $types .= "d";
     }
 
-    // Filter by duration
     if (!empty($_GET['duration'])) {
         $sql .= " AND duration = ?";
         $params[] = $_GET['duration'];
         $types .= "s";
     }
 
-    // Search by keyword in title/description
     if (!empty($_GET['q'])) {
         $sql .= " AND (title LIKE ? OR description LIKE ?)";
-        $keyword = "%" . mysqli_real_escape_string($conn, $_GET['q']) . "%";
+        $keyword = "%" . $_GET['q'] . "%";
         $params[] = $keyword;
         $params[] = $keyword;
         $types .= "ss";
     }
 
-    // Add ordering
+    // Order
     $sql .= " ORDER BY id DESC";
 
-    // Prepare and execute
+    // Prepare and execute query
     $stmt = mysqli_prepare($conn, $sql);
-    
     if (!$stmt) {
         throw new Exception("Prepare failed: " . mysqli_error($conn));
     }
 
     if (!empty($params)) {
-        if (!mysqli_stmt_bind_param($stmt, $types, ...$params)) {
-            throw new Exception("Binding parameters failed: " . mysqli_stmt_error($stmt));
-        }
+        mysqli_stmt_bind_param($stmt, $types, ...$params);
     }
 
     if (!mysqli_stmt_execute($stmt)) {
@@ -90,46 +94,39 @@ try {
     }
 
     $result = mysqli_stmt_get_result($stmt);
-    
     if (!$result) {
-        throw new Exception("Getting result failed: " . mysqli_stmt_error($stmt));
+        throw new Exception("Get result failed: " . mysqli_stmt_error($stmt));
     }
 
     $courses = [];
     while ($row = mysqli_fetch_assoc($result)) {
-        // For non-admin users, don't expose admin_action field
         if ($user_role !== 'admin') {
-            unset($row['admin_action']);
+            unset($row['admin_action']); // hide internal status
         }
         $courses[] = $row;
     }
 
-    // Success response
     echo json_encode([
         "status" => true,
         "message" => "Courses retrieved successfully",
         "courses" => $courses,
         "total_count" => count($courses),
-        "user_role" => $user_role // For debugging, remove in production
+        "user_role" => $user_role,
+        "token_user_id" => $user_id,
+        "institute_id_used" => $institute_id
     ]);
 
     mysqli_stmt_close($stmt);
     mysqli_close($conn);
 
 } catch (Exception $e) {
-    // Error response
     http_response_code(500);
     echo json_encode([
         "status" => false,
         "message" => "Error retrieving courses: " . $e->getMessage(),
         "courses" => []
     ]);
-    
-    if (isset($stmt)) {
-        mysqli_stmt_close($stmt);
-    }
-    if (isset($conn)) {
-        mysqli_close($conn);
-    }
+    if (isset($stmt)) mysqli_stmt_close($stmt);
+    if (isset($conn)) mysqli_close($conn);
 }
 ?>
