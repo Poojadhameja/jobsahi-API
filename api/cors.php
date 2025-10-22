@@ -3,7 +3,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 $BASE_DIR = dirname(__DIR__);
-require_once $BASE_DIR . "/vendor/autoload.php";
+require_once $BASE_DIR . "../vendor/autoload.php";
 
 header('Content-Type: application/json');
 
@@ -11,7 +11,10 @@ header('Content-Type: application/json');
 $strictAllowed = [
   'https://beige-jaguar-560051.hostingersite.com',
 ];
-
+$strictAllowed[] = 'http://localhost';
+$strictAllowed[] = 'http://127.0.0.1';
+$strictAllowed[] = 'https://localhost';
+$strictAllowed[] = 'https://127.0.0.1';
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 $allow = false;
 
@@ -55,11 +58,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-if (!in_array($_SERVER['REQUEST_METHOD'], ['POST','GET'])) {
+if (!in_array($_SERVER['REQUEST_METHOD'], ['POST','GET', 'PUT'])) {
   http_response_code(405);
   echo json_encode([
     "status"  => false,
-    "message" => "Only POST/GET requests allowed",
+    "message" => "Only POST/GET/PUT requests allowed",
     "code"    => "METHOD_NOT_ALLOWED"
   ]);
   exit;

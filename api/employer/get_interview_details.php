@@ -1,0 +1,80 @@
+<?php
+require_once '../cors.php';
+
+// ✅ Authenticate recruiter
+$decoded = authenticateJWT(['recruiter', 'admin']);
+$role = strtolower($decoded['role'] ?? '');
+$user_id = $decoded['user_id'] ?? null;
+
+if (!$user_id) {
+    http_response_code(401);
+    echo json_encode(["message" => "Unauthorized", "status" => false]);
+    exit;
+}
+
+try {
+    if ($role !== 'recruiter') {
+        http_response_code(403);
+        echo json_encode(["message" => "Access denied", "status" => false]);
+        exit;
+    }
+
+    // 🔹 Get recruiter_profile id
+    $sql_rec = "SELECT id FROM recruiter_profiles WHERE user_id = ? AND admin_action = 'approved'";
+    $stmt_rec = $conn->prepare($sql_rec);
+    $stmt_rec->bind_param("i", $user_id);
+    $stmt_rec->execute();
+    $rec = $stmt_rec->get_result()->fetch_assoc();
+    $recruiter_profile_id = $rec['id'] ?? null;
+
+    if (!$recruiter_profile_id) {
+        http_response_code(400);
+        echo json_encode(["message" => "Recruiter profile not found or not approved", "status" => false]);
+        exit;
+    }
+
+    // 🔹 Fetch latest approved & scheduled interview
+    $sql = "
+        SELECT 
+            u.user_name AS candidate_name,
+            j.title AS job_title,
+            i.mode AS interview_mode,
+            i.location AS interview_location,
+            DATE_FORMAT(i.scheduled_at, '%h:%i %p') AS interview_time
+        FROM interviews i
+        INNER JOIN applications a ON a.id = i.application_id
+        INNER JOIN jobs j ON j.id = a.job_id
+        INNER JOIN student_profiles sp ON sp.id = a.student_id
+        INNER JOIN users u ON u.id = sp.user_id
+        WHERE j.recruiter_id = ?
+          AND i.admin_action = 'approved'
+          AND i.status = 'scheduled'
+        ORDER BY i.scheduled_at DESC";
+
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $recruiter_profile_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($row = $result->fetch_assoc()) {
+        $data = [
+            "name" => $row['candidate_name'],
+            "job_title" => $row['job_title'],
+            "mode" => ucfirst($row['interview_mode']),
+            "location" => $row['interview_location'],
+            "time" => $row['interview_time']
+        ];
+        http_response_code(200);
+        echo json_encode(["candidate_interview_details" => $data, "status" => true]);
+    } else {
+        http_response_code(200);
+        echo json_encode(["candidate_interview_details" => null, "status" => true]);
+    }
+
+} catch (Exception $e) {
+    http_response_code(500);
+    echo json_encode(["message" => $e->getMessage(), "status" => false]);
+}
+
+$conn->close();
+?>

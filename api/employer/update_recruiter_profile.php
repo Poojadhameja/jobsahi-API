@@ -1,38 +1,68 @@
 <?php
-include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
+require_once '../cors.php';
+
+// ✅ Authenticate JWT (allowed roles: admin, recruiter)
+$current_user = authenticateJWT(['admin', 'recruiter']);
+$user_role = strtolower($current_user['role']);
+$user_id = $current_user['user_id']; // ✅ user_id from token
+
+// ✅ Allow only PUT requests
+if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
+    echo json_encode(["message" => "Only PUT requests allowed", "status" => false]);
+    exit;
+}
+
 include "../db.php";
 
-// Authenticate user and get role
-$current_user = authenticateJWT(['admin', 'recruiter']);
-$user_role = $current_user['role'] ?? '';
-
-// Get JSON input
-$input = json_decode(file_get_contents('php://input'), true);
-
-if (!$input) {
-    http_response_code(400);
-    echo json_encode(array("message" => "Invalid JSON input", "status" => false));
+if (!$conn) {
+    echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
     exit;
 }
 
-// Validate required fields
-if (!isset($input['id']) || empty($input['id'])) {
-    http_response_code(400);
-    echo json_encode(array("message" => "Profile ID is required", "status" => false));
+// ✅ Determine recruiter_id based on role
+if ($user_role === 'admin') {
+    // Admin can update any recruiter profile
+    $recruiter_id = isset($_GET['recruiter_id']) ? intval($_GET['recruiter_id']) : 0;
+    if ($recruiter_id <= 0) {
+        echo json_encode(["message" => "Missing or invalid recruiter_id for admin", "status" => false]);
+        exit;
+    }
+} else {
+    // Recruiter can only update their own approved profile
+    $stmt = $conn->prepare("SELECT id FROM recruiter_profiles WHERE user_id = ? AND admin_action = 'approved' AND deleted_at IS NULL LIMIT 1");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $stmt->bind_result($recruiter_id);
+    $stmt->fetch();
+    $stmt->close();
+
+    if (!$recruiter_id) {
+        echo json_encode(["message" => "Profile not found or not approved for this recruiter", "status" => false]);
+        exit;
+    }
+}
+
+// ✅ Get JSON input
+$input = json_decode(file_get_contents("php://input"), true);
+
+if (json_last_error() !== JSON_ERROR_NONE) {
+    echo json_encode(["message" => "Invalid JSON input", "status" => false]);
     exit;
 }
 
-$profile_id = intval($input['id']);
-
-// Build update query dynamically based on provided fields
-$update_fields = array();
-$params = array();
-$types = '';
-
+// ✅ Define allowed fields for update
 $allowed_fields = ['company_name', 'company_logo', 'industry', 'website', 'location', 'admin_action'];
 
+// ✅ Restrict admin_action updates — only admin can change this field
+if ($user_role !== 'admin') {
+    unset($allowed_fields[array_search('admin_action', $allowed_fields)]);
+}
+
+$update_fields = [];
+$params = [];
+$types = '';
+
+// ✅ Build dynamic SQL based on provided fields
 foreach ($allowed_fields as $field) {
     if (isset($input[$field])) {
         $update_fields[] = "$field = ?";
@@ -42,79 +72,86 @@ foreach ($allowed_fields as $field) {
 }
 
 if (empty($update_fields)) {
-    http_response_code(400);
-    echo json_encode(array("message" => "No valid fields provided for update", "status" => false));
+    echo json_encode(["message" => "No valid fields provided for update", "status" => false]);
     exit;
 }
 
-// Add modified_at timestamp
+// ✅ Always update modified_at
 $update_fields[] = "modified_at = NOW()";
 
-// Build SQL query for update
-$sql = "UPDATE recruiter_profiles SET " . implode(', ', $update_fields) . " WHERE id = ? AND deleted_at IS NULL";
-$params[] = $profile_id;
-$types .= 'i';
-
-$stmt = mysqli_prepare($conn, $sql);
-if (!$stmt) {
-    http_response_code(500);
-    echo json_encode(array("message" => "Database prepare failed", "status" => false));
-    exit;
-}
-
-mysqli_stmt_bind_param($stmt, $types, ...$params);
-$result = mysqli_stmt_execute($stmt);
-
-if (!$result) {
-    http_response_code(500);
-    echo json_encode(array("message" => "Database update failed", "status" => false));
-    exit;
-}
-
-$affected_rows = mysqli_stmt_affected_rows($stmt);
-
-mysqli_stmt_close($stmt);
-
-if ($affected_rows > 0) {
-    // Build fetch query with role-based visibility
-    if ($user_role === 'admin') {
-        $fetch_sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, admin_action, created_at, modified_at 
-                      FROM recruiter_profiles 
-                      WHERE id = ? AND deleted_at IS NULL";
-        $fetch_stmt = mysqli_prepare($conn, $fetch_sql);
-        mysqli_stmt_bind_param($fetch_stmt, 'i', $profile_id);
-    } else {
-        // Non-admin users: only see admin_action = 'approval'
-        $fetch_sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, admin_action, created_at, modified_at 
-                      FROM recruiter_profiles 
-                      WHERE id = ? AND admin_action = 'approval' AND deleted_at IS NULL";
-        $fetch_stmt = mysqli_prepare($conn, $fetch_sql);
-        mysqli_stmt_bind_param($fetch_stmt, 'i', $profile_id);
-    }
-
-    mysqli_stmt_execute($fetch_stmt);
-    $fetch_result = mysqli_stmt_get_result($fetch_stmt);
-
-    if ($updated_profile = mysqli_fetch_assoc($fetch_result)) {
-        http_response_code(200);
-        echo json_encode(array(
-            "message" => "Profile updated successfully",
-            "profile" => $updated_profile,
-            "status" => true
-        ));
-    } else {
-        http_response_code(403);
-        echo json_encode(array(
-            "message" => "Profile updated but you are not authorized to view it",
-            "status" => false
-        ));
-    }
-
-    mysqli_stmt_close($fetch_stmt);
+// ✅ Build SQL query based on role
+if ($user_role === 'admin') {
+    $sql = "UPDATE recruiter_profiles 
+            SET " . implode(', ', $update_fields) . " 
+            WHERE id = ? AND deleted_at IS NULL";
+    $params[] = $recruiter_id;
+    $types .= 'i';
 } else {
-    http_response_code(404);
-    echo json_encode(array("message" => "Profile not found or no changes made", "status" => false));
+    // Recruiter can update only their own approved profile
+    $sql = "UPDATE recruiter_profiles 
+            SET " . implode(', ', $update_fields) . " 
+            WHERE id = ? AND user_id = ? AND admin_action = 'approved' AND deleted_at IS NULL";
+    $params[] = $recruiter_id;
+    $params[] = $user_id;
+    $types .= 'ii';
 }
 
-mysqli_close($conn);
+$stmt = $conn->prepare($sql);
+if (!$stmt) {
+    echo json_encode(["message" => "Failed to prepare statement: " . mysqli_error($conn), "status" => false]);
+    $conn->close();
+    exit;
+}
+
+$stmt->bind_param($types, ...$params);
+
+// ✅ Execute update
+if ($stmt->execute()) {
+    if ($stmt->affected_rows > 0) {
+        // ✅ Fetch updated profile
+        if ($user_role === 'admin') {
+            $fetch_sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, admin_action, created_at, modified_at 
+                          FROM recruiter_profiles 
+                          WHERE id = ? AND deleted_at IS NULL";
+            $fetch_stmt = $conn->prepare($fetch_sql);
+            $fetch_stmt->bind_param('i', $recruiter_id);
+        } else {
+            $fetch_sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, admin_action, created_at, modified_at 
+                          FROM recruiter_profiles 
+                          WHERE id = ? AND user_id = ? AND admin_action = 'approved' AND deleted_at IS NULL";
+            $fetch_stmt = $conn->prepare($fetch_sql);
+            $fetch_stmt->bind_param('ii', $recruiter_id, $user_id);
+        }
+
+        $fetch_stmt->execute();
+        $result = $fetch_stmt->get_result();
+
+        if ($updated_profile = $result->fetch_assoc()) {
+            echo json_encode([
+                "message" => "Recruiter profile updated successfully",
+                "status" => true,
+                "profile" => $updated_profile,
+                "updated_by" => $user_role,
+                "timestamp" => date('Y-m-d H:i:s')
+            ], JSON_PRETTY_PRINT);
+        } else {
+            echo json_encode([
+                "message" => "Profile updated but not visible to your role",
+                "status" => false
+            ]);
+        }
+
+        $fetch_stmt->close();
+    } else {
+        echo json_encode([
+            "message" => "No record updated. Check recruiter_id or profile may be deleted",
+            "status" => false
+        ]);
+    }
+} else {
+    echo json_encode(["message" => "Update failed: " . $stmt->error, "status" => false]);
+}
+
+$stmt->close();
+$conn->close();
 ?>

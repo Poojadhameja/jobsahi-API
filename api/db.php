@@ -1,9 +1,10 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
+$BASE_DIR = dirname(__DIR__);
+require_once $BASE_DIR . "../vendor/autoload.php";
 
-// Database Configuration - Localhost Setup
-$dbHost = 'localhost';
-$dbPort = '3306';
+// Database Configuration
+$dbHost = '127.0.0.1';
+$dbPort = '3307';
 $dbName = 'jobsahi_database';
 $dbUser = 'root';
 $dbPass = '';
