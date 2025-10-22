@@ -1,11 +1,11 @@
 <?php
 $BASE_DIR = dirname(__DIR__);
-require_once $BASE_DIR . "../vendor/autoload.php";
+require_once $BASE_DIR . "../vendor/vendor/autoload.php";
 
 // Database Configuration
 $dbHost = '127.0.0.1';
-$dbPort = '3307';
-$dbName = 'jobsahi_database';
+$dbPort = '3306';
+$dbName = 'jobsahi_database_shared';
 $dbUser = 'root';
 $dbPass = '';
 

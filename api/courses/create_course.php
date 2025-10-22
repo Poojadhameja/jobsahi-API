@@ -1,60 +1,47 @@
 <?php
-// create_course.php - Create new course (Admin or Institute access)
 require_once '../cors.php';
 
-// Authenticate JWT and allow only admin or institute
 $decoded = authenticateJWT(['admin', 'institute']); 
 $user_role = $decoded['role'] ?? '';  
 $user_id   = $decoded['user_id'] ?? 0;
 
-// ---------- POST: Create New Course ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!in_array($user_role, ['admin', 'institute'])) {
-        echo json_encode([
-            "status" => false,
-            "message" => "Unauthorized: Only admin or institute can create courses"
-        ]);
+        echo json_encode(["status" => false, "message" => "Unauthorized"]);
         exit();
     }
 
-    // Parse JSON from frontend
     $data = json_decode(file_get_contents("php://input"), true);
 
-    // Collect all input fields
+    // ✅ Values fetch karna
     $title          = trim($data['title'] ?? '');
-    $description    = trim(strip_tags($data['description'] ?? ''));
+    $description    = trim($data['description'] ?? '');
     $duration       = trim($data['duration'] ?? '');
-    $category_id    = intval($data['category_id'] ?? 0);
+    $category_id    = !empty($data['category_id']) ? intval($data['category_id']) : null;
     $tagged_skills  = trim($data['tagged_skills'] ?? '');
     $batch_limit    = intval($data['batch_limit'] ?? 0);
-    $status         = trim($data['status'] ?? 'active');
+    $status         = trim($data['status'] ?? 'Active');
     $instructor_name = trim($data['instructor_name'] ?? '');
-    $mode           = trim($data['mode'] ?? 'offline');
+    $mode           = trim($data['mode'] ?? 'Offline');
     $certification_allowed = isset($data['certification_allowed']) && $data['certification_allowed'] ? 1 : 0;
     $module_title   = trim($data['module_title'] ?? '');
     $module_description = trim($data['module_description'] ?? '');
     $media          = trim($data['media'] ?? '');
     $fee            = floatval($data['fee'] ?? 0);
 
-    // Role-based assignment
     $admin_action = 'pending';
     $institute_id = ($user_role === 'institute') ? $user_id : 0;
 
-    // Basic validation
-    if (
-        empty($title) || empty($description) || empty($duration) || 
-        $fee <= 0 || empty($instructor_name)
-    ) {
-        echo json_encode([
-            "status" => false,
-            "message" => "All required fields must be filled properly."
-        ]);
+    // ✅ Debug line (sirf testing ke liye)
+    // file_put_contents('debug_log.txt', json_encode($data, JSON_PRETTY_PRINT));
+
+    if (empty($title) || empty($description) || empty($duration) || $fee <= 0 || empty($instructor_name)) {
+        echo json_encode(["status" => false, "message" => "All required fields must be filled"]);
         exit();
     }
 
     try {
-        // ✅ Insert query with all fields
         $stmt = $conn->prepare("
             INSERT INTO courses (
                 institute_id, title, description, duration, category_id, tagged_skills, 
@@ -63,11 +50,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
+        // ✅ Type string exact 16 chars
         $stmt->bind_param(
-            "isssisssssssssdss",
-            $institute_id, $title, $description, $duration, $category_id, $tagged_skills,
-            $batch_limit, $status, $instructor_name, $mode, $certification_allowed,
-            $module_title, $module_description, $media, $fee, $admin_action
+            "isssisisssisssds",
+            $institute_id,
+            $title,
+            $description,
+            $duration,
+            $category_id,
+            $tagged_skills,
+            $batch_limit,
+            $status,
+            $instructor_name,
+            $mode,
+            $certification_allowed,
+            $module_title,
+            $module_description,
+            $media,
+            $fee,
+            $admin_action
         );
 
         if ($stmt->execute()) {
@@ -79,11 +80,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             echo json_encode([
                 "status" => false,
-                "message" => "Failed to create course",
+                "message" => "Database insert failed",
                 "error"   => $stmt->error
             ]);
         }
 
+        $stmt->close();
     } catch (Exception $e) {
         echo json_encode([
             "status" => false,
