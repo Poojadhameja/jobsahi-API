@@ -55,11 +55,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-if (!in_array($_SERVER['REQUEST_METHOD'], ['POST','GET'])) {
+if (!in_array($_SERVER['REQUEST_METHOD'], ['POST','GET','PUT'])) {
   http_response_code(405);
   echo json_encode([
     "status"  => false,
-    "message" => "Only POST/GET requests allowed",
+    "message" => "Only POST/GET & PUT requests allowed",
     "code"    => "METHOD_NOT_ALLOWED"
   ]);
   exit;
