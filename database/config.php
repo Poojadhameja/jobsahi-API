@@ -1,5 +1,6 @@
 <?php
-$conn = mysqli_connect("localhost", "root", "", "jobsahi_data_new");
+$conn = mysqli_connect("localhost", "root", "", "jobsahi_database");
+
 if (!$conn) {
     die("Connection failed: " . mysqli_connect_error());
 }

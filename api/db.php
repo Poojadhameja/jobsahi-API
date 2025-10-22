@@ -1,5 +1,6 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
+$BASE_DIR = dirname(__DIR__);
+require_once $BASE_DIR . "../vendor/autoload.php";
 
 // Database Configuration
 $dbHost = '127.0.0.1';
@@ -7,6 +8,12 @@ $dbPort = '3307';
 $dbName = 'jobsahi_database';
 $dbUser = 'root';
 $dbPass = '';
+
+// $dbHost = 'localhost'; // Hostinger uses localhost for shared hosting
+// $dbPort = '3306';
+// $dbName = 'u829931622_jobsahi_data';
+// $dbUser = 'u829931622_jobsahi_data';
+// $dbPass = 'Jobsahi1@';
 
 $dsn = "mysql:host={$dbHost};port={$dbPort};dbname={$dbName};charset=utf8mb4";
 
@@ -35,7 +42,8 @@ if (!defined('JWT_SECRET')) {
 if (!defined('JWT_ALGORITHM')) {
     define('JWT_ALGORITHM', 'HS256');
 }
-if (!defined('JWT_EXPIRY')) {
-    define('JWT_EXPIRY', 3600); // 1 hour in seconds
-}
+// JWT_EXPIRY removed - tokens never expire based on time
+// if (!defined('JWT_EXPIRY')) {
+//     define('JWT_EXPIRY', 30); // 30 seconds
+// }
 ?>

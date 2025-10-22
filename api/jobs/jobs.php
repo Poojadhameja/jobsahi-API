@@ -94,8 +94,11 @@ $sql = "SELECT
             j.status,
             j.admin_action,
             j.created_at,
-            (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS views
-        FROM jobs j";
+            (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS views,
+            -- Company name only
+            rp.company_name
+        FROM jobs j
+        LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id";
 
 if (!empty($filters)) {
     $sql .= " WHERE " . implode(" AND ", $filters);

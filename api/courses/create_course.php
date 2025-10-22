@@ -1,13 +1,13 @@
 <?php
-// create_course.php - Create new course (Admin, Institute access)
+// create_course.php - Create new course (Admin or Institute access)
 require_once '../cors.php';
 
-// Authenticate JWT and allow multiple roles
+// Authenticate JWT and allow only admin or institute
 $decoded = authenticateJWT(['admin', 'institute']); 
-$user_role = $decoded['role'] ?? '';  // assuming 'role' exists in JWT
+$user_role = $decoded['role'] ?? '';  
 $user_id   = $decoded['user_id'] ?? 0;
 
-// ---------- POST: Create Course (Admin / Institute only) ----------
+// ---------- POST: Create New Course ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!in_array($user_role, ['admin', 'institute'])) {
@@ -18,27 +18,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit();
     }
 
+    // Parse JSON from frontend
     $data = json_decode(file_get_contents("php://input"), true);
 
-    $title       = isset($data['title']) ? trim($data['title']) : '';
-    $description = isset($data['description']) ? trim($data['description']) : '';
-    $duration    = isset($data['duration']) ? trim($data['duration']) : '';
-    $fee         = isset($data['fee']) ? floatval($data['fee']) : 0;
-    $admin_action = 'pending'; // New courses default to 'pending'
+    // Collect all input fields
+    $title          = trim($data['title'] ?? '');
+    $description    = trim(strip_tags($data['description'] ?? ''));
+    $duration       = trim($data['duration'] ?? '');
+    $category_id    = intval($data['category_id'] ?? 0);
+    $tagged_skills  = trim($data['tagged_skills'] ?? '');
+    $batch_limit    = intval($data['batch_limit'] ?? 0);
+    $status         = trim($data['status'] ?? 'active');
+    $instructor_name = trim($data['instructor_name'] ?? '');
+    $mode           = trim($data['mode'] ?? 'offline');
+    $certification_allowed = isset($data['certification_allowed']) && $data['certification_allowed'] ? 1 : 0;
+    $module_title   = trim($data['module_title'] ?? '');
+    $module_description = trim($data['module_description'] ?? '');
+    $media          = trim($data['media'] ?? '');
+    $fee            = floatval($data['fee'] ?? 0);
 
-    if (empty($title) || empty($description) || empty($duration) || $fee <= 0) {
+    // Role-based assignment
+    $admin_action = 'pending';
+    $institute_id = ($user_role === 'institute') ? $user_id : 0;
+
+    // Basic validation
+    if (
+        empty($title) || empty($description) || empty($duration) || 
+        $fee <= 0 || empty($instructor_name)
+    ) {
         echo json_encode([
             "status" => false,
-            "message" => "All fields are required"
+            "message" => "All required fields must be filled properly."
         ]);
         exit();
     }
 
-    $institute_id = $user_role === 'institute' ? $user_id : 0; // admin may not have institute_id
-
     try {
-        $stmt = $conn->prepare("INSERT INTO courses (institute_id, title, description, duration, fee, admin_action) VALUES (?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("issdss", $institute_id, $title, $description, $duration, $fee, $admin_action);
+        // ✅ Insert query with all fields
+        $stmt = $conn->prepare("
+            INSERT INTO courses (
+                institute_id, title, description, duration, category_id, tagged_skills, 
+                batch_limit, status, instructor_name, mode, certification_allowed, 
+                module_title, module_description, media, fee, admin_action
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+
+        $stmt->bind_param(
+            "isssisssssssssdss",
+            $institute_id, $title, $description, $duration, $category_id, $tagged_skills,
+            $batch_limit, $status, $instructor_name, $mode, $certification_allowed,
+            $module_title, $module_description, $media, $fee, $admin_action
+        );
 
         if ($stmt->execute()) {
             echo json_encode([
@@ -53,41 +83,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 "error"   => $stmt->error
             ]);
         }
-    } catch (Exception $e) {
-        echo json_encode([
-            "status" => false,
-            "message" => "Error: " . $e->getMessage()
-        ]);
-    }
-
-    $conn->close();
-    exit();
-}
-
-// ---------- GET: List Courses with Role-based Visibility ----------
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    try {
-        if ($user_role === 'admin') {
-            // Admin sees everything
-            $sql = "SELECT * FROM courses";
-        } else {
-            // Other roles see only approved courses
-            $sql = "SELECT * FROM courses WHERE admin_action = 'approved'";
-        }
-
-        $result = $conn->query($sql);
-        $courses = [];
-
-        if ($result && $result->num_rows > 0) {
-            while ($row = $result->fetch_assoc()) {
-                $courses[] = $row;
-            }
-        }
-
-        echo json_encode([
-            "status" => true,
-            "courses" => $courses
-        ]);
 
     } catch (Exception $e) {
         echo json_encode([

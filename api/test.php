@@ -18,7 +18,7 @@ try {
 echo "2. Testing constants...\n";
 $constants_to_check = [
     'JWT_SECRET',
-    'JWT_EXPIRY', 
+    // 'JWT_EXPIRY',  // Removed - tokens never expire
     'HTTP_OK',
     'SUCCESS_MESSAGE',
     'MAX_FILE_SIZE'

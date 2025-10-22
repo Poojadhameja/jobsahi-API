@@ -1,5 +1,5 @@
 <?php
-$dsn = "mysql:host=localhost;dbname=jobsahi_data;charset=utf8mb4";
+$dsn = "mysql:host=localhost;dbname=jobsahi_database;charset=utf8mb4";
 $username = "root";   // apna DB user
 $password = "";       // apna DB password
 
