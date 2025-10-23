@@ -3,7 +3,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 $BASE_DIR = dirname(__DIR__);
-require_once $BASE_DIR . "../vendor/autoload.php";
+require_once $BASE_DIR . "../vendor/vendor/autoload.php";
 
 header('Content-Type: application/json');
 
