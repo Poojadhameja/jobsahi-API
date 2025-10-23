@@ -1,11 +1,18 @@
-* text=auto eol=lf
+# Set default behavior to automatically normalize line endings
+* text=auto
 
-*.blade.php diff=html
-*.css diff=css
-*.html diff=html
-*.md diff=markdown
-*.php diff=php
+# Explicitly declare text files you want to always be normalized and converted
+# to native line endings on checkout
+*.php text
+*.js text
+*.css text
+*.html text
+*.json text
+*.md text
+*.txt text
 
-/.github export-ignore
-CHANGELOG.md export-ignore
-.styleci.yml export-ignore
+# Declare files that will always have CRLF line endings on checkout
+*.bat text eol=crlf
+
+# Declare files that will always have LF line endings on checkout
+*.sh text eol=lf
