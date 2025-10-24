@@ -1,5 +1,6 @@
 <?php
 require_once '../cors.php';
+require_once '../db.php'; // ✅ ensure DB connection
 
 // ✅ Authenticate JWT (allowed roles: admin, student)
 $current_user = authenticateJWT(['admin', 'student']); 
@@ -12,9 +13,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-// ✅ Role-based SQL condition
+// ✅ Build SQL based on role
 if ($user_role === 'admin') {
-    // Admin: can view all profiles (pending + approved)
+    // Admin can view all profiles (pending + approved)
     $sql = "SELECT 
                 id, 
                 user_id, 
@@ -33,6 +34,9 @@ if ($user_role === 'admin') {
                 longitude,
                 bio,
                 experience,
+                projects,
+                languages,
+                aadhar_number,
                 graduation_year,
                 cgpa,
                 admin_action,
@@ -44,7 +48,7 @@ if ($user_role === 'admin') {
               AND (admin_action = 'pending' OR admin_action = 'approved')
             ORDER BY created_at DESC";
 } else {
-    // Student: can view ONLY their own profile AND only if approved
+    // Student can only view their own approved profile
     $sql = "SELECT 
                 id, 
                 user_id, 
@@ -63,6 +67,9 @@ if ($user_role === 'admin') {
                 longitude,
                 bio,
                 experience,
+                projects,
+                languages,
+                aadhar_number,
                 graduation_year,
                 cgpa,
                 admin_action,
@@ -73,7 +80,7 @@ if ($user_role === 'admin') {
             WHERE deleted_at IS NULL 
               AND user_id = $logged_in_user_id
               AND admin_action = 'approved'
-            LIMIT 1"; // Each student should have only one profile
+            LIMIT 1";
 }
 
 $result = mysqli_query($conn, $sql);
@@ -81,15 +88,14 @@ $students = [];
 
 if ($result && mysqli_num_rows($result) > 0) {
     while ($student = mysqli_fetch_assoc($result)) {
-        // ✅ Process experience field
-        $experienceData = null;
-        
+
+        // ✅ Decode Experience JSON (if valid)
+        $experienceData = [];
         if (!empty($student['experience'])) {
             $decoded = json_decode($student['experience'], true);
             if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
                 $experienceData = $decoded;
             } else {
-                // Not valid JSON → fallback
                 $experienceData = [
                     "level" => "",
                     "years" => $student['experience'],
@@ -97,15 +103,41 @@ if ($result && mysqli_num_rows($result) > 0) {
                 ];
             }
         } else {
-            // Empty experience
             $experienceData = [
                 "level" => "",
                 "years" => "",
                 "details" => []
             ];
         }
-        
+
+        // ✅ Decode Projects JSON (if valid)
+        $projectsData = [];
+        if (!empty($student['projects'])) {
+            $decodedProjects = json_decode($student['projects'], true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decodedProjects)) {
+                // ✅ Projects array (e.g. [{name:"",link:""}])
+                $projectsData = $decodedProjects;
+            } else {
+                // fallback if plain string
+                $projectsData = [["name" => $student['projects'], "link" => ""]];
+            }
+        }
+
+        // ✅ Normalize empty/null fields
+        foreach ([
+            'skills', 'education', 'resume', 'certificates', 'portfolio_link',
+            'linkedin_url', 'dob', 'gender', 'job_type', 'trade', 'location',
+            'bio', 'languages', 'aadhar_number', 'graduation_year', 'cgpa'
+        ] as $field) {
+            if (!isset($student[$field]) || $student[$field] === null) {
+                $student[$field] = "";
+            }
+        }
+
+        // ✅ Replace with decoded structured data
         $student['experience'] = $experienceData;
+        $student['projects'] = $projectsData;
+
         $students[] = $student;
     }
 
