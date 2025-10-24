@@ -1,0 +1,21 @@
+CREATE TABLE `courses` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `institute_id` int(10) UNSIGNED NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `description` text NOT NULL,
+  `duration` varchar(255) NOT NULL,
+  `category_id` int(11) DEFAULT NULL,
+  `tagged_skills` varchar(255) DEFAULT NULL,
+  `batch_limit` int(11) DEFAULT NULL,
+  `status` enum('active','inactive') DEFAULT 'active',
+  `instructor_name` varchar(100) DEFAULT NULL,
+  `mode` enum('online','offline','hybrid') DEFAULT 'offline',
+  `certification_allowed` tinyint(1) DEFAULT 0,
+  `module_title` varchar(255) DEFAULT NULL,
+  `module_description` text DEFAULT NULL,
+  `media` text DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `fee` decimal(8,2) NOT NULL,
+  `admin_action` enum('pending','approved','rejected') NOT NULL DEFAULT 'pending'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_nopad_ci;

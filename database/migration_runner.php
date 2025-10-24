@@ -1,31 +1,67 @@
 <?php
-$dsn = "mysql:host=localhost;dbname=jobsahi_database;charset=utf8mb4";
-$username = "root";   // apna DB user
-$password = "";       // apna DB password
+/**
+ * JobSahi Migration Runner (Scratch Build)
+ * Usage:
+ *   php database/migration_runner.php status
+ *   php database/migration_runner.php up
+ */
+require_once __DIR__ . '/../api/db.php'; // ← uses same creds as APIs
 
 try {
-    $pdo = new PDO($dsn, $username, $password, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
-    ]);
-    echo "✅ Database connected...\n";
-
-    $migrationFiles = glob(__DIR__ . "/migrations/*.php");
-    sort($migrationFiles);
-
-    foreach ($migrationFiles as $file) {
-        require_once $file;
-        $className = pathinfo($file, PATHINFO_FILENAME);
-        $className = preg_replace('/^\d+_/', '', $className); 
-        $className = str_replace('_', '', ucwords($className, '_'));
-
-        if (class_exists($className)) {
-            $migration = new $className();
-            $migration->up($pdo);
-            echo "✅ Migrated: {$className}\n";
-        } else {
-            echo "⚠️ Class not found: {$file}\n";
-        }
-    }
+  $pdo = new PDO(
+    "mysql:host=$DB_HOST;dbname=$DB_NAME;charset=utf8mb4",
+    $DB_USER, $DB_PASS, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+  );
 } catch (PDOException $e) {
-    die("❌ Database connection failed: " . $e->getMessage());
+  die("❌ DB connect failed: ".$e->getMessage()."\n");
 }
+
+$pdo->exec("CREATE TABLE IF NOT EXISTS _migrations(
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  filename VARCHAR(255) NOT NULL UNIQUE,
+  applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+$dir = __DIR__ . '/migrations';
+if (!is_dir($dir)) { die("Missing migrations dir\n"); }
+
+$files = glob($dir.'/*.sql');
+natsort($files);
+$applied = $pdo->query("SELECT filename FROM _migrations")->fetchAll(PDO::FETCH_COLUMN);
+$cmd = $argv[1] ?? 'status';
+
+function run_sql_file(PDO $pdo, string $file) {
+  $sql = file_get_contents($file);
+  $pdo->beginTransaction();
+  try {
+    $pdo->exec($sql);
+    $pdo->commit();
+    echo "✅ ".basename($file)."\n";
+  } catch (Throwable $e) {
+    $pdo->rollBack();
+    echo "❌ ".basename($file)." -> ".$e->getMessage()."\n";
+    exit(1);
+  }
+}
+
+if ($cmd === 'status') {
+  echo "📋 Migration Status (".$pdo->query("SELECT DATABASE()")->fetchColumn()."):\n";
+  foreach ($files as $f) {
+    $b = basename($f);
+    echo (in_array($b,$applied) ? " [✓] " : " [ ] ") . $b . "\n";
+  }
+  exit;
+}
+if ($cmd === 'up') {
+  foreach ($files as $f) {
+    $b = basename($f);
+    if (in_array($b,$applied)) continue;
+    echo "▶️  Applying $b...\n";
+    run_sql_file($pdo,$f);
+    $stmt = $pdo->prepare("INSERT INTO _migrations(filename) VALUES(?)");
+    $stmt->execute([$b]);
+  }
+  echo "🎉 All pending migrations applied.\n";
+  exit;
+}
+echo "Usage: php database/migration_runner.php [status|up]\n";
