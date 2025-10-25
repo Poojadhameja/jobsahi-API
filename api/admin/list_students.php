@@ -3,7 +3,7 @@
 require_once '../cors.php';
 
 // ✅ Authenticate JWT and allow only admin access
-$decoded = authenticateJWT(['admin']); // Only admin can access this endpoint
+$decoded = authenticateJWT(['admin','institute']); // Only admin can access this endpoint
 
 // Extract admin user ID from JWT token
 $admin_id = $decoded['user_id'];
