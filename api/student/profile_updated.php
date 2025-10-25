@@ -41,30 +41,34 @@ if (json_last_error() !== JSON_ERROR_NONE) {
     exit;
 }
 
-// ✅ Debugging support (optional)
-file_put_contents('debug_profile_update.txt', print_r($input, true));
+// ✅ Debugging support removed for production
 
-// ✅ Extract all expected fields
-$skills           = $input['skills'] ?? null;
-$education        = $input['education'] ?? null;
-$resume           = $input['resume'] ?? null;
-$certificates     = $input['certificates'] ?? null;
-$portfolio_link   = $input['portfolio_link'] ?? null;
-$linkedin_url     = $input['linkedin_url'] ?? null;
-$dob              = $input['dob'] ?? null;
-$gender           = $input['gender'] ?? null;
-$job_type         = $input['job_type'] ?? null;
-$trade            = $input['trade'] ?? null;
-$bio              = $input['bio'] ?? null;
-$experience       = $input['experience'] ?? null;
-$projects         = $input['projects'] ?? null;
-$languages        = $input['languages'] ?? null;
-$aadhar_number    = $input['aadhar_number'] ?? null;
-$graduation_year  = $input['graduation_year'] ?? null;
-$cgpa             = $input['cgpa'] ?? null;
-$latitude         = $input['latitude'] ?? null;
-$longitude        = $input['longitude'] ?? null;
-$location         = $input['location'] ?? null;
+// ✅ Extract all expected fields (support both flat and structured JSON)
+$skills           = $input['skills'] ?? $input['professional_info']['skills'] ?? null;
+$education        = $input['education'] ?? $input['professional_info']['education'] ?? null;
+$resume           = $input['resume'] ?? $input['documents']['resume'] ?? null;
+$certificates     = $input['certificates'] ?? $input['documents']['certificates'] ?? null;
+$portfolio_link   = $input['portfolio_link'] ?? $input['social_links']['portfolio_link'] ?? null;
+$linkedin_url     = $input['linkedin_url'] ?? $input['social_links']['linkedin_url'] ?? null;
+$dob              = $input['dob'] ?? $input['personal_info']['date_of_birth'] ?? null;
+$gender           = $input['gender'] ?? $input['personal_info']['gender'] ?? null;
+$job_type         = $input['job_type'] ?? $input['professional_info']['job_type'] ?? null;
+$trade            = $input['trade'] ?? $input['professional_info']['trade'] ?? null;
+$bio              = $input['bio'] ?? $input['additional_info']['bio'] ?? null;
+$experience       = $input['experience'] ?? $input['professional_info']['experience'] ?? null;
+$projects         = $input['projects'] ?? $input['professional_info']['projects'] ?? null;
+$languages        = $input['languages'] ?? $input['professional_info']['languages'] ?? null;
+$aadhar_number    = $input['aadhar_number'] ?? $input['documents']['aadhar_number'] ?? null;
+$graduation_year  = $input['graduation_year'] ?? $input['professional_info']['graduation_year'] ?? null;
+$cgpa             = $input['cgpa'] ?? $input['professional_info']['cgpa'] ?? null;
+$latitude         = $input['latitude'] ?? $input['personal_info']['latitude'] ?? null;
+$longitude        = $input['longitude'] ?? $input['personal_info']['longitude'] ?? null;
+$location         = $input['location'] ?? $input['personal_info']['location'] ?? null;
+$email            = $input['email'] ?? $input['personal_info']['email'] ?? null;
+$user_name        = $input['user_name'] ?? $input['personal_info']['user_name'] ?? null;
+$phone_number     = $input['phone_number'] ?? $input['personal_info']['phone_number'] ?? null;
+
+// ✅ Debug statements removed for production
 
 // ✅ Convert experience to JSON if array
 if (is_array($experience)) {
@@ -76,7 +80,13 @@ if (is_array($projects)) {
     $projects = json_encode($projects, JSON_UNESCAPED_UNICODE);
 }
 
-// ✅ Build UPDATE SQL query
+// ✅ Start transaction for updating both tables
+mysqli_autocommit($conn, false);
+
+$update_success = true;
+$error_message = "";
+
+// ✅ Update student_profiles table
 $sql = "UPDATE student_profiles SET 
             skills = ?, 
             education = ?, 
@@ -103,64 +113,139 @@ $sql = "UPDATE student_profiles SET
 
 $stmt = mysqli_prepare($conn, $sql);
 if (!$stmt) {
-    echo json_encode([
-        "message" => "Failed to prepare statement: " . mysqli_error($conn),
-        "status" => false
-    ]);
-    mysqli_close($conn);
-    exit;
+    $update_success = false;
+    $error_message = "Failed to prepare student profile statement: " . mysqli_error($conn);
+} else {
+    // ✅ Bind all parameters (21 total)
+    mysqli_stmt_bind_param(
+        $stmt,
+        "ssssssssssssssssddssi",
+        $skills,
+        $education,
+        $resume,
+        $certificates,
+        $portfolio_link,
+        $linkedin_url,
+        $dob,
+        $gender,
+        $job_type,
+        $trade,
+        $bio,
+        $experience,
+        $projects,
+        $languages,
+        $aadhar_number,
+        $graduation_year,
+        $cgpa,
+        $latitude,
+        $longitude,
+        $location,
+        $student_id
+    );
+
+    if (!mysqli_stmt_execute($stmt)) {
+        $update_success = false;
+        $error_message = "Student profile update failed: " . mysqli_stmt_error($stmt);
+    }
+    mysqli_stmt_close($stmt);
 }
 
-// ✅ Bind all parameters (21 total)
-mysqli_stmt_bind_param(
-    $stmt,
-    "ssssssssssssssssddssi",
-    $skills,
-    $education,
-    $resume,
-    $certificates,
-    $portfolio_link,
-    $linkedin_url,
-    $dob,
-    $gender,
-    $job_type,
-    $trade,
-    $bio,
-    $experience,
-    $projects,
-    $languages,
-    $aadhar_number,
-    $graduation_year,
-    $cgpa,
-    $latitude,
-    $longitude,
-    $location,
-    $student_id
-);
+// ✅ Update users table if email, user_name, or phone_number is provided
+if ($update_success && ($email !== null || $user_name !== null || $phone_number !== null)) {
+    // Get user_id from student_profiles
+    $user_id_query = "SELECT user_id FROM student_profiles WHERE id = ? AND deleted_at IS NULL";
+    $user_stmt = mysqli_prepare($conn, $user_id_query);
+    if (!$user_stmt) {
+        $update_success = false;
+        $error_message = "Failed to prepare user_id query: " . mysqli_error($conn);
+    } else {
+        mysqli_stmt_bind_param($user_stmt, "i", $student_id);
+        mysqli_stmt_execute($user_stmt);
+        mysqli_stmt_bind_result($user_stmt, $user_id_from_profile);
+        mysqli_stmt_fetch($user_stmt);
+        mysqli_stmt_close($user_stmt);
 
-// ✅ Execute
-if (mysqli_stmt_execute($stmt)) {
-    if (mysqli_stmt_affected_rows($stmt) > 0) {
-        echo json_encode([
-            "message" => "Student profile updated successfully",
-            "status" => true,
+        if ($user_id_from_profile) {
+            // Build dynamic update query for users table
+            $user_update_fields = [];
+            $user_params = [];
+            $user_types = "";
+
+            if ($email !== null) {
+                $user_update_fields[] = "email = ?";
+                $user_params[] = $email;
+                $user_types .= "s";
+            }
+            if ($user_name !== null) {
+                $user_update_fields[] = "user_name = ?";
+                $user_params[] = $user_name;
+                $user_types .= "s";
+            }
+            if ($phone_number !== null) {
+                $user_update_fields[] = "phone_number = ?";
+                $user_params[] = $phone_number;
+                $user_types .= "s";
+            }
+
+            if (!empty($user_update_fields)) {
+                $user_sql = "UPDATE users SET " . implode(", ", $user_update_fields) . " WHERE id = ?";
+                $user_types .= "i";
+                $user_params[] = $user_id_from_profile;
+
+                $user_update_stmt = mysqli_prepare($conn, $user_sql);
+                if (!$user_update_stmt) {
+                    $update_success = false;
+                    $error_message = "Failed to prepare user update statement: " . mysqli_error($conn);
+                } else {
+                    mysqli_stmt_bind_param($user_update_stmt, $user_types, ...$user_params);
+                    if (!mysqli_stmt_execute($user_update_stmt)) {
+                        $update_success = false;
+                        $error_message = "User update failed: " . mysqli_stmt_error($user_update_stmt);
+                    }
+                    mysqli_stmt_close($user_update_stmt);
+                }
+            }
+        }
+    }
+}
+
+// ✅ Commit or rollback transaction
+if ($update_success) {
+    mysqli_commit($conn);
+    echo json_encode([
+        "success" => true,
+        "message" => "Student profile updated successfully",
+        "data" => [
             "profile_updated_id" => $student_id,
             "updated_by" => $user_role,
-            "timestamp" => date('Y-m-d H:i:s')
-        ], JSON_PRETTY_PRINT);
-    } else {
-        echo json_encode([
-            "message" => "No record updated. Check student_id or profile may be deleted",
-            "status" => false
-        ]);
-    }
+            "updated_fields" => [
+                "student_profile" => true,
+                "user_info" => ($email !== null || $user_name !== null || $phone_number !== null)
+            ]
+        ],
+        "meta" => [
+            "timestamp" => date('Y-m-d H:i:s'),
+            "api_version" => "1.0"
+        ]
+    ], JSON_PRETTY_PRINT);
 } else {
+    mysqli_rollback($conn);
     echo json_encode([
-        "message" => "Update failed: " . mysqli_stmt_error($stmt),
-        "status" => false
-    ]);
+        "success" => false,
+        "message" => "Update failed: " . $error_message,
+        "data" => [
+            "error_details" => $error_message,
+            "profile_id" => $student_id
+        ],
+        "meta" => [
+            "timestamp" => date('Y-m-d H:i:s'),
+            "api_version" => "1.0"
+        ]
+    ], JSON_PRETTY_PRINT);
 }
 
-mysqli_stmt_close($stmt);
+// ✅ Restore autocommit
+mysqli_autocommit($conn, true);
+
 mysqli_close($conn);
 ?>

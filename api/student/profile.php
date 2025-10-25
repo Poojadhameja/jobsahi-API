@@ -17,69 +17,77 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 if ($user_role === 'admin') {
     // Admin can view all profiles (pending + approved)
     $sql = "SELECT 
-                id, 
-                user_id, 
-                skills, 
-                education, 
-                resume, 
-                certificates,
-                portfolio_link, 
-                linkedin_url, 
-                dob, 
-                gender, 
-                job_type, 
-                trade, 
-                location, 
-                latitude,
-                longitude,
-                bio,
-                experience,
-                projects,
-                languages,
-                aadhar_number,
-                graduation_year,
-                cgpa,
-                admin_action,
-                created_at, 
-                modified_at, 
-                deleted_at
-            FROM student_profiles 
-            WHERE deleted_at IS NULL 
-              AND (admin_action = 'pending' OR admin_action = 'approved')
-            ORDER BY created_at DESC";
+                sp.id, 
+                sp.user_id, 
+                u.email,
+                u.user_name,
+                u.phone_number,
+                sp.skills, 
+                sp.education, 
+                sp.resume, 
+                sp.certificates,
+                sp.portfolio_link, 
+                sp.linkedin_url, 
+                sp.dob, 
+                sp.gender, 
+                sp.job_type, 
+                sp.trade, 
+                sp.location, 
+                sp.latitude,
+                sp.longitude,
+                sp.bio,
+                sp.experience,
+                sp.projects,
+                sp.languages,
+                sp.aadhar_number,
+                sp.graduation_year,
+                sp.cgpa,
+                sp.admin_action,
+                sp.created_at, 
+                sp.modified_at, 
+                sp.deleted_at
+            FROM student_profiles sp
+            INNER JOIN users u ON sp.user_id = u.id
+            WHERE sp.deleted_at IS NULL 
+              AND (sp.admin_action = 'pending' OR sp.admin_action = 'approved')
+            ORDER BY sp.created_at DESC";
 } else {
     // Student can only view their own approved profile
     $sql = "SELECT 
-                id, 
-                user_id, 
-                skills, 
-                education, 
-                resume, 
-                certificates,
-                portfolio_link, 
-                linkedin_url, 
-                dob, 
-                gender, 
-                job_type, 
-                trade, 
-                location, 
-                latitude,
-                longitude,
-                bio,
-                experience,
-                projects,
-                languages,
-                aadhar_number,
-                graduation_year,
-                cgpa,
-                admin_action,
-                created_at, 
-                modified_at, 
-                deleted_at
-            FROM student_profiles 
-            WHERE deleted_at IS NULL 
-              AND user_id = $logged_in_user_id
-              AND admin_action = 'approved'
+                sp.id, 
+                sp.user_id, 
+                u.email,
+                u.user_name,
+                u.phone_number,
+                sp.skills, 
+                sp.education, 
+                sp.resume, 
+                sp.certificates,
+                sp.portfolio_link, 
+                sp.linkedin_url, 
+                sp.dob, 
+                sp.gender, 
+                sp.job_type, 
+                sp.trade, 
+                sp.location, 
+                sp.latitude,
+                sp.longitude,
+                sp.bio,
+                sp.experience,
+                sp.projects,
+                sp.languages,
+                sp.aadhar_number,
+                sp.graduation_year,
+                sp.cgpa,
+                sp.admin_action,
+                sp.created_at, 
+                sp.modified_at, 
+                sp.deleted_at
+            FROM student_profiles sp
+            INNER JOIN users u ON sp.user_id = u.id
+            WHERE sp.deleted_at IS NULL 
+              AND sp.user_id = $logged_in_user_id
+              AND sp.admin_action = 'approved'
             LIMIT 1";
 }
 
@@ -134,29 +142,91 @@ if ($result && mysqli_num_rows($result) > 0) {
             }
         }
 
-        // ✅ Replace with decoded structured data
-        $student['experience'] = $experienceData;
-        $student['projects'] = $projectsData;
+        // ✅ Format structured response
+        $formattedStudent = [
+            "profile_id" => intval($student['id']),
+            "user_id" => intval($student['user_id']),
+            "personal_info" => [
+                "email" => $student['email'],
+                "user_name" => $student['user_name'],
+                "phone_number" => $student['phone_number'],
+                "date_of_birth" => $student['dob'],
+                "gender" => $student['gender'],
+                "location" => $student['location'],
+                "latitude" => $student['latitude'] ? floatval($student['latitude']) : null,
+                "longitude" => $student['longitude'] ? floatval($student['longitude']) : null
+            ],
+            "professional_info" => [
+                "skills" => $student['skills'],
+                "education" => $student['education'],
+                "experience" => $experienceData,
+                "projects" => $projectsData,
+                "job_type" => $student['job_type'],
+                "trade" => $student['trade'],
+                "graduation_year" => $student['graduation_year'],
+                "cgpa" => $student['cgpa'],
+                "languages" => $student['languages']
+            ],
+            "documents" => [
+                "resume" => $student['resume'],
+                "certificates" => $student['certificates'],
+                "aadhar_number" => $student['aadhar_number']
+            ],
+            "social_links" => [
+                "portfolio_link" => $student['portfolio_link'],
+                "linkedin_url" => $student['linkedin_url']
+            ],
+            "additional_info" => [
+                "bio" => $student['bio']
+            ],
+            "status" => [
+                "admin_action" => $student['admin_action'],
+                "created_at" => $student['created_at'],
+                "modified_at" => $student['modified_at']
+            ]
+        ];
 
-        $students[] = $student;
+        $students[] = $formattedStudent;
     }
 
     echo json_encode([
-        "message" => "Student profiles fetched successfully",
-        "status" => true,
-        "count" => count($students),
-        "data" => $students,
-        "timestamp" => date('Y-m-d H:i:s')
+        "success" => true,
+        "message" => "Student profiles retrieved successfully",
+        "data" => [
+            "profiles" => $students,
+            "total_count" => count($students),
+            "user_role" => $user_role,
+            "filters_applied" => [
+                "admin_action" => $user_role === 'admin' ? ['pending', 'approved'] : ['approved'],
+                "deleted_at" => "NULL"
+            ]
+        ],
+        "meta" => [
+            "timestamp" => date('Y-m-d H:i:s'),
+            "api_version" => "1.0",
+            "response_format" => "structured"
+        ]
     ], JSON_PRETTY_PRINT);
 } else {
     echo json_encode([
+        "success" => false,
         "message" => $user_role === 'student' 
             ? "No profile found for this student" 
             : "No student profiles found",
-        "status" => false,
-        "count" => 0,
-        "data" => [],
-        "timestamp" => date('Y-m-d H:i:s')
+        "data" => [
+            "profiles" => [],
+            "total_count" => 0,
+            "user_role" => $user_role,
+            "filters_applied" => [
+                "admin_action" => $user_role === 'admin' ? ['pending', 'approved'] : ['approved'],
+                "deleted_at" => "NULL"
+            ]
+        ],
+        "meta" => [
+            "timestamp" => date('Y-m-d H:i:s'),
+            "api_version" => "1.0",
+            "response_format" => "structured"
+        ]
     ], JSON_PRETTY_PRINT);
 }
 
