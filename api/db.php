@@ -1,19 +1,19 @@
 <?php
 $BASE_DIR = dirname(__DIR__);
-require_once $BASE_DIR . "../vendor/vendor/autoload.php";
+// require_once $BASE_DIR . "../vendor/vendor/autoload.php";
 
 // Database Configuration
-// $dbHost = '127.0.0.1';
-// $dbPort = '3306';
-// $dbName = 'jobsahi_database';
-// $dbUser = 'root';
-// $dbPass = '';
-
-$dbHost = 'localhost'; // Hostinger uses localhost for shared hosting
+$dbHost = '127.0.0.1';
 $dbPort = '3306';
-$dbName = 'u829931622_jobsahi_data';
-$dbUser = 'u829931622_jobsahi_data';
-$dbPass = 'Jobsahi1@';
+$dbName = 'jobsahi_database';
+$dbUser = 'root';
+$dbPass = '';
+
+// $dbHost = 'localhost'; // Hostinger uses localhost for shared hosting
+// $dbPort = '3306';
+// $dbName = 'u829931622_jobsahi_data';
+// $dbUser = 'u829931622_jobsahi_data';
+// $dbPass = 'Jobsahi1@';
 
 $dsn = "mysql:host={$dbHost};port={$dbPort};dbname={$dbName};charset=utf8mb4";
 
