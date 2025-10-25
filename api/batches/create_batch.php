@@ -1,107 +1,103 @@
 <?php
-// create_batch.php - Create new batch (Admin, Institute access) & List batches based on admin_action
+// create_batch.php - Create new batch (Admin, Institute access only)
 require_once '../cors.php';
 
 try {
-    // Authenticate JWT for multiple roles
-    $decoded = authenticateJWT(['admin', 'institute']); // returns array with role info
-    $role = $decoded['role']; // role of the logged-in user
+    // ✅ Authenticate JWT for admin or institute
+    $decoded = authenticateJWT(['admin', 'institute']);
+    $role = strtolower($decoded['role']);
 
-    // -------------------------------
-    // Handle GET request - List batches
-    // -------------------------------
-    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-
-        if ($role === 'admin') {
-            // Admin sees all batches
-            $sql = "SELECT * FROM batches";
-            $stmt = $conn->prepare($sql);
-        } else {
-            // Other roles see only approved batches
-            $sql = "SELECT * FROM batches WHERE admin_action = 'approved'";
-            $stmt = $conn->prepare($sql);
-        }
-
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $batches = $result->fetch_all(MYSQLI_ASSOC);
-
+    // ✅ Only allow POST requests
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         echo json_encode([
-            "status" => true,
-            "role"   => $role,
-            "batches" => $batches
+            "status" => false,
+            "message" => "Invalid request method. Only POST allowed."
         ]);
-        $stmt->close();
-        $conn->close();
         exit();
     }
 
-    // -------------------------------
-    // Handle POST request - Create batch
-    // -------------------------------
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        // Only admin or institute can create batches
-        if (!in_array($role, ['admin', 'institute'])) {
-            echo json_encode([
-                "status" => false,
-                "message" => "Unauthorized. Only admin or institute can create batches."
-            ]);
-            exit();
-        }
+    // ✅ Read JSON body
+    $data = json_decode(file_get_contents("php://input"), true);
 
-        // Get POST data
-        $data = json_decode(file_get_contents("php://input"), true);
+    // ✅ Extract and sanitize fields
+    $course_id       = isset($data['course_id']) ? intval($data['course_id']) : 0;
+    $name            = isset($data['name']) ? trim($data['name']) : '';
+    $batch_time_slot = isset($data['batch_time_slot']) ? trim($data['batch_time_slot']) : '';
+    $start_date      = isset($data['start_date']) ? $data['start_date'] : null;
+    $end_date        = isset($data['end_date']) ? $data['end_date'] : null;
+    $media           = isset($data['media']) ? $data['media'] : null;
+    $instructor_id   = isset($data['instructor_id']) ? intval($data['instructor_id']) : 0;
+    $admin_action    = "approved"; // default status
 
-        $course_id     = isset($data['course_id']) ? (int)$data['course_id'] : 0;
-        $name          = isset($data['name']) ? trim($data['name']) : '';
-        $start_date    = isset($data['start_date']) ? $data['start_date'] : null;
-        $end_date      = isset($data['end_date']) ? $data['end_date'] : null;
-        $instructor_id = isset($data['instructor_id']) ? (int)$data['instructor_id'] : null;
-        $admin_action  = "approved"; // default value
-
-        // Validate course exists
-        $check = $conn->prepare("SELECT id FROM courses WHERE id = ?");
-        $check->bind_param("i", $course_id);
-        $check->execute();
-        $result = $check->get_result();
-        if ($result->num_rows === 0) {
-            echo json_encode([
-                "status" => false,
-                "message" => "Invalid course_id. Course does not exist."
-            ]);
-            exit();
-        }
-        $check->close();
-
-        // Insert batch
-        $stmt = $conn->prepare("INSERT INTO batches (course_id, name, start_date, end_date, instructor_id, admin_action) 
-                                VALUES (?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("isssis", $course_id, $name, $start_date, $end_date, $instructor_id, $admin_action);
-
-        if ($stmt->execute()) {
-            echo json_encode([
-                "status"   => true,
-                "message"  => "Batch created successfully",
-                "batch_id" => $stmt->insert_id
-            ]);
-        } else {
-            echo json_encode([
-                "status"  => false,
-                "message" => "Failed to create batch",
-                "error"   => $stmt->error
-            ]);
-        }
-
-        $stmt->close();
-        $conn->close();
+    // ✅ Basic validation for required fields
+    if ($course_id <= 0 || empty($name) || empty($batch_time_slot) || empty($start_date) || empty($end_date) || $instructor_id <= 0) {
+        echo json_encode([
+            "status" => false,
+            "message" => "All fields including valid instructor_id are required."
+        ]);
         exit();
     }
 
-    // Invalid method
-    echo json_encode([
-        "status" => false,
-        "message" => "Invalid request method."
-    ]);
+    // ✅ Validate course_id exists
+    $check_course = $conn->prepare("SELECT id FROM courses WHERE id = ?");
+    $check_course->bind_param("i", $course_id);
+    $check_course->execute();
+    if ($check_course->get_result()->num_rows === 0) {
+        echo json_encode(["status" => false, "message" => "Invalid course_id. Course not found."]);
+        exit();
+    }
+    $check_course->close();
+
+    // ✅ Validate instructor_id exists
+    $check_instructor = $conn->prepare("SELECT id FROM faculty_users WHERE id = ?");
+    $check_instructor->bind_param("i", $instructor_id);
+    $check_instructor->execute();
+    if ($check_instructor->get_result()->num_rows === 0) {
+        echo json_encode(["status" => false, "message" => "Invalid instructor_id. Faculty not found."]);
+        exit();
+    }
+    $check_instructor->close();
+
+    // ✅ Convert media to JSON if array
+    if (is_array($media)) {
+        $media = json_encode($media, JSON_UNESCAPED_UNICODE);
+    }
+
+    // ✅ Insert new batch
+    $stmt = $conn->prepare("
+        INSERT INTO batches 
+        (course_id, name, batch_time_slot, start_date, end_date, media, instructor_id, admin_action)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ");
+    $stmt->bind_param(
+        "isssssis",
+        $course_id,
+        $name,
+        $batch_time_slot,
+        $start_date,
+        $end_date,
+        $media,
+        $instructor_id,
+        $admin_action
+    );
+
+    // ✅ Execute insert
+    if ($stmt->execute()) {
+        echo json_encode([
+            "status"   => true,
+            "message"  => "Batch created successfully.",
+            "batch_id" => $stmt->insert_id
+        ], JSON_PRETTY_PRINT);
+    } else {
+        echo json_encode([
+            "status"  => false,
+            "message" => "Failed to create batch.",
+            "error"   => $stmt->error
+        ]);
+    }
+
+    $stmt->close();
+    $conn->close();
 
 } catch (Exception $e) {
     echo json_encode([
