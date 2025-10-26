@@ -1,6 +1,5 @@
 <?php
 require_once '../cors.php';
-require_once '../db.php'; // ✅ make sure DB connection is included
 
 // Authenticate and allow admin, recruiter, institute, and student roles
 $decoded = authenticateJWT(['admin', 'student', 'recruiter', 'institute']);
@@ -61,13 +60,13 @@ try {
     // If receiver_role is not provided, try to fetch it from the database
     if (!$receiver_role) {
         $role_query = "
-            SELECT 'student' AS role FROM students WHERE id = ? 
+            SELECT 'student' AS role FROM student_profiles WHERE id = ? 
             UNION ALL 
-            SELECT 'recruiter' AS role FROM recruiters WHERE id = ? 
+            SELECT 'recruiter' AS role FROM recruiter_profiles WHERE id = ? 
             UNION ALL 
-            SELECT 'institute' AS role FROM institutes WHERE id = ? 
+            SELECT 'institute' AS role FROM institute_profiles WHERE id = ? 
             UNION ALL 
-            SELECT 'admin' AS role FROM admins WHERE id = ?
+            SELECT 'admin' AS role FROM users WHERE id = ?
             LIMIT 1
         ";
 
