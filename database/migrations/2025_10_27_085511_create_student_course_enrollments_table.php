@@ -6,15 +6,20 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     public function up(): void {
-       Schema::create('student_course_enrollments', function (Blueprint $table) {
-    $table->id();
-    $table->foreignId('student_id')->constrained('student_profiles')->onDelete('cascade');
-    $table->foreignId('course_id')->constrained('courses')->onDelete('cascade');
-    $table->date('enrollment_date')->nullable();
-    $table->enum('status',['enrolled','completed','dropped'])->default('enrolled');
-    $table->timestamps();
-});
+        Schema::create('student_course_enrollments', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('student_id');
+            $table->unsignedBigInteger('course_id');
+            $table->dateTime('enrollment_date')->nullable();
+            $table->enum('status', ['enrolled', 'completed', 'dropped'])->default('enrolled');
+            $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('modified_at')->useCurrent()->useCurrentOnUpdate();
+            $table->dateTime('deleted_at')->nullable();
+            $table->enum('admin_action', ['pending', 'approved', 'rejected'])->default('approved');
 
+            $table->foreign('student_id')->references('id')->on('student_profiles')->onDelete('cascade');
+            $table->foreign('course_id')->references('id')->on('courses')->onDelete('cascade');
+        });
     }
 
     public function down(): void {

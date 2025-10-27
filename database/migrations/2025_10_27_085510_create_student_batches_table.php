@@ -8,9 +8,13 @@ return new class extends Migration {
     public function up(): void {
         Schema::create('student_batches', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('batch_id')->constrained('batches')->onDelete('cascade');
-            $table->foreignId('student_id')->constrained('student_profiles')->onDelete('cascade');
-            $table->timestamps();
+            $table->unsignedBigInteger('student_id');
+            $table->unsignedBigInteger('batch_id');
+            $table->text('assignment_reason')->nullable();
+            $table->enum('admin_action', ['pending', 'approved', 'rejected'])->default('approved');
+
+            $table->foreign('student_id')->references('id')->on('student_profiles')->onDelete('cascade');
+            $table->foreign('batch_id')->references('id')->on('batches')->onDelete('cascade');
         });
     }
 

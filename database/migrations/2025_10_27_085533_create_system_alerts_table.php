@@ -10,11 +10,9 @@ return new class extends Migration {
             $table->id();
             $table->string('title');
             $table->text('message')->nullable();
-            $table->enum('type', ['info', 'warning', 'error', 'success'])->default('info');
-            $table->boolean('is_active')->default(true);
-            $table->timestamp('scheduled_at')->nullable(); // for future alert scheduling
-            $table->timestamp('expires_at')->nullable();   // alert expiry
-            $table->timestamps();
+            $table->enum('target_role', ['student', 'recruiter', 'institute', 'admin', 'all'])->default('all');
+            $table->dateTime('scheduled_at')->nullable();
+            $table->dateTime('created_at')->useCurrent();
         });
     }
 

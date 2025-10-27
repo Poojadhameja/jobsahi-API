@@ -6,17 +6,14 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     public function up(): void {
-       Schema::create('course_category', function (Blueprint $table) {
-    $table->id();
-    $table->string('name');
-    $table->text('description')->nullable();
-    $table->boolean('status')->default(true);
-    $table->timestamps();
-});
-
+        Schema::create('course_category', function (Blueprint $table) {
+            $table->id();
+            $table->string('category_name');
+            $table->timestamp('created_at')->useCurrent();
+        });
     }
 
     public function down(): void {
-        Schema::dropIfExists('courses');
+        Schema::dropIfExists('course_category');
     }
 };

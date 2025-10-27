@@ -4,29 +4,21 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
-    /**
-     * Run the migrations.
-     */
-    public function up(): void
-    {
-      Schema::create('plans', function (Blueprint $table) {
-    $table->id();
-    $table->string('plan_name');
-    $table->decimal('price',10,2)->default(0);
-    $table->integer('duration_days')->default(30);
-    $table->boolean('is_active')->default(true);
-    $table->timestamps();
-});
-
+return new class extends Migration {
+    public function up(): void {
+        Schema::create('plans', function (Blueprint $table) {
+            $table->id();
+            $table->string('title', 100)->nullable();
+            $table->enum('type', ['employer', 'institute'])->nullable();
+            $table->integer('price')->nullable();
+            $table->integer('duration_days')->nullable();
+            $table->longText('features_json')->nullable();
+            $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('modified_at')->useCurrent()->useCurrentOnUpdate();
+        });
     }
 
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
-    {
+    public function down(): void {
         Schema::dropIfExists('plans');
     }
 };
