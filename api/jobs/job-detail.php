@@ -6,6 +6,34 @@ require_once '../cors.php';
 $decodedToken = authenticateJWT(['student', 'recruiter', 'admin']);
 $user_role = $decodedToken['role']; // role from JWT
 
+// Get student_id if user is student
+$student_profile_id = null;
+if ($user_role === 'student') {
+    $user_id = null;
+    if (isset($decodedToken['id'])) {
+        $user_id = $decodedToken['id'];
+    } elseif (isset($decodedToken['user_id'])) {
+        $user_id = $decodedToken['user_id'];
+    } elseif (isset($decodedToken['student_id'])) {
+        $user_id = $decodedToken['student_id'];
+    }
+    
+    if ($user_id) {
+        // Get student profile ID from user_id
+        $check_student_sql = "SELECT id FROM student_profiles WHERE user_id = ?";
+        $check_student_stmt = mysqli_prepare($conn, $check_student_sql);
+        mysqli_stmt_bind_param($check_student_stmt, "i", $user_id);
+        mysqli_stmt_execute($check_student_stmt);
+        $student_result = mysqli_stmt_get_result($check_student_stmt);
+        
+        if (mysqli_num_rows($student_result) > 0) {
+            $student_profile = mysqli_fetch_assoc($student_result);
+            $student_profile_id = $student_profile['id'];
+        }
+        mysqli_stmt_close($check_student_stmt);
+    }
+}
+
 // ✅ Validate job ID
 $job_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 if ($job_id <= 0) {
@@ -49,8 +77,18 @@ $sql = "SELECT
             (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id AND a.status = 'applied') AS pending_applications,
             (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id AND a.status = 'shortlisted') AS shortlisted_applications,
             (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id AND a.status = 'selected') AS selected_applications,
-            (SELECT COUNT(*) FROM saved_jobs s WHERE s.job_id = j.id) AS times_saved
-        FROM jobs j
+            (SELECT COUNT(*) FROM jobs j2 WHERE j2.save_status = 1 AND j2.id = j.id) AS times_saved";
+
+// Add is_saved field for students
+if ($user_role === 'student' && $student_profile_id) {
+    $sql .= ",
+            CASE 
+                WHEN j.save_status = 1 AND j.saved_by_student_id = ? THEN 1 
+                ELSE 0 
+            END as is_saved";
+}
+
+$sql .= " FROM jobs j
         LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
         WHERE j.id = ? AND $visibilityCondition";
 
@@ -61,7 +99,12 @@ if (!$stmt) {
     exit;
 }
 
-mysqli_stmt_bind_param($stmt, "i", $job_id);
+// Bind parameters - add student_id if needed
+if ($user_role === 'student' && $student_profile_id) {
+    mysqli_stmt_bind_param($stmt, "ii", $student_profile_id, $job_id);
+} else {
+    mysqli_stmt_bind_param($stmt, "i", $job_id);
+}
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 

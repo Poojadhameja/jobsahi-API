@@ -13,6 +13,34 @@ if (!$userRole) {
     exit;
 }
 
+// Get student_id if user is student
+$student_profile_id = null;
+if ($userRole === 'student') {
+    $user_id = null;
+    if (isset($decoded['id'])) {
+        $user_id = $decoded['id'];
+    } elseif (isset($decoded['user_id'])) {
+        $user_id = $decoded['user_id'];
+    } elseif (isset($decoded['student_id'])) {
+        $user_id = $decoded['student_id'];
+    }
+    
+    if ($user_id) {
+        // Get student profile ID from user_id
+        $check_student_sql = "SELECT id FROM student_profiles WHERE user_id = ?";
+        $check_student_stmt = mysqli_prepare($conn, $check_student_sql);
+        mysqli_stmt_bind_param($check_student_stmt, "i", $user_id);
+        mysqli_stmt_execute($check_student_stmt);
+        $student_result = mysqli_stmt_get_result($check_student_stmt);
+        
+        if (mysqli_num_rows($student_result) > 0) {
+            $student_profile = mysqli_fetch_assoc($student_result);
+            $student_profile_id = $student_profile['id'];
+        }
+        mysqli_stmt_close($check_student_stmt);
+    }
+}
+
 // Check request method
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     echo json_encode(["message" => "Only GET requests allowed", "status" => false]);
@@ -76,6 +104,11 @@ if (!empty($_GET['is_remote'])) {
     $types   .= "i";
 }
 
+// Featured jobs filter
+if (isset($_GET['featured']) && $_GET['featured'] == 'true') {
+    $filters[] = "j.is_featured = 1";
+}
+
 // Build query
 $sql = "SELECT 
             j.id,
@@ -93,11 +126,22 @@ $sql = "SELECT
             j.no_of_vacancies,
             j.status,
             j.admin_action,
+            j.is_featured,
             j.created_at,
             (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS views,
             -- Company name only
-            rp.company_name
-        FROM jobs j
+            rp.company_name";
+
+// Add save_status for students
+if ($userRole === 'student' && $student_profile_id) {
+    $sql .= ",
+            CASE 
+                WHEN j.save_status = 1 AND j.saved_by_student_id = ? THEN 1 
+                ELSE 0 
+            END as is_saved";
+}
+
+$sql .= " FROM jobs j
         LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id";
 
 if (!empty($filters)) {
@@ -113,9 +157,18 @@ if (!$stmt) {
     exit;
 }
 
-// Bind filters
-if (!empty($params)) {
-    mysqli_stmt_bind_param($stmt, $types, ...$params);
+// Bind parameters - add student_id if needed
+if ($userRole === 'student' && $student_profile_id) {
+    if (!empty($params)) {
+        mysqli_stmt_bind_param($stmt, "i" . $types, $student_profile_id, ...$params);
+    } else {
+        mysqli_stmt_bind_param($stmt, "i", $student_profile_id);
+    }
+} else {
+    // Bind filters for non-students
+    if (!empty($params)) {
+        mysqli_stmt_bind_param($stmt, $types, ...$params);
+    }
 }
 
 mysqli_stmt_execute($stmt);

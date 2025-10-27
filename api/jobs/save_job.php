@@ -1,0 +1,128 @@
+<?php
+// save_job.php - Save job for student (JWT required)
+require_once '../cors.php';
+
+// ✅ Authenticate JWT (only student can access)
+$decoded = authenticateJWT('student'); 
+
+// Handle different key names from JWT payload safely
+$student_id = null;
+if (isset($decoded['id'])) {
+    $student_id = $decoded['id'];
+} elseif (isset($decoded['user_id'])) {
+    $student_id = $decoded['user_id'];
+} elseif (isset($decoded['student_id'])) {
+    $student_id = $decoded['student_id'];
+}
+
+if (!$student_id) {
+    echo json_encode([
+        "message" => "Invalid token payload: student id missing",
+        "status"  => false
+    ]);
+    exit;
+}
+
+// Get input data - Handle both JSON and form data
+$content_type = isset($_SERVER["CONTENT_TYPE"]) ? trim($_SERVER["CONTENT_TYPE"]) : '';
+$job_id = null;
+
+if (strpos($content_type, "application/json") !== false) {
+    $raw_input = file_get_contents('php://input');
+    $input = json_decode($raw_input, true);
+    
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        echo json_encode(["message" => "Invalid JSON format: " . json_last_error_msg(), "status" => false]);
+        exit;
+    }
+    
+    $job_id = isset($input['job_id']) ? intval($input['job_id']) : null;
+} else {
+    $job_id = isset($_POST['job_id']) ? intval($_POST['job_id']) : null;
+}
+
+// Validation
+if (!$job_id || $job_id <= 0) {
+    echo json_encode([
+        "message" => "Job ID is required and must be a positive integer", 
+        "status" => false,
+        "received_job_id" => $job_id
+    ]);
+    exit;
+}
+
+// ✅ Check if student exists in student_profiles table
+$check_student_sql = "SELECT id FROM student_profiles WHERE user_id = ?";
+$check_student_stmt = mysqli_prepare($conn, $check_student_sql);
+mysqli_stmt_bind_param($check_student_stmt, "i", $student_id);
+mysqli_stmt_execute($check_student_stmt);
+$student_result = mysqli_stmt_get_result($check_student_stmt);
+
+if (mysqli_num_rows($student_result) === 0) {
+    echo json_encode([
+        "message" => "Student profile not found. Please complete your profile.", 
+        "status" => false,
+        "student_id" => $student_id
+    ]);
+    mysqli_stmt_close($check_student_stmt);
+    mysqli_close($conn);
+    exit;
+}
+
+// Get the actual student profile ID
+$student_profile = mysqli_fetch_assoc($student_result);
+$student_profile_id = $student_profile['id'];
+mysqli_stmt_close($check_student_stmt);
+
+// ✅ Check if job exists and is approved
+$check_job_sql = "SELECT id, title, save_status, saved_by_student_id FROM jobs WHERE id = ? AND status = 'open' AND admin_action = 'approved'";
+$check_job_stmt = mysqli_prepare($conn, $check_job_sql);
+mysqli_stmt_bind_param($check_job_stmt, "i", $job_id);
+mysqli_stmt_execute($check_job_stmt);
+$job_result = mysqli_stmt_get_result($check_job_stmt);
+
+if (mysqli_num_rows($job_result) === 0) {
+    echo json_encode(["message" => "Job not found or not available for saving", "status" => false]);
+    mysqli_stmt_close($check_job_stmt);
+    mysqli_close($conn);
+    exit;
+}
+
+$job_data = mysqli_fetch_assoc($job_result);
+mysqli_stmt_close($check_job_stmt);
+
+// ✅ Check if already saved by this student
+if ($job_data['save_status'] == 1 && $job_data['saved_by_student_id'] == $student_profile_id) {
+    echo json_encode([
+        "message" => "Job is already saved by you", 
+        "status" => false,
+        "already_saved" => true
+    ]);
+    mysqli_close($conn);
+    exit;
+}
+
+// ✅ Update job with save status
+$update_sql = "UPDATE jobs SET save_status = 1, saved_by_student_id = ? WHERE id = ?";
+$update_stmt = mysqli_prepare($conn, $update_sql);
+mysqli_stmt_bind_param($update_stmt, "ii", $student_profile_id, $job_id);
+
+if (mysqli_stmt_execute($update_stmt)) {
+    echo json_encode([
+        "message" => "Job saved successfully",
+        "status" => true,
+        "data" => [
+            "job_id" => $job_id,
+            "job_title" => $job_data['title'],
+            "student_id" => $student_profile_id,
+            "save_status" => 1
+        ],
+        "timestamp" => date('Y-m-d H:i:s')
+    ]);
+} else {
+    echo json_encode(["message" => "Failed to save job: " . mysqli_stmt_error($update_stmt), "status" => false]);
+}
+
+mysqli_stmt_close($update_stmt);
+mysqli_close($conn);
+?>

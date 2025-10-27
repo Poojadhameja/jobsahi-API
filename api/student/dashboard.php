@@ -65,8 +65,8 @@ if ($applied_stmt = mysqli_prepare($conn, $applied_sql)) {
     mysqli_stmt_close($applied_stmt);
 }
 
-// 2. Count Saved Jobs
-$saved_sql = "SELECT COUNT(*) as count FROM saved_jobs WHERE student_id = ? AND deleted_at IS NULL";
+// 2. Count Saved Jobs (using jobs table save_status)
+$saved_sql = "SELECT COUNT(*) as count FROM jobs WHERE save_status = 1 AND saved_by_student_id = ?";
 if ($saved_stmt = mysqli_prepare($conn, $saved_sql)) {
     mysqli_stmt_bind_param($saved_stmt, "i", $student_id);
     mysqli_stmt_execute($saved_stmt);
