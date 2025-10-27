@@ -7,13 +7,14 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
-        "laravel/framework": "^12.0",
+        "laravel/framework": "^12.35",
         "laravel/tinker": "^2.10.1",
         "phpmailer/phpmailer": "^6.10",
         "vlucas/phpdotenv": "^5.6"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
+        "kitloong/laravel-migrations-generator": "^7.2",
         "laravel/pail": "^1.2.2",
         "laravel/pint": "^1.24",
         "laravel/sail": "^1.41",
@@ -56,7 +57,10 @@
         "test": [
             "@php artisan config:clear --ansi",
             "@php artisan test"
-        ]
+        ],
+            "migrate:sql": "php database/migration_runner.php --fresh",
+    "migrate:sql:structure": "php database/migration_runner.php --fresh --no-data"
+
     },
     "extra": {
         "laravel": {
