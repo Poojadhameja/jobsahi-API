@@ -97,8 +97,8 @@ try {
     $hashed_password = password_hash($password, PASSWORD_DEFAULT);
 
     // Insert new user with hashed password - using exact column names from your database
-    $sql = "INSERT INTO users (user_name, email, password, phone_number, role, is_verified, status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)";
+   $sql = "INSERT INTO users (user_name, email, password, phone_number, role, is_verified, status, created_at, last_activity) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
 
     if ($stmt = mysqli_prepare($conn, $sql)) {
         // Bind parameters: s=string, i=integer
@@ -117,7 +117,7 @@ try {
         
         switch ($role) {
             case 'student':
-                $profile_sql = "INSERT INTO student_profiles (user_id, created_at, modified_at) VALUES (?, NOW(), NOW())";
+                $profile_sql = "INSERT INTO student_profiles (user_id, created_at, updated_at) VALUES (?, NOW(), NOW())";
                 if ($profile_stmt = mysqli_prepare($conn, $profile_sql)) {
                     mysqli_stmt_bind_param($profile_stmt, "i", $user_id);
                     if (mysqli_stmt_execute($profile_stmt)) {

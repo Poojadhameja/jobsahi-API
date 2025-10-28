@@ -4,8 +4,8 @@ $BASE_DIR = dirname(__DIR__);
 
 // Database Configuration
 $dbHost = '127.0.0.1';
-$dbPort = '3306';
-$dbName = 'jobsahi_database_shared';
+$dbPort = '3307';
+$dbName = 'jobsahi_database';
 $dbUser = 'root';
 $dbPass = '';
 
