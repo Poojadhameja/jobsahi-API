@@ -6,46 +6,44 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     public function up(): void {
-        // ✅ Step 1: Create table without risky FK dependency
         Schema::create('applications', function (Blueprint $table) {
             $table->id();
 
-            // ✅ Safe Foreign Keys
-            $table->foreignId('job_id')
-                ->constrained('jobs')
-                ->cascadeOnDelete();
+            // ✅ Foreign keys (safe ones only)
+            $table->unsignedBigInteger('job_id');
+            $table->unsignedBigInteger('interview_id')->nullable(); // FK added later via separate migration
+            $table->unsignedBigInteger('student_id');
 
-            $table->unsignedBigInteger('interview_id')->nullable(); // add FK later safely
-
-            $table->foreignId('student_id')
-                ->constrained('student_profiles')
-                ->cascadeOnDelete();
-
-            // ✅ Main Columns
-            $table->dateTime('applied_at')->nullable();
-            $table->string('resume_link', 255)->nullable();
-            $table->text('cover_letter')->nullable();
+            // ✅ Fields
+            $table->boolean('job_selected')->default(0);
             $table->enum('status', ['applied', 'shortlisted', 'rejected', 'selected'])->default('applied');
+            $table->dateTime('applied_at');
+            $table->string('resume_link', 255);
+            $table->text('cover_letter');
 
-            // ✅ Admin & Timestamps
+            // ✅ System timestamps
+            $table->dateTime('created_at')->useCurrent();
+            $table->dateTime('modified_at')->useCurrent()->useCurrentOnUpdate();
+            $table->dateTime('deleted_at')->nullable();
             $table->enum('admin_action', ['pending', 'approved', 'rejected'])->default('pending');
-            $table->timestamps();
-        });
 
-        // ✅ Step 2: Add interview FK safely after interviews table exists
-        Schema::table('applications', function (Blueprint $table) {
-            if (Schema::hasTable('interviews')) {
-                $table->foreign('interview_id')
-                      ->references('id')
-                      ->on('interviews')
-                      ->nullOnDelete();
-            }
+            // ✅ Safe Foreign Key Constraints
+            $table->foreign('job_id')
+                ->references('id')
+                ->on('jobs')
+                ->onDelete('cascade');
+
+            $table->foreign('student_id')
+                ->references('id')
+                ->on('student_profiles')
+                ->onDelete('cascade');
         });
     }
 
     public function down(): void {
         Schema::table('applications', function (Blueprint $table) {
-            $table->dropForeign(['interview_id']);
+            $table->dropForeign(['job_id']);
+            $table->dropForeign(['student_id']);
         });
 
         Schema::dropIfExists('applications');
