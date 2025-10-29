@@ -1,8 +1,6 @@
 <?php
 // get_batch.php - Fetch all batches or specific batch with course & instructor info
 require_once '../cors.php';
-require_once '../db.php';
-
 try {
     // ✅ Authenticate JWT for admin or institute
     $decoded = authenticateJWT(['admin', 'institute']);
@@ -21,7 +19,6 @@ try {
             b.batch_time_slot,
             b.start_date,
             b.end_date,
-            b.media,
             b.admin_action,
             c.id AS course_id,
             c.title AS course_title,
