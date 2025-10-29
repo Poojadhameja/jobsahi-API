@@ -65,15 +65,16 @@ try {
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ");
     $stmt->bind_param(
-        "issssiss",
-        $course_id,
-        $name,
-        $batch_time_slot,
-        $start_date,
-        $end_date,
-        $instructor_id,
-        $admin_action
-    );
+    "issssis",
+    $course_id,
+    $name,
+    $batch_time_slot,
+    $start_date,
+    $end_date,
+    $instructor_id,
+    $admin_action
+);
+
 
     // ✅ Execute insert
     if ($stmt->execute()) {
