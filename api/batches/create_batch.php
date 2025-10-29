@@ -59,21 +59,24 @@ try {
     $check_instructor->close();
 
     // ✅ Insert new batch
-    $stmt = $conn->prepare("
-        INSERT INTO batches 
-        (course_id, name, batch_time_slot, start_date, end_date, instructor_id, admin_action)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ");
-    $stmt->bind_param(
-        "issssiss",
-        $course_id,
-        $name,
-        $batch_time_slot,
-        $start_date,
-        $end_date,
-        $instructor_id,
-        $admin_action
-    );
+    // ✅ Insert new batch
+$stmt = $conn->prepare("
+    INSERT INTO batches 
+    (course_id, name, batch_time_slot, start_date, end_date, instructor_id, admin_action)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+");
+
+$stmt->bind_param(
+    "issssis", // ✅ Corrected count
+    $course_id,
+    $name,
+    $batch_time_slot,
+    $start_date,
+    $end_date,
+    $instructor_id,
+    $admin_action
+);
+
 
     // ✅ Execute insert
     if ($stmt->execute()) {
