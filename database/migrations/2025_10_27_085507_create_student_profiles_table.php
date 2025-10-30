@@ -18,8 +18,7 @@ return new class extends Migration {
                 ->onDelete('cascade');
 
             // ✅ Basic Details
-            $table->text('skills')->nullable();
-            $table->text('bio')->nullable(); // new field added
+            $table->text('skills')->nullable();// new field added
             $table->text('education')->nullable();
             $table->string('resume', 255)->nullable();
             $table->text('certificates')->nullable();

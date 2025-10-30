@@ -1,5 +1,4 @@
 <?php
-<<<<<<< HEAD
 $BASE_DIR = dirname(__DIR__);
 // require_once $BASE_DIR . "../vendor/vendor/autoload.php";
 
@@ -15,20 +14,6 @@ $dbPass = '';
 // $dbName = 'u829931622_jobsahi_data';
 // $dbUser = 'u829931622_jobsahi_data';
 // $dbPass = 'Jobsahi1@';
-=======
-// Database Configuration
-$dbHost = '127.0.0.1';
-$dbPort = '3306';
-$dbName = 'jobsahi_database_shared_new';
-$dbUser = 'root';
-$dbPass = '';
-
-// // $dbHost = 'localhost'; // Hostinger uses localhost for shared hosting
-// // $dbPort = '3306';
-// // $dbName = 'u829931622_jobsahi_data';
-// // $dbUser = 'u829931622_jobsahi_data';
-// // $dbPass = 'Jobsahi1@';
->>>>>>> origin/pooja
 
 $dsn = "mysql:host={$dbHost};port={$dbPort};dbname={$dbName};charset=utf8mb4";
 
