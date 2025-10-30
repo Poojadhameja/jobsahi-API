@@ -37,7 +37,7 @@ $end_date        = isset($data['end_date']) ? $data['end_date'] : null;
 $instructor_id   = isset($data['instructor_id']) ? intval($data['instructor_id']) : 0;
 
 // ✅ Force approved mode
-$admin_action = 'approved';
+$admin_action    = "approved"; // default status
 
 // ✅ Validate mandatory fields
 if ($course_id <= 0 || empty($name) || empty($batch_time_slot) || empty($start_date) || empty($end_date) || $instructor_id <= 0) {
