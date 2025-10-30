@@ -1,129 +1,141 @@
 <?php
-// create_job.php - Create new job posting (Admin, Recruiter access)
 require_once '../cors.php';
+require_once '../db.php';
 
-// ✅ Authenticate JWT and allow multiple roles
-$decoded = authenticateJWT(['admin', 'recruiter']); // returns array
-
-// ✅ Get recruiter_id from URL parameter
-$recruiter_id = isset($_GET['recruiter_id']) ? intval($_GET['recruiter_id']) : 0;
-
-// Validate recruiter_id
-if ($recruiter_id <= 0) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Valid recruiter_id is required in URL parameters"
-    ]);
-    exit();
+// ✅ Allow only POST
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    echo json_encode(["message" => "Only POST requests allowed", "status" => false]);
+    exit;
 }
 
-// Get POST data
-$data = json_decode(file_get_contents("php://input"), true);
+// ✅ Authenticate recruiter
+$current_user = authenticateJWT(['recruiter', 'admin']);
+$user_role = strtolower($current_user['role']);
+$user_id = $current_user['user_id'];
 
-// Validate JSON data
-if (json_last_error() !== JSON_ERROR_NONE) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Invalid JSON data"
-    ]);
-    exit();
+if ($user_role !== 'recruiter') {
+    echo json_encode(["message" => "Only recruiters can create jobs", "status" => false]);
+    exit;
 }
 
-$title = isset($data['title']) ? trim($data['title']) : '';
-$description = isset($data['description']) ? trim($data['description']) : '';
-$location = isset($data['location']) ? trim($data['location']) : '';
-$skills_required = isset($data['skills_required']) ? trim($data['skills_required']) : '';
-$salary_min = isset($data['salary_min']) ? floatval($data['salary_min']) : 0;
-$salary_max = isset($data['salary_max']) ? floatval($data['salary_max']) : 0;
-$job_type = isset($data['job_type']) ? trim($data['job_type']) : '';
-$experience_required = isset($data['experience_required']) ? trim($data['experience_required']) : '';
-$application_deadline = isset($data['application_deadline']) ? $data['application_deadline'] : null;
-$is_remote = isset($data['is_remote']) ? intval($data['is_remote']) : 0;
-$no_of_vacancies = isset($data['no_of_vacancies']) ? intval($data['no_of_vacancies']) : 1;
-$status = isset($data['status']) ? trim($data['status']) : 'open';
+// ✅ Get recruiter_id
+$stmt = $conn->prepare("SELECT id FROM recruiter_profiles WHERE user_id = ? AND admin_action = 'approved' LIMIT 1");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$stmt->bind_result($recruiter_id);
+$stmt->fetch();
+$stmt->close();
 
-// Basic validation for required fields
-if (empty($title)) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Job title is required"
-    ]);
-    exit();
+if (!$recruiter_id) {
+    echo json_encode(["message" => "Recruiter profile not found or not approved", "status" => false]);
+    exit;
 }
 
-if (empty($description)) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Job description is required"
-    ]);
-    exit();
+// ✅ Get input data
+$input = json_decode(file_get_contents('php://input'), true);
+if (!$input) {
+    echo json_encode(["message" => "Invalid JSON input", "status" => false]);
+    exit;
 }
 
-// Validate salary range if provided
-if ($salary_min > 0 && $salary_max > 0 && $salary_min > $salary_max) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Minimum salary cannot be greater than maximum salary"
-    ]);
-    exit();
-}
+// Job details
+$title = $input['title'] ?? '';
+$description = $input['description'] ?? '';
+$category_name = $input['category_name'] ?? '';
+$location = $input['location'] ?? '';
+$skills_required = $input['skills_required'] ?? '';
+$salary_min = $input['salary_min'] ?? 0;
+$salary_max = $input['salary_max'] ?? 0;
+$job_type = $input['job_type'] ?? 'full_time';
+$experience_required = $input['experience_required'] ?? '';
+$application_deadline = $input['application_deadline'] ?? null;
+$is_remote = $input['is_remote'] ?? 0;
+$no_of_vacancies = $input['no_of_vacancies'] ?? 1;
+$status = 'open';
+$admin_action = 'pending';
+
+// Recruiter info
+$person_name = $input['person_name'] ?? '';
+$phone = $input['phone'] ?? '';
+$additional_contact = $input['additional_contact'] ?? '';
+
+// ✅ Start Transaction
+$conn->begin_transaction();
 
 try {
-    // ✅ Check if recruiter profile exists (matches foreign key constraint)
-    $check_stmt = $conn->prepare("SELECT id FROM recruiter_profiles WHERE id = ?");
-    $check_stmt->bind_param("i", $recruiter_id);
-    $check_stmt->execute();
-    $result = $check_stmt->get_result();
-    
-    if ($result->num_rows === 0) {
-        echo json_encode([
-            "status" => false,
-            "message" => "Invalid recruiter profile ID"
-        ]);
-        exit();
-    }
-    
-    // Insert job
-$stmt = $conn->prepare("INSERT INTO jobs (
-    recruiter_id, title, description, location, skills_required, salary_min, salary_max, 
-    job_type, experience_required, application_deadline, is_remote, no_of_vacancies, status, created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+    // 1️⃣ Category check or insert
+    $category_id = null;
+    $cat_check = $conn->prepare("SELECT id FROM job_category WHERE LOWER(category_name) = LOWER(?) LIMIT 1");
+    $cat_check->bind_param("s", $category_name);
+    $cat_check->execute();
+    $cat_check->bind_result($category_id);
+    $cat_check->fetch();
+    $cat_check->close();
 
-$stmt->bind_param("issssddsssiss", 
-    $recruiter_id, 
-    $title, 
-    $description, 
-    $location, 
-    $skills_required, 
-    $salary_min, 
-    $salary_max, 
-    $job_type, 
-    $experience_required, 
-    $application_deadline, 
-    $is_remote, 
-    $no_of_vacancies, 
-    $status   // ✅ string type
-);
-
-    
-    if ($stmt->execute()) {
-        echo json_encode([
-            "status" => true,
-            "message" => "Job created successfully",
-            "job_id" => $stmt->insert_id
-        ]);
-    } else {
-        echo json_encode([
-            "status" => false,
-            "message" => "Failed to create job",
-            "error" => $stmt->error
-        ]);
+    if (!$category_id) {
+        $cat_insert = $conn->prepare("INSERT INTO job_category (category_name, created_at) VALUES (?, NOW())");
+        $cat_insert->bind_param("s", $category_name);
+        $cat_insert->execute();
+        $category_id = $cat_insert->insert_id;
+        $cat_insert->close();
     }
-} catch (Exception $e) {
+
+    // 2️⃣ Insert into jobs (without company_info_id first)
+    $job_sql = "INSERT INTO jobs (recruiter_id, category_id, title, description, location, skills_required, salary_min, salary_max, job_type, experience_required, application_deadline, is_remote, no_of_vacancies, status, admin_action)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $job_stmt = $conn->prepare($job_sql);
+    $job_stmt->bind_param(
+        "iissssddsssiiis",
+        $recruiter_id,
+        $category_id,
+        $title,
+        $description,
+        $location,
+        $skills_required,
+        $salary_min,
+        $salary_max,
+        $job_type,
+        $experience_required,
+        $application_deadline,
+        $is_remote,
+        $no_of_vacancies,
+        $status,
+        $admin_action
+    );
+    $job_stmt->execute();
+    $job_id = $job_stmt->insert_id;
+    $job_stmt->close();
+
+    // 3️⃣ Insert company info
+    $company_sql = "INSERT INTO recruiter_company_info (job_id, recruiter_id, person_name, phone, additional_contact, created_at)
+                    VALUES (?, ?, ?, ?, ?, NOW())";
+    $company_stmt = $conn->prepare($company_sql);
+    $company_stmt->bind_param("iisss", $job_id, $recruiter_id, $person_name, $phone, $additional_contact);
+    $company_stmt->execute();
+    $company_info_id = $company_stmt->insert_id;
+    $company_stmt->close();
+
+    // 4️⃣ Update the job record with company_info_id
+    $update_sql = "UPDATE jobs SET company_info_id = ? WHERE id = ?";
+    $update_stmt = $conn->prepare($update_sql);
+    $update_stmt->bind_param("ii", $company_info_id, $job_id);
+    $update_stmt->execute();
+    $update_stmt->close();
+
+    // ✅ Commit transaction
+    $conn->commit();
+
     echo json_encode([
-        "status" => false,
-        "message" => "Error: " . $e->getMessage()
-    ]);
+        "message" => "Job, category, and recruiter contact info created successfully",
+        "status" => true,
+        "job_id" => $job_id,
+        "category_id" => $category_id,
+        "company_info_id" => $company_info_id
+    ], JSON_PRETTY_PRINT);
+
+} catch (Exception $e) {
+    $conn->rollback();
+    echo json_encode(["message" => $e->getMessage(), "status" => false]);
 }
 
 $conn->close();
