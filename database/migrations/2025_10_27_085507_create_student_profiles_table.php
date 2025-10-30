@@ -19,7 +19,7 @@ return new class extends Migration {
 
             // ✅ Basic Details
             $table->text('skills')->nullable();
-            $table->text('bio')->nullable(); // new field added
+            $table->text('bio', 255)->nullable(); // new field added
             $table->text('education')->nullable();
             $table->string('resume', 255)->nullable();
             $table->text('certificates')->nullable();

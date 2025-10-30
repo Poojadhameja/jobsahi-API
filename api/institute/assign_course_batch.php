@@ -3,12 +3,17 @@ require_once '../cors.php';
 $decoded = authenticateJWT(['admin', 'institute']);
 $institute_id = intval($decoded['institute_id'] ?? 0);
 
-
 $input = json_decode(file_get_contents("php://input"), true);
+
 $student_id = $input['student_id'] ?? [];
-$course_id   = intval($input['course_id'] ?? 0);
-$batch_id    = intval($input['batch_id'] ?? 0);
-$reason      = trim($input['reason'] ?? '');
+$course_id  = intval($input['course_id'] ?? 0);
+$batch_id   = intval($input['batch_id'] ?? 0);
+$assignment_reason     = trim($input['assignment_reason'] ?? '');
+
+// ✅ Normalize student_id
+if (!is_array($student_id)) {
+    $student_id = [$student_id];
+}
 
 if (empty($student_id) || !$course_id || !$batch_id) {
     echo json_encode(["status" => false, "message" => "Missing parameters"]);
@@ -30,12 +35,12 @@ try {
     }
 
     $stmt2 = $conn->prepare("
-        INSERT INTO student_batches (student_id, batch_id, admin_action)
-        VALUES (?, ?, 'approved')
+        INSERT INTO student_batches (student_id, batch_id,assignment_reason, admin_action)
+        VALUES (?, ?, ?, 'approved')
         ON DUPLICATE KEY UPDATE batch_id = VALUES(batch_id)
     ");
     foreach ($student_id as $sid) {
-        $stmt2->bind_param("ii", $sid, $batch_id);
+        $stmt2->bind_param("iis", $sid, $batch_id, $assignment_reason);
         $stmt2->execute();
     }
 

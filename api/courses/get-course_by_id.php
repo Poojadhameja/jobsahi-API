@@ -3,7 +3,7 @@
 require_once '../cors.php';
 
 // Authenticate user and get role
-$user = authenticateJWT(['admin','student']); 
+$user = authenticateJWT(['admin','student','institute']); // ✅ Fix: include 'institute' role
 $role = $user['role'];  // ✅ Fix: define $role
 
 // Get course ID from query string
