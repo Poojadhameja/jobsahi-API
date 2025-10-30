@@ -1,0 +1,23 @@
+CREATE TABLE `institute_profiles` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `user_id` int(10) UNSIGNED NOT NULL,
+  `institute_name` varchar(255) DEFAULT NULL,
+  `institute_type` varchar(100) DEFAULT NULL,
+  `website` varchar(255) DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `address` varchar(255) DEFAULT NULL,
+  `city` varchar(100) DEFAULT NULL,
+  `state` varchar(100) DEFAULT NULL,
+  `country` varchar(100) DEFAULT NULL,
+  `postal_code` varchar(20) DEFAULT NULL,
+  `contact_person` varchar(255) DEFAULT NULL,
+  `contact_designation` varchar(100) DEFAULT NULL,
+  `accreditation` varchar(255) DEFAULT NULL,
+  `established_year` int(4) DEFAULT NULL,
+  `location` varchar(255) NOT NULL,
+  `courses_offered` text NOT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `modified_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `deleted_at` datetime DEFAULT NULL,
+  `admin_action` enum('pending','approved','rejected') NOT NULL DEFAULT 'approved'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_nopad_ci;
