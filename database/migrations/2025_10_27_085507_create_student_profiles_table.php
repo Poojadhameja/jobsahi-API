@@ -20,6 +20,7 @@ return new class extends Migration {
             $table->text('certificates')->nullable();
             $table->string('portfolio_link', 255)->nullable();
             $table->string('linkedin_url', 255)->nullable();
+            $table->string('bio', 255)->nullable();
             $table->date('dob')->nullable();
             $table->enum('gender', ['male', 'female', 'other', 'prefer_not_to_say'])->nullable();
 
