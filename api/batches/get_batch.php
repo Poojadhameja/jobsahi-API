@@ -1,6 +1,8 @@
 <?php
 // get_batch.php - Fetch all batches or specific batch with course & instructor info
 require_once '../cors.php';
+require_once '../db.php';
+
 try {
     // ✅ Authenticate JWT for admin or institute
     $decoded = authenticateJWT(['admin', 'institute']);
@@ -58,20 +60,29 @@ try {
     // -------------------------------
     // Response formatting
     // -------------------------------
-    if ($batch_id > 0 && empty($batches)) {
+    if ($batch_id > 0) {
+        // ✅ Return single batch by ID
+        if (!empty($batches)) {
+            echo json_encode([
+                "status" => true,
+                "message" => "Batch fetched successfully.",
+                "batch" => $batches[0]
+            ], JSON_PRETTY_PRINT);
+        } else {
+            echo json_encode([
+                "status" => false,
+                "message" => "Batch not found or not accessible."
+            ], JSON_PRETTY_PRINT);
+        }
+    } else {
+        // ✅ Return all batches
         echo json_encode([
-            "status" => false,
-            "message" => "Batch not found or not accessible."
-        ]);
-        exit();
+            "status"  => true,
+            "role"    => $role,
+            "count"   => count($batches),
+            "batches" => $batches
+        ], JSON_PRETTY_PRINT);
     }
-
-    echo json_encode([
-        "status"  => true,
-        "role"    => $role,
-        "count"   => count($batches),
-        "batches" => $batches
-    ], JSON_PRETTY_PRINT);
 
     $stmt->close();
     $conn->close();
