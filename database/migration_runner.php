@@ -27,14 +27,14 @@ if (file_exists($envPath)) {
 // ✅ DB creds
 $DB_HOST = $_ENV['DB_HOST'] ?? '127.0.0.1';
 $DB_PORT = $_ENV['DB_PORT'] ?? '3306';
-$DB_NAME = $_ENV['DB_DATABASE'] ?? 'jobsahi_database_shared';
+$DB_NAME = $_ENV['DB_DATABASE'] ?? 'database';
 $DB_USER = $_ENV['DB_USERNAME'] ?? 'root';
 $DB_PASS = $_ENV['DB_PASSWORD'] ?? '';
 
 echo "📦 DB: $DB_NAME @ $DB_HOST:$DB_PORT\n";
 
 // ✅ SQL dump
-$SQL_FILE = __DIR__ . '/sql/jobsahi_database_shared_new.sql';
+$SQL_FILE = __DIR__ . '/sql/database.sql';
 if (!file_exists($SQL_FILE)) {
     echo "❌ SQL file not found: $SQL_FILE\n";
     exit(1);
