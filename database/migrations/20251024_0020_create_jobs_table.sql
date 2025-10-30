@@ -1,0 +1,21 @@
+CREATE TABLE `jobs` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `recruiter_id` int(10) UNSIGNED DEFAULT NULL,
+  `company_info_id` int(11) UNSIGNED DEFAULT NULL,
+  `category_id` int(11) UNSIGNED DEFAULT NULL,
+  `title` varchar(255) NOT NULL,
+  `description` text NOT NULL,
+  `location` varchar(255) NOT NULL,
+  `skills_required` text NOT NULL,
+  `salary_min` decimal(8,2) NOT NULL,
+  `salary_max` decimal(8,2) NOT NULL,
+  `job_type` enum('full_time','part_time','internship','contract') NOT NULL DEFAULT 'full_time',
+  `experience_required` varchar(255) NOT NULL,
+  `application_deadline` datetime NOT NULL,
+  `is_remote` tinyint(1) NOT NULL,
+  `no_of_vacancies` int(11) NOT NULL,
+  `status` enum('open','closed','paused') NOT NULL DEFAULT 'open',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  `admin_action` enum('pending','approved','rejected') NOT NULL DEFAULT 'pending'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_nopad_ci;

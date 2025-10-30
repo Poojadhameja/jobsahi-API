@@ -8,13 +8,18 @@ return new class extends Migration {
     public function up(): void {
         Schema::create('student_profiles', function (Blueprint $table) {
             $table->id();
-            
+
             // ✅ Foreign Key
             $table->unsignedBigInteger('user_id');
-            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
-            
+            $table
+                ->foreign('user_id')
+                ->references('id')
+                ->on('users')
+                ->onDelete('cascade');
+
             // ✅ Basic Details
             $table->text('skills')->nullable();
+            $table->text('bio')->nullable(); // new field added
             $table->text('education')->nullable();
             $table->string('resume', 255)->nullable();
             $table->text('certificates')->nullable();
@@ -29,7 +34,7 @@ return new class extends Migration {
             $table->string('trade', 100)->nullable();
             $table->string('location', 255)->nullable();
 
-            // ✅ Extra Info (from phpMyAdmin)
+            // ✅ Extra Info
             $table->text('experience')->nullable();
             $table->string('projects', 255)->nullable();
             $table->string('languages', 255)->nullable();
@@ -39,10 +44,11 @@ return new class extends Migration {
             $table->decimal('latitude', 10, 8)->nullable();
             $table->decimal('longitude', 11, 8)->nullable();
 
-            // ✅ System Fields
+            // ✅ System Columns (same as phpMyAdmin)
             $table->enum('admin_action', ['pending', 'approved', 'rejected'])->default('pending');
-            $table->timestamps();
-            $table->softDeletes();
+            $table->dateTime('created_at')->useCurrent();
+            $table->dateTime('modified_at')->useCurrent()->useCurrentOnUpdate();
+            $table->dateTime('deleted_at')->nullable();
         });
     }
 
