@@ -18,13 +18,13 @@ return new class extends Migration {
                 ->onDelete('cascade');
 
             // ✅ Basic Details
-            $table->text('skills')->nullable();// new field added
+            $table->text('skills')->nullable();
+            $table->text('bio')->nullable(); // new field added
             $table->text('education')->nullable();
             $table->string('resume', 255)->nullable();
             $table->text('certificates')->nullable();
             $table->string('portfolio_link', 255)->nullable();
             $table->string('linkedin_url', 255)->nullable();
-            $table->string('bio', 255)->nullable();
             $table->date('dob')->nullable();
             $table->enum('gender', ['male', 'female', 'other', 'prefer_not_to_say'])->nullable();
 

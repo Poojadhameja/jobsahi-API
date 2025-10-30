@@ -1,14 +1,4 @@
 <?php
-<<<<<<< HEAD
-=======
-/**
- * JobSahi Migration Runner (Scratch Build)
- * Usage:
- *   php database/migration_runner.php status
- *   php database/migration_runner.php up
- */
-require_once __DIR__ . '/../api/db.php'; // ← uses same creds as APIs
->>>>>>> origin/pooja
 
 declare(strict_types=1);
 error_reporting(E_ALL);
@@ -53,7 +43,6 @@ echo "✅ SQL file found: $SQL_FILE\n";
 
 // ✅ connect to MySQL
 try {
-<<<<<<< HEAD
     $pdo = new PDO("mysql:host=$DB_HOST;port=$DB_PORT;charset=utf8mb4", $DB_USER, $DB_PASS, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
     ]);
@@ -80,14 +69,6 @@ try {
 } catch (Throwable $e) {
     echo "❌ ERROR: " . $e->getMessage() . "\n";
     exit(1);
-=======
-  $pdo = new PDO(
-    "mysql:host=$DB_HOST;dbname=$DB_NAME;charset=utf8mb4",
-    $DB_USER, $DB_PASS, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-  );
-} catch (PDOException $e) {
-  die("❌ DB connect failed: ".$e->getMessage()."\n");
->>>>>>> origin/pooja
 }
 
 $pdo->exec("CREATE TABLE IF NOT EXISTS _migrations(
