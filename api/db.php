@@ -1,6 +1,6 @@
 <?php
 $BASE_DIR = dirname(__DIR__);
-// require_once $BASE_DIR . "../vendor/vendor/autoload.php";
+require_once $BASE_DIR . "../vendor/autoload.php";
 
 // Database Configuration
 $dbHost = '127.0.0.1';
@@ -14,9 +14,11 @@ $dbPass = '';
 // $dbName = 'u829931622_jobsahi_data';
 // $dbUser = 'u829931622_jobsahi_data';
 // $dbPass = 'Jobsahi1@';
-
+$conn = mysqli_connect($dbHost, $dbUser, $dbPass, $dbName, $dbPort);
 $dsn = "mysql:host={$dbHost};port={$dbPort};dbname={$dbName};charset=utf8mb4";
-
+if (!$conn) {
+    die("Database connection failed: " . mysqli_connect_error());
+}
 try {
     $pdo = new PDO($dsn, $dbUser, $dbPass, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,

@@ -90,20 +90,19 @@ $sql = "
         start_date = ?, 
         end_date = ?, 
         instructor_id = ?, 
-        admin_action = ?
+        admin_action = 'approved'
     WHERE id = ?
 ";
 
 $stmt = $conn->prepare($sql);
 $stmt->bind_param(
-    "isssssii",
+    "isssssi",
     $course_id,
     $name,
     $batch_time_slot,
     $start_date,
     $end_date,
     $instructor_id,
-    $admin_action,
     $batch_id
 );
 
