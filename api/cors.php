@@ -2,13 +2,8 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-<<<<<<< HEAD
 // $BASE_DIR = dirname(__DIR__);
 // require_once $BASE_DIR . "../vendor/vendor/autoload.php";
-=======
-$BASE_DIR = dirname(__DIR__);
-require_once $BASE_DIR . "/vendor/autoload.php";
->>>>>>> origin/pooja
 
 header('Content-Type: application/json');
 
