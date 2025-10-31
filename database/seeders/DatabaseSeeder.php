@@ -1,0 +1,100 @@
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+
+class DatabaseSeeder extends Seeder
+{
+    public function run(): void
+    {
+        // -------------------------------
+        // 🔹 1. Core & User Tables
+        // -------------------------------
+        $this->call([
+            UsersTableSeeder::class,
+            RecruiterProfilesTableSeeder::class,
+            InstituteProfilesTableSeeder::class,
+            FacultyUsersTableSeeder::class,
+            StudentProfilesTableSeeder::class,
+        ]);
+
+        // -------------------------------
+        // 🔹 2. Course-Related Tables
+        // -------------------------------
+        $this->call([
+            CourseCategoryTableSeeder::class,
+            CoursesTableSeeder::class,
+            BatchesTableSeeder::class,
+            CoursePaymentsTableSeeder::class,
+            CourseFeedbackTableSeeder::class,
+            StudentCourseEnrollmentsTableSeeder::class,
+        ]);
+
+        $this->call([
+            RecruiterCompanyInfoTableSeeder::class,
+        ]);
+        // -------------------------------
+        // 🔹 3. Job-Related Tables
+        // -------------------------------
+        $this->call([
+            JobCategoryTableSeeder::class,
+            JobsTableSeeder::class,
+            JobFlagsTableSeeder::class,
+            JobViewsTableSeeder::class,
+            JobRecommendationsTableSeeder::class,
+            ApplicationsTableSeeder::class,
+            InterviewPanelTableSeeder::class,
+            InterviewsTableSeeder::class,
+        ]);
+
+        // -------------------------------
+        // 🔹 4. Certificates & Skills
+        // -------------------------------
+        $this->call([
+            CertificateTemplatesTableSeeder::class,
+            CertificatesTableSeeder::class,
+            SkillTestsTableSeeder::class,
+            SkillQuestionsTableSeeder::class,
+            SkillAttemptsTableSeeder::class,
+        ]);
+
+        // -------------------------------
+        // 🔹 5. Communication & Notifications
+        // -------------------------------
+        $this->call([
+            MessagesTableSeeder::class,
+            MessageTemplatesTableSeeder::class,
+            NotificationsTemplatesTableSeeder::class,
+            NotificationsTableSeeder::class,
+            OtpRequestsTableSeeder::class,
+            SystemAlertsTableSeeder::class,
+        ]);
+
+        // -------------------------------
+        // 🔹 6. Plans, Payments & Transactions
+        // -------------------------------
+        $this->call([
+            PlansTableSeeder::class,
+            SubscriptionsTableSeeder::class,
+            TransactionsTableSeeder::class,
+        ]);
+
+        // -------------------------------
+        // 🔹 7. Reports, Logs & Referrals
+        // -------------------------------
+        $this->call([
+            ReportsTableSeeder::class,
+            ResumeAccessLogsTableSeeder::class,
+            ReferralsTableSeeder::class,
+            RecommendationsTableSeeder::class,
+            ActivityLogsTableSeeder::class,
+            BlacklistedTokensTableSeeder::class,
+        ]);
+
+        // -------------------------------
+        // 🔹 8. Recruiter & Company Info
+        // -------------------------------
+        
+    }
+}

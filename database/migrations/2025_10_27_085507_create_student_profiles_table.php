@@ -46,7 +46,7 @@ return new class extends Migration {
             // ✅ System Columns (same as phpMyAdmin)
             $table->enum('admin_action', ['pending', 'approved', 'rejected'])->default('pending');
             $table->dateTime('created_at')->useCurrent();
-            $table->dateTime('modified_at')->useCurrent()->useCurrentOnUpdate();
+            $table->dateTime('updated_at')->useCurrent()->useCurrentOnUpdate();
             $table->dateTime('deleted_at')->nullable();
         });
     }
