@@ -10,7 +10,7 @@ return new class extends Migration {
             $table->id();
 
             // ✅ Foreign Keys
-            $table->unsignedBigInteger('job_id');
+            $table->unsignedBigInteger('job_id')->nullable();
             $table->unsignedBigInteger('recruiter_id');
 
             // ✅ Columns
@@ -28,10 +28,10 @@ return new class extends Migration {
                   ->on('recruiter_profiles')
                   ->onDelete('cascade');
 
-            $table->foreign('job_id')
-                  ->references('id')
-                  ->on('jobs')
-                  ->onDelete('cascade');
+            // $table->foreign('job_id')
+            //       ->references('id')
+            //       ->on('jobs')
+            //       ->onDelete('cascade');
         });
     }
 
