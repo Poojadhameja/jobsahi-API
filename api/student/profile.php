@@ -182,7 +182,7 @@ if ($result && mysqli_num_rows($result) > 0) {
             "status" => [
                 "admin_action" => $student['admin_action'],
                 "created_at" => $student['created_at'],
-                "modified_at" => $student['modified_at']
+                "modified_at" => $student['updated_at']
             ]
         ];
 
