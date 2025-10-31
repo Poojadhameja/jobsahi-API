@@ -121,7 +121,7 @@ $insert_sql = "INSERT INTO applications (
     resume_link,
     status,
     applied_at
-) VALUES (?, ?, ?, ?, 'pending', NOW())";
+) VALUES (?, ?, ?, ?, 'applied', NOW())";
 
 $insert_stmt = mysqli_prepare($conn, $insert_sql);
 

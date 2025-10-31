@@ -44,7 +44,7 @@ if ($user_role === 'admin') {
                 sp.cgpa,
                 sp.admin_action,
                 sp.created_at, 
-                sp.modified_at, 
+                sp.updated_at, 
                 sp.deleted_at
             FROM student_profiles sp
             INNER JOIN users u ON sp.user_id = u.id
@@ -81,7 +81,7 @@ if ($user_role === 'admin') {
                 sp.cgpa,
                 sp.admin_action,
                 sp.created_at, 
-                sp.modified_at, 
+                sp.updated_at, 
                 sp.deleted_at
             FROM student_profiles sp
             INNER JOIN users u ON sp.user_id = u.id

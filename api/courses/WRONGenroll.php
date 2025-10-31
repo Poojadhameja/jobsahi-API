@@ -3,7 +3,7 @@
 require_once '../cors.php';
 
 // Authenticate user and get their role
-$user = authenticateJWT(['admin', 'student']); // Returns decoded JWT payload
+$user = authenticateJWT(['admin', 'student','institute']); // Returns decoded JWT payload
 $user_role = $user['role'] ?? 'student';
 
 // -------- ENROLL STUDENT (POST) --------

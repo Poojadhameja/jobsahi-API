@@ -2,7 +2,7 @@
 // login.php - User authentication with JWT
 
 require_once '../cors.php';
-
+require_once '../db.php';
 // Get and decode JSON data
 $json_input = file_get_contents('php://input');
 $data = json_decode($json_input, true);
