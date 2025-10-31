@@ -38,17 +38,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
         $file_name = 'certificate_' . time() . '.' . $ext;
 
-        // ✅ Allowed extensions
-        $allowed_extensions = ['jpg', 'jpeg', 'png', 'csv', 'doc'];
+        $allowed_extensions = ['jpg', 'jpeg', 'png', 'csv', 'doc', 'pdf'];
         if (!in_array($ext, $allowed_extensions)) {
             echo json_encode([
                 "status" => false,
-                "message" => "Invalid file type. Only JPG, JPEG, PNG, CSV, DOC are allowed."
+                "message" => "Invalid file type. Only JPG, JPEG, PNG, CSV, DOC, PDF are allowed."
             ]);
             exit();
         }
 
-        // ✅ Create directory if not exists
         if (!is_dir($upload_dir)) {
             mkdir($upload_dir, 0777, true);
         }
@@ -80,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // ✅ Verify course exists
-        $course_check = $conn->prepare("SELECT title FROM courses WHERE id = ?");
+        $course_check = $conn->prepare("SELECT id, title FROM courses WHERE id = ?");
         $course_check->bind_param("i", $course_id);
         $course_check->execute();
         $course_result = $course_check->get_result();
@@ -100,13 +98,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->bind_param("iisssss", $student_id, $course_id, $file_url, $issue_date, $admin_action, $created_at, $modified_at);
 
         if ($stmt->execute()) {
+            $certificate_id = $stmt->insert_id;
+
+            // ✅ JOIN Query to fetch student + batch + course details for response (UI Preview)
+            $join_query = "
+                SELECT 
+                    c.id AS certificate_id,
+                    c.file_url,
+                    c.issue_date,
+                    c.admin_action,
+                    s.id AS student_id,
+                    u.user_name AS student_name,
+                    u.email AS student_email,
+                    sb.batch_id,
+                    b.name AS batch_name,
+                    co.title AS course_title
+                FROM certificates c
+                JOIN student_profiles s ON s.id = c.student_id
+                JOIN users u ON u.id = s.user_id
+                LEFT JOIN student_batches sb ON sb.student_id = s.id
+                LEFT JOIN batches b ON b.id = sb.batch_id
+                JOIN courses co ON co.id = c.course_id
+                WHERE c.id = ?
+            ";
+
+            $fetch = $conn->prepare($join_query);
+            $fetch->bind_param("i", $certificate_id);
+            $fetch->execute();
+            $details = $fetch->get_result()->fetch_assoc();
+
+            // ✅ Response — same structure but with joined data
             echo json_encode([
                 "status" => true,
                 "message" => "Certificate issued successfully",
-                "certificate_id" => $stmt->insert_id,
-                "course_title" => $course_data['title'],
-                "file_url" => $file_url
-            ]);
+                "certificate_id" => $certificate_id,
+                "course_title" => $details['course_title'],
+                "file_url" => $details['file_url'],
+                "url" => $details['file_url'], // ✅ for frontend
+                "student_name" => $details['student_name'],
+                "student_email" => $details['student_email'],
+                "batch_name" => $details['batch_name'],
+                "issue_date" => $details['issue_date'],
+                "admin_action" => $details['admin_action']
+            ], JSON_PRETTY_PRINT);
+
         } else {
             echo json_encode([
                 "status" => false,
