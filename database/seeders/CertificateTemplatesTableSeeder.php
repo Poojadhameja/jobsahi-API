@@ -31,7 +31,7 @@ class CertificateTemplatesTableSeeder extends Seeder
                 'footer_text' => 'Powered by JobSahi',
                 'background_image_url' => '/uploads/institute_certificate_templates/background_image_url_1761750317.png',
                 'is_active' => 1,
-                'created_at' => '2025-10-29 15:31:29',
+                'created_at' => '2025-10-29 21:01:54',
                 'modified_at' => '2025-10-29 21:01:51',
                 'deleted_at' => NULL,
                 'admin_action' => 'approved',

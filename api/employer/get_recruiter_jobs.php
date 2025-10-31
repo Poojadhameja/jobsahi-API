@@ -53,13 +53,13 @@ try {
         $result_scheduled = $stmt_scheduled->get_result();
         $dashboard_stats['interview_job'] = $result_scheduled->fetch_assoc()['interview_scheduled'] ?? 0;
 
-        // ✅ 4. Interview Completed Count (from applications table where job_selected = true)
+        // ✅ 4. Interview Completed Count (from applications table where job_selected = false)
         $sql_completed = "SELECT COUNT(*) as interview_completed
                           FROM applications a
                           INNER JOIN jobs j ON a.job_id = j.id
                           INNER JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
                           WHERE rp.user_id = ? 
-                          AND a.job_selected = 'true'";
+                          AND a.job_selected = 'false'";
         $stmt_completed = $conn->prepare($sql_completed);
         $stmt_completed->bind_param("i", $user_id);
         $stmt_completed->execute();

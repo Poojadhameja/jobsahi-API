@@ -26,16 +26,21 @@ class DatabaseSeeder extends Seeder
             CourseCategoryTableSeeder::class,
             CoursesTableSeeder::class,
             BatchesTableSeeder::class,
+            StudentBatchesTableSeeder::class,
             CoursePaymentsTableSeeder::class,
             CourseFeedbackTableSeeder::class,
             StudentCourseEnrollmentsTableSeeder::class,
         ]);
 
+        // -------------------------------
+        // 🔹 3. Recruiter & Company Info
+        // -------------------------------
         $this->call([
             RecruiterCompanyInfoTableSeeder::class,
         ]);
+
         // -------------------------------
-        // 🔹 3. Job-Related Tables
+        // 🔹 4. Job-Related Tables
         // -------------------------------
         $this->call([
             JobCategoryTableSeeder::class,
@@ -49,7 +54,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // -------------------------------
-        // 🔹 4. Certificates & Skills
+        // 🔹 5. Certificates & Skill Tests
         // -------------------------------
         $this->call([
             CertificateTemplatesTableSeeder::class,
@@ -60,7 +65,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // -------------------------------
-        // 🔹 5. Communication & Notifications
+        // 🔹 6. Communication & Notifications
         // -------------------------------
         $this->call([
             MessagesTableSeeder::class,
@@ -72,7 +77,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // -------------------------------
-        // 🔹 6. Plans, Payments & Transactions
+        // 🔹 7. Plans, Subscriptions & Transactions
         // -------------------------------
         $this->call([
             PlansTableSeeder::class,
@@ -81,7 +86,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // -------------------------------
-        // 🔹 7. Reports, Logs & Referrals
+        // 🔹 8. Reports, Logs & Referrals
         // -------------------------------
         $this->call([
             ReportsTableSeeder::class,
@@ -91,10 +96,5 @@ class DatabaseSeeder extends Seeder
             ActivityLogsTableSeeder::class,
             BlacklistedTokensTableSeeder::class,
         ]);
-
-        // -------------------------------
-        // 🔹 8. Recruiter & Company Info
-        // -------------------------------
-        
     }
 }

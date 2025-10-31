@@ -24,9 +24,9 @@ try {
     $stmt = $conn->prepare("
         INSERT INTO student_course_enrollments 
         (student_id, course_id, enrollment_date, status, admin_action)
-        VALUES (?, ?, NOW(), 'active', 'approved')
+        VALUES (?, ?, NOW(), 'enrolled', 'approved')
         ON DUPLICATE KEY UPDATE 
-        course_id = VALUES(course_id), status = 'active'
+        course_id = VALUES(course_id), status = 'enrolled'
     ");
 
     foreach ($student_id as $sid) {

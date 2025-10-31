@@ -40,7 +40,7 @@ class CourseCategoryTableSeeder extends Seeder
             3 => 
             array (
                 'id' => 4,
-                'category_name' => 'MBBS',
+                'category_name' => '2',
                 'created_at' => '2025-10-29 15:57:15',
             ),
         ));

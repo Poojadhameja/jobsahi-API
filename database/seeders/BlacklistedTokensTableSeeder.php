@@ -75,6 +75,38 @@ class BlacklistedTokensTableSeeder extends Seeder
                 'blacklisted_at' => '2025-10-30 13:54:50',
                 'expires_at' => NULL,
             ),
+            7 => 
+            array (
+                'id' => 8,
+                'token_hash' => '746e94b63ab368576df3dacf85385412d288e1a2f1cb54a792629fdea13225ca',
+                'user_id' => 3,
+                'blacklisted_at' => '2025-10-31 13:56:16',
+                'expires_at' => NULL,
+            ),
+            8 => 
+            array (
+                'id' => 9,
+                'token_hash' => '79e2f243526999de80e1dedae9f827aef9af1f885f407834f14d9294a0328b59',
+                'user_id' => 2,
+                'blacklisted_at' => '2025-10-31 14:07:24',
+                'expires_at' => NULL,
+            ),
+            9 => 
+            array (
+                'id' => 10,
+                'token_hash' => 'f97f10ca65cfb2b3d8141dc3c399e78befcf7c156453974fb47409b3958b70ed',
+                'user_id' => 3,
+                'blacklisted_at' => '2025-10-31 14:22:54',
+                'expires_at' => NULL,
+            ),
+            10 => 
+            array (
+                'id' => 11,
+                'token_hash' => '556e6f1e61717294a2b0bda115767cac0972a416219e4c266a9a1e3af538b57f',
+                'user_id' => 1,
+                'blacklisted_at' => '2025-10-31 18:20:29',
+                'expires_at' => NULL,
+            ),
         ));
         
         
