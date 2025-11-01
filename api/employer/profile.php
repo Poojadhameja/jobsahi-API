@@ -1,70 +1,116 @@
 <?php
-// get_employer_profiles.php - Get employer/recruiter profiles with admin_action filter
 require_once '../cors.php';
+require_once '../db.php';
 
-// ✅ Authenticate user and get decoded token
-$decoded_token = authenticateJWT(['admin', 'recruiter']);
-$user_role = strtolower($decoded_token['role'] ?? '');
-$user_id = $decoded_token['user_id'] ?? null;
+try {
+    // ✅ Authenticate user
+    $decoded = authenticateJWT(['admin', 'recruiter']);
+    $user_role = strtolower($decoded['role'] ?? '');
+    $user_id = intval($decoded['user_id'] ?? ($decoded['id'] ?? 0));
 
-// ✅ Build SQL query based on role
-if ($user_role === 'admin') {
-    // Admin sees all pending and approved profiles
-    $sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, admin_action, created_at, modified_at 
-            FROM recruiter_profiles 
-            WHERE deleted_at IS NULL
-            AND (admin_action = 'pending' OR admin_action = 'approved')
-            ORDER BY id DESC";
+    if (!$conn) {
+        echo json_encode(["success" => false, "message" => "Database connection failed: " . mysqli_connect_error()]);
+        exit;
+    }
 
-    $stmt = $conn->prepare($sql);
-} 
-elseif ($user_role === 'recruiter' && $user_id) {
-    // Recruiter sees only their own approved profile
-    $sql = "SELECT id, user_id, company_name, company_logo, industry, website, location, admin_action, created_at, modified_at 
-            FROM recruiter_profiles 
-            WHERE deleted_at IS NULL
-            AND admin_action = 'approved'
-            AND user_id = ?
-            ORDER BY id DESC";
+    // ✅ Determine recruiter_id (for admin, can filter by ?recruiter_id=)
+    $recruiter_id = isset($_GET['recruiter_id']) ? intval($_GET['recruiter_id']) : 0;
 
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $user_id);
-} 
-else {
-    http_response_code(403);
-    echo json_encode(["message" => "Unauthorized or invalid user role", "status" => false]);
-    exit;
-}
+    if ($user_role === 'admin' && $recruiter_id > 0) {
+        // Admin can fetch specific recruiter
+        $sql = "SELECT rp.*, u.user_name, u.email, u.phone_number 
+                FROM recruiter_profiles rp
+                INNER JOIN users u ON rp.user_id = u.id
+                WHERE rp.id = ? AND rp.deleted_at IS NULL
+                ORDER BY rp.id DESC";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param('i', $recruiter_id);
+    } elseif ($user_role === 'admin') {
+        // Admin sees all recruiters (pending + approved)
+        $sql = "SELECT rp.*, u.user_name, u.email, u.phone_number 
+                FROM recruiter_profiles rp
+                INNER JOIN users u ON rp.user_id = u.id
+                WHERE rp.deleted_at IS NULL
+                AND (rp.admin_action = 'pending' OR rp.admin_action = 'approved')
+                ORDER BY rp.id DESC";
+        $stmt = $conn->prepare($sql);
+    } else {
+        // Recruiter sees only their own approved profile
+        $sql = "SELECT rp.*, u.user_name, u.email, u.phone_number 
+                FROM recruiter_profiles rp
+                INNER JOIN users u ON rp.user_id = u.id
+                WHERE rp.user_id = ? AND rp.admin_action = 'approved' AND rp.deleted_at IS NULL
+                ORDER BY rp.id DESC LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param('i', $user_id);
+    }
 
-// ✅ Execute query
-$stmt->execute();
-$result = $stmt->get_result();
+    $stmt->execute();
+    $result = $stmt->get_result();
 
-if (!$result) {
-    http_response_code(500);
-    echo json_encode(["message" => "Database query failed", "status" => false]);
-    exit;
-}
+    // ✅ Prepare response data
+    $profiles = [];
+    while ($row = $result->fetch_assoc()) {
+        // ✅ Construct absolute file URL if file exists
+        $base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") .
+                    "://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
+        $company_logo_url = null;
 
-// ✅ Prepare response
-if ($result->num_rows > 0) {
-    $profiles = $result->fetch_all(MYSQLI_ASSOC);
-    http_response_code(200);
+        if (!empty($row['company_logo'])) {
+            $company_logo_url = $base_url . $row['company_logo'];
+        }
+
+        $profiles[] = [
+            "profile_id" => intval($row['id']),
+            "user_id" => intval($row['user_id']),
+            "personal_info" => [
+                "email" => $row['email'],
+                "user_name" => $row['user_name'],
+                "phone_number" => $row['phone_number'],
+                "location" => $row['location']
+            ],
+            "professional_info" => [
+                "company_name" => $row['company_name'] ?? "N/A",
+                "industry" => $row['industry'] ?? "N/A",
+                "website" => $row['website'] ?? null
+            ],
+            "documents" => [
+                "company_logo" => $company_logo_url
+            ],
+            "status" => [
+                "admin_action" => $row['admin_action'] ?? "pending",
+                "created_at" => $row['created_at'] ?? null,
+                "modified_at" => $row['modified_at'] ?? null
+            ]
+        ];
+    }
+
+    // ✅ Final response
     echo json_encode([
-        "profiles" => $profiles,
-        "count" => count($profiles),
-        "status" => true
-    ]);
-} else {
-    http_response_code(200);
-    echo json_encode([
-        "profiles" => [],
-        "count" => 0,
-        "status" => true
-    ]);
-}
+        "success" => true,
+        "message" => count($profiles) > 0 
+            ? "Recruiter profile(s) retrieved successfully" 
+            : "No profiles found",
+        "data" => [
+            "profiles" => $profiles,
+            "total_count" => count($profiles),
+            "user_role" => $user_role,
+            "filters_applied" => [
+                "admin_action" => ($user_role === 'admin') ? ['pending', 'approved'] : ['approved'],
+                "deleted_at" => "NULL"
+            ]
+        ],
+        "meta" => [
+            "timestamp" => date('Y-m-d H:i:s'),
+            "api_version" => "1.0",
+            "response_format" => "structured"
+        ]
+    ], JSON_PRETTY_PRINT);
 
-// ✅ Close connection
-$stmt->close();
-$conn->close();
+    $stmt->close();
+    $conn->close();
+
+} catch (Exception $e) {
+    echo json_encode(["success" => false, "message" => "Error: " . $e->getMessage()]);
+}
 ?>
