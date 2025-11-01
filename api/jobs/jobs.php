@@ -132,11 +132,14 @@ $sql = "SELECT
             -- Company name only
             rp.company_name";
 
-// Add save_status for students
+// Add save_status for students using saved_jobs junction table
 if ($userRole === 'student' && $student_profile_id) {
     $sql .= ",
             CASE 
-                WHEN j.save_status = 1 AND j.saved_by_student_id = ? THEN 1 
+                WHEN EXISTS (
+                    SELECT 1 FROM saved_jobs sj 
+                    WHERE sj.job_id = j.id AND sj.student_id = ?
+                ) THEN 1 
                 ELSE 0 
             END as is_saved";
 }

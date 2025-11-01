@@ -60,7 +60,7 @@ $offset = isset($_GET['offset']) ? intval($_GET['offset']) : 0;
 $limit = max(1, min(100, $limit)); // Limit between 1-100
 $offset = max(0, $offset);
 
-// Get saved jobs with job details
+// Get saved jobs with job details using saved_jobs junction table
 $sql = "SELECT 
             j.id,
             j.title,
@@ -76,19 +76,18 @@ $sql = "SELECT
             j.no_of_vacancies,
             j.status,
             j.created_at,
-            j.save_status,
-            j.saved_by_student_id,
+            sj.created_at as saved_at,
             rp.company_name,
             rp.company_logo,
             rp.industry,
             rp.website
-        FROM jobs j
+        FROM saved_jobs sj
+        INNER JOIN jobs j ON sj.job_id = j.id
         LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
-        WHERE j.save_status = 1 
-        AND j.saved_by_student_id = ?
+        WHERE sj.student_id = ?
         AND j.admin_action = 'approved'
         AND j.status = 'open'
-        ORDER BY j.created_at DESC
+        ORDER BY sj.created_at DESC
         LIMIT ? OFFSET ?";
 
 $stmt = mysqli_prepare($conn, $sql);
@@ -118,7 +117,7 @@ while ($row = mysqli_fetch_assoc($result)) {
         'no_of_vacancies' => intval($row['no_of_vacancies']),
         'status' => $row['status'],
         'created_at' => $row['created_at'],
-        'save_status' => (bool)$row['save_status'],
+        'saved_at' => $row['saved_at'],
         'company' => [
             'company_name' => $row['company_name'],
             'company_logo' => $row['company_logo'],
@@ -131,7 +130,9 @@ while ($row = mysqli_fetch_assoc($result)) {
 mysqli_stmt_close($stmt);
 
 // Get total count for pagination
-$count_sql = "SELECT COUNT(*) as total FROM jobs WHERE save_status = 1 AND saved_by_student_id = ? AND admin_action = 'approved' AND status = 'open'";
+$count_sql = "SELECT COUNT(*) as total FROM saved_jobs sj 
+              INNER JOIN jobs j ON sj.job_id = j.id 
+              WHERE sj.student_id = ? AND j.admin_action = 'approved' AND j.status = 'open'";
 $count_stmt = mysqli_prepare($conn, $count_sql);
 mysqli_stmt_bind_param($count_stmt, "i", $student_id);
 mysqli_stmt_execute($count_stmt);
