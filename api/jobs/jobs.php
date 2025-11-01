@@ -1,68 +1,73 @@
 <?php
-// jobs.php - Job Listings API (Enhanced with Category & Company Info)
+// jobs.php - Job Listings API (Role-based access with admin_action filter)
 require_once '../cors.php';
 
 // ✅ Authenticate all roles
-$current_user = authenticateJWT(['student', 'admin', 'recruiter', 'institute']);
-$user_role = strtolower($current_user['role']);
-$user_id = $current_user['user_id']; // ✅ user_id from token
+$decoded = authenticateJWT(['student', 'admin', 'recruiter', 'institute']);  // decoded JWT payload
 
-if (!$user_role) {
+// Ensure we got the role correctly
+$userRole = isset($decoded['role']) ? $decoded['role'] : null;
+
+if (!$userRole) {
     echo json_encode(["message" => "Unauthorized: Role not found in token", "status" => false]);
     exit;
 }
 
-// ✅ Allow only GET
+// Get student_id if user is student
+$student_profile_id = null;
+if ($userRole === 'student') {
+    $user_id = null;
+    if (isset($decoded['id'])) {
+        $user_id = $decoded['id'];
+    } elseif (isset($decoded['user_id'])) {
+        $user_id = $decoded['user_id'];
+    } elseif (isset($decoded['student_id'])) {
+        $user_id = $decoded['student_id'];
+    }
+    
+    if ($user_id) {
+        // Get student profile ID from user_id
+        $check_student_sql = "SELECT id FROM student_profiles WHERE user_id = ?";
+        $check_student_stmt = mysqli_prepare($conn, $check_student_sql);
+        mysqli_stmt_bind_param($check_student_stmt, "i", $user_id);
+        mysqli_stmt_execute($check_student_stmt);
+        $student_result = mysqli_stmt_get_result($check_student_stmt);
+        
+        if (mysqli_num_rows($student_result) > 0) {
+            $student_profile = mysqli_fetch_assoc($student_result);
+            $student_profile_id = $student_profile['id'];
+        }
+        mysqli_stmt_close($check_student_stmt);
+    }
+}
+
+// Check request method
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     echo json_encode(["message" => "Only GET requests allowed", "status" => false]);
     exit;
 }
 
-include "../db.php";
 
 if (!$conn) {
     echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
     exit;
 }
 
-// --- Initialize filters ---
+// Collect filters from query params
 $filters = [];
 $params = [];
 $types  = "";
 
 // ✅ Role-based filter for admin_action
-if ($user_role === 'admin') {
-    // Admin sees all pending and approved
+if ($userRole === 'admin') {
+    // Admin sees both pending + approved
     $filters[] = "(j.admin_action = 'pending' OR j.admin_action = 'approved')";
-} elseif ($user_role === 'recruiter') {
-    // ✅ Recruiter sees only their jobs (pending + approved)
-    $stmt = $conn->prepare("SELECT id FROM recruiter_profiles WHERE user_id = ? AND admin_action = 'approved' AND deleted_at IS NULL LIMIT 1");
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $stmt->bind_result($recruiter_id);
-    $stmt->fetch();
-    $stmt->close();
-
-    if (!$recruiter_id) {
-        echo json_encode([
-            "message" => "Recruiter profile not approved or not found",
-            "status" => false,
-            "count" => 0,
-            "data" => []
-        ]);
-        exit;
-    }
-
-    $filters[] = "j.recruiter_id = ?";
-    $filters[] = "(j.admin_action = 'approved' OR j.admin_action = 'pending')";
-    $params[] = $recruiter_id;
-    $types .= "i";
 } else {
-    // Student or Institute → only approved jobs
+    // Other roles only see approved jobs
     $filters[] = "j.admin_action = 'approved'";
 }
 
-// --- Additional filters (optional) ---
+// Keyword search (title/description)
 if (!empty($_GET['keyword'])) {
     $filters[] = "(j.title LIKE ? OR j.description LIKE ?)";
     $kw = "%" . $_GET['keyword'] . "%";
@@ -71,40 +76,43 @@ if (!empty($_GET['keyword'])) {
     $types   .= "ss";
 }
 
+// Location filter
 if (!empty($_GET['location'])) {
     $filters[] = "j.location = ?";
     $params[] = $_GET['location'];
     $types   .= "s";
 }
 
+// Job type filter
 if (!empty($_GET['job_type'])) {
     $filters[] = "j.job_type = ?";
     $params[] = $_GET['job_type'];
     $types   .= "s";
 }
 
+// Status filter
 if (!empty($_GET['status'])) {
     $filters[] = "j.status = ?";
     $params[] = $_GET['status'];
     $types   .= "s";
 }
 
+// Remote filter
 if (!empty($_GET['is_remote'])) {
     $filters[] = "j.is_remote = ?";
     $params[] = $_GET['is_remote'];
     $types   .= "i";
 }
 
-// --- Build main SQL ---
+// Featured jobs filter
+if (isset($_GET['featured']) && $_GET['featured'] == 'true') {
+    $filters[] = "j.is_featured = 1";
+}
+
+// Build query
 $sql = "SELECT 
             j.id,
             j.recruiter_id,
-            j.category_id,
-            c.category_name,
-            j.company_info_id,
-            ci.person_name,
-            ci.phone,
-            ci.additional_contact,
             j.title,
             j.description,
             j.location,
@@ -118,72 +126,71 @@ $sql = "SELECT
             j.no_of_vacancies,
             j.status,
             j.admin_action,
+            j.is_featured,
             j.created_at,
-            (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS views
-        FROM jobs j
-        LEFT JOIN job_category c ON j.category_id = c.id
-        LEFT JOIN recruiter_company_info ci ON j.company_info_id = ci.id";
+            (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS views,
+            -- Company name only
+            rp.company_name";
 
-// --- Apply filters ---
+// Add save_status for students using saved_jobs junction table
+if ($userRole === 'student' && $student_profile_id) {
+    $sql .= ",
+            CASE 
+                WHEN EXISTS (
+                    SELECT 1 FROM saved_jobs sj 
+                    WHERE sj.job_id = j.id AND sj.student_id = ?
+                ) THEN 1 
+                ELSE 0 
+            END as is_saved";
+}
+
+$sql .= " FROM jobs j
+        LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id";
+
 if (!empty($filters)) {
     $sql .= " WHERE " . implode(" AND ", $filters);
 }
 
 $sql .= " ORDER BY j.created_at DESC";
 
-// --- Prepare & execute ---
-$stmt = $conn->prepare($sql);
+// Prepare statement
+$stmt = mysqli_prepare($conn, $sql);
 if (!$stmt) {
-    echo json_encode(["message" => "Query preparation error: " . $conn->error, "status" => false]);
+    echo json_encode(["message" => "Query error: " . mysqli_error($conn), "status" => false]);
     exit;
 }
 
-if (!empty($params)) {
-    $stmt->bind_param($types, ...$params);
+// Bind parameters - add student_id if needed
+if ($userRole === 'student' && $student_profile_id) {
+    if (!empty($params)) {
+        mysqli_stmt_bind_param($stmt, "i" . $types, $student_profile_id, ...$params);
+    } else {
+        mysqli_stmt_bind_param($stmt, "i", $student_profile_id);
+    }
+} else {
+    // Bind filters for non-students
+    if (!empty($params)) {
+        mysqli_stmt_bind_param($stmt, $types, ...$params);
+    }
 }
 
-$stmt->execute();
-$result = $stmt->get_result();
+mysqli_stmt_execute($stmt);
+$result = mysqli_stmt_get_result($stmt);
 
 $jobs = [];
-while ($row = $result->fetch_assoc()) {
-    $jobs[] = [
-        "id" => $row['id'],
-        "title" => $row['title'],
-        "description" => $row['description'],
-        "category_id" => $row['category_id'],
-        "category_name" => $row['category_name'],
-        "recruiter_id" => $row['recruiter_id'],
-        "company_info_id" => $row['company_info_id'],
-        "person_name" => $row['person_name'],
-        "phone" => $row['phone'],
-        "additional_contact" => $row['additional_contact'],
-        "location" => $row['location'],
-        "skills_required" => $row['skills_required'],
-        "salary_min" => $row['salary_min'],
-        "salary_max" => $row['salary_max'],
-        "job_type" => $row['job_type'],
-        "experience_required" => $row['experience_required'],
-        "application_deadline" => $row['application_deadline'],
-        "is_remote" => $row['is_remote'],
-        "no_of_vacancies" => $row['no_of_vacancies'],
-        "status" => $row['status'],
-        "admin_action" => $row['admin_action'],
-        "views" => intval($row['views']),
-        "created_at" => $row['created_at']
-    ];
+while ($row = mysqli_fetch_assoc($result)) {
+    $jobs[] = $row;
 }
 
-$stmt->close();
-$conn->close();
+mysqli_stmt_close($stmt);
+mysqli_close($conn);
 
-// --- Response ---
+// Return JSON
 echo json_encode([
     "message" => "Jobs fetched successfully",
     "status" => true,
     "count" => count($jobs),
     "data" => $jobs,
-    "user_role" => $user_role,
     "timestamp" => date('Y-m-d H:i:s')
-], JSON_PRETTY_PRINT);
+]);
 ?>

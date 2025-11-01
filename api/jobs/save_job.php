@@ -75,7 +75,7 @@ $student_profile_id = $student_profile['id'];
 mysqli_stmt_close($check_student_stmt);
 
 // ✅ Check if job exists and is approved
-$check_job_sql = "SELECT id, title, save_status, saved_by_student_id FROM jobs WHERE id = ? AND status = 'open' AND admin_action = 'approved'";
+$check_job_sql = "SELECT id, title FROM jobs WHERE id = ? AND status = 'open' AND admin_action = 'approved'";
 $check_job_stmt = mysqli_prepare($conn, $check_job_sql);
 mysqli_stmt_bind_param($check_job_stmt, "i", $job_id);
 mysqli_stmt_execute($check_job_stmt);
@@ -92,22 +92,30 @@ $job_data = mysqli_fetch_assoc($job_result);
 mysqli_stmt_close($check_job_stmt);
 
 // ✅ Check if already saved by this student
-if ($job_data['save_status'] == 1 && $job_data['saved_by_student_id'] == $student_profile_id) {
+$check_saved_sql = "SELECT id FROM saved_jobs WHERE student_id = ? AND job_id = ?";
+$check_saved_stmt = mysqli_prepare($conn, $check_saved_sql);
+mysqli_stmt_bind_param($check_saved_stmt, "ii", $student_profile_id, $job_id);
+mysqli_stmt_execute($check_saved_stmt);
+$saved_result = mysqli_stmt_get_result($check_saved_stmt);
+
+if (mysqli_num_rows($saved_result) > 0) {
     echo json_encode([
         "message" => "Job is already saved by you", 
         "status" => false,
         "already_saved" => true
     ]);
+    mysqli_stmt_close($check_saved_stmt);
     mysqli_close($conn);
     exit;
 }
+mysqli_stmt_close($check_saved_stmt);
 
-// ✅ Update job with save status
-$update_sql = "UPDATE jobs SET save_status = 1, saved_by_student_id = ? WHERE id = ?";
-$update_stmt = mysqli_prepare($conn, $update_sql);
-mysqli_stmt_bind_param($update_stmt, "ii", $student_profile_id, $job_id);
+// ✅ Insert into saved_jobs table
+$insert_sql = "INSERT INTO saved_jobs (student_id, job_id, created_at) VALUES (?, ?, NOW())";
+$insert_stmt = mysqli_prepare($conn, $insert_sql);
+mysqli_stmt_bind_param($insert_stmt, "ii", $student_profile_id, $job_id);
 
-if (mysqli_stmt_execute($update_stmt)) {
+if (mysqli_stmt_execute($insert_stmt)) {
     echo json_encode([
         "message" => "Job saved successfully",
         "status" => true,
@@ -115,14 +123,14 @@ if (mysqli_stmt_execute($update_stmt)) {
             "job_id" => $job_id,
             "job_title" => $job_data['title'],
             "student_id" => $student_profile_id,
-            "save_status" => 1
+            "saved_at" => date('Y-m-d H:i:s')
         ],
         "timestamp" => date('Y-m-d H:i:s')
     ]);
 } else {
-    echo json_encode(["message" => "Failed to save job: " . mysqli_stmt_error($update_stmt), "status" => false]);
+    echo json_encode(["message" => "Failed to save job: " . mysqli_stmt_error($insert_stmt), "status" => false]);
 }
 
-mysqli_stmt_close($update_stmt);
+mysqli_stmt_close($insert_stmt);
 mysqli_close($conn);
 ?>

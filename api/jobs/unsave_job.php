@@ -74,10 +74,12 @@ $student_profile = mysqli_fetch_assoc($student_result);
 $student_profile_id = $student_profile['id'];
 mysqli_stmt_close($check_student_stmt);
 
-// ✅ Check if job is saved by this student
-$check_sql = "SELECT id, title, save_status, saved_by_student_id FROM jobs WHERE id = ? AND saved_by_student_id = ? AND save_status = 1";
+// ✅ Check if job is saved by this student and get job title
+$check_sql = "SELECT sj.id, j.title FROM saved_jobs sj 
+              INNER JOIN jobs j ON sj.job_id = j.id 
+              WHERE sj.student_id = ? AND sj.job_id = ?";
 $check_stmt = mysqli_prepare($conn, $check_sql);
-mysqli_stmt_bind_param($check_stmt, "ii", $job_id, $student_profile_id);
+mysqli_stmt_bind_param($check_stmt, "ii", $student_profile_id, $job_id);
 mysqli_stmt_execute($check_stmt);
 $result = mysqli_stmt_get_result($check_stmt);
 
@@ -94,27 +96,26 @@ if (mysqli_num_rows($result) === 0) {
 $job_data = mysqli_fetch_assoc($result);
 mysqli_stmt_close($check_stmt);
 
-// ✅ Update job to unsave
-$update_sql = "UPDATE jobs SET save_status = 0, saved_by_student_id = NULL WHERE id = ? AND saved_by_student_id = ?";
-$update_stmt = mysqli_prepare($conn, $update_sql);
-mysqli_stmt_bind_param($update_stmt, "ii", $job_id, $student_profile_id);
+// ✅ Delete from saved_jobs table
+$delete_sql = "DELETE FROM saved_jobs WHERE student_id = ? AND job_id = ?";
+$delete_stmt = mysqli_prepare($conn, $delete_sql);
+mysqli_stmt_bind_param($delete_stmt, "ii", $student_profile_id, $job_id);
 
-if (mysqli_stmt_execute($update_stmt)) {
+if (mysqli_stmt_execute($delete_stmt)) {
     echo json_encode([
         "message" => "Job removed from saved list successfully",
         "status" => true,
         "data" => [
             "job_id" => $job_id,
             "job_title" => $job_data['title'],
-            "student_id" => $student_profile_id,
-            "save_status" => 0
+            "student_id" => $student_profile_id
         ],
         "timestamp" => date('Y-m-d H:i:s')
     ]);
 } else {
-    echo json_encode(["message" => "Failed to remove job: " . mysqli_stmt_error($update_stmt), "status" => false]);
+    echo json_encode(["message" => "Failed to remove job: " . mysqli_stmt_error($delete_stmt), "status" => false]);
 }
 
-mysqli_stmt_close($update_stmt);
+mysqli_stmt_close($delete_stmt);
 mysqli_close($conn);
 ?>
