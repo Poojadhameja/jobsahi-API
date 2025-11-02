@@ -7,22 +7,29 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void {
         Schema::create('institute_profiles', function (Blueprint $table) {
-            $table->unsignedBigInteger('id', true); // ✅ Unsigned ID
-            $table->unsignedBigInteger('user_id')->nullable(); // ✅ Match type with users.id
-            $table->string('institute_name');
-            $table->string('registration_no')->nullable();
-            $table->string('institute_type')->nullable();
-            $table->string('contact_email')->nullable();
-            $table->string('contact_phone')->nullable();
-            $table->text('address')->nullable();
-            $table->string('city')->nullable();
-            $table->string('state')->nullable();
-            $table->timestamps();
+            $table->id();
+            $table->unsignedBigInteger('user_id');
+            $table->string('institute_name', 255)->nullable();
+            $table->string('institute_type', 100)->nullable();
+            $table->string('website', 255)->nullable();
+            $table->text('description')->nullable();
+            $table->string('address', 255)->nullable();
+            $table->string('city', 100)->nullable();
+            $table->string('state', 100)->nullable();
+            $table->string('country', 100)->nullable();
+            $table->string('postal_code', 20)->nullable();
+            $table->string('contact_person', 255)->nullable();
+            $table->string('contact_designation', 100)->nullable();
+            $table->string('accreditation', 255)->nullable();
+            $table->integer('established_year')->nullable();
+            $table->string('location', 255)->nullable();
+            $table->text('courses_offered')->nullable();
+            $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('modified_at')->useCurrent()->useCurrentOnUpdate();
+            $table->timestamp('deleted_at')->nullable();
+            $table->enum('admin_action', ['pending', 'approved', 'rejected'])->default('approved');
 
-            // ✅ Add FK after table creation (safe method)
-            $table->foreign('user_id')
-                ->references('id')->on('users')
-                ->onDelete('cascade');
+            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
         });
     }
 

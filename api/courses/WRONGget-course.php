@@ -1,11 +1,9 @@
 <?php
 include '../CORS.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-require_once '../db.php'; // database connection
+
 
 // Authenticate user and get role
-$user = authenticateJWT(['admin','student']); // Returns user info with 'role'
+$user = authenticateJWT(['admin','student','institute']); // Returns user info with 'role'
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (!isset($_GET['id']) || empty($_GET['id'])) {

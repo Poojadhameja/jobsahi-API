@@ -111,22 +111,48 @@ if (mysqli_num_rows($saved_result) > 0) {
 mysqli_stmt_close($check_saved_stmt);
 
 // ✅ Insert into saved_jobs table
-$insert_sql = "INSERT INTO saved_jobs (student_id, job_id, created_at) VALUES (?, ?, NOW())";
+$insert_sql = "INSERT INTO saved_jobs (student_id, job_id, saved_at, modified_at) VALUES (?, ?, NOW(), NOW())";
 $insert_stmt = mysqli_prepare($conn, $insert_sql);
 mysqli_stmt_bind_param($insert_stmt, "ii", $student_profile_id, $job_id);
 
 if (mysqli_stmt_execute($insert_stmt)) {
-    echo json_encode([
-        "message" => "Job saved successfully",
-        "status" => true,
-        "data" => [
-            "job_id" => $job_id,
-            "job_title" => $job_data['title'],
-            "student_id" => $student_profile_id,
-            "saved_at" => date('Y-m-d H:i:s')
-        ],
-        "timestamp" => date('Y-m-d H:i:s')
-    ]);
+    $saved_job_id = mysqli_insert_id($conn);
+    
+    // Fetch saved job details with job info
+    $get_saved_sql = "SELECT sj.id, sj.student_id, sj.job_id, sj.saved_at,
+                             j.title, j.location, j.job_type, j.salary_min, j.salary_max
+                      FROM saved_jobs sj
+                      JOIN jobs j ON sj.job_id = j.id
+                      WHERE sj.id = ?";
+    $get_saved_stmt = mysqli_prepare($conn, $get_saved_sql);
+    
+    if ($get_saved_stmt) {
+        mysqli_stmt_bind_param($get_saved_stmt, "i", $saved_job_id);
+        mysqli_stmt_execute($get_saved_stmt);
+        $saved_job_result = mysqli_stmt_get_result($get_saved_stmt);
+        $saved_job_data = mysqli_fetch_assoc($saved_job_result);
+
+        echo json_encode([
+            "message" => "Job saved successfully",
+            "status" => true,
+            "data" => [
+                "saved_job_id" => intval($saved_job_data['id']),
+                "job_id" => intval($saved_job_data['job_id']),
+                "job_title" => $saved_job_data['title'],
+                "student_id" => intval($saved_job_data['student_id']),
+                "saved_at" => $saved_job_data['saved_at']
+            ],
+            "timestamp" => date('Y-m-d H:i:s')
+        ]);
+        mysqli_stmt_close($get_saved_stmt);
+    } else {
+        echo json_encode([
+            "message" => "Job saved successfully but couldn't fetch details",
+            "status" => true,
+            "saved_job_id" => $saved_job_id,
+            "timestamp" => date('Y-m-d H:i:s')
+        ]);
+    }
 } else {
     echo json_encode(["message" => "Failed to save job: " . mysqli_stmt_error($insert_stmt), "status" => false]);
 }

@@ -44,7 +44,7 @@ if ($user_role === 'admin') {
                 sp.cgpa,
                 sp.admin_action,
                 sp.created_at, 
-                sp.modified_at, 
+                sp.updated_at, 
                 sp.deleted_at
             FROM student_profiles sp
             INNER JOIN users u ON sp.user_id = u.id
@@ -81,7 +81,7 @@ if ($user_role === 'admin') {
                 sp.cgpa,
                 sp.admin_action,
                 sp.created_at, 
-                sp.modified_at, 
+                sp.updated_at, 
                 sp.deleted_at
             FROM student_profiles sp
             INNER JOIN users u ON sp.user_id = u.id
@@ -182,7 +182,7 @@ if ($result && mysqli_num_rows($result) > 0) {
             "status" => [
                 "admin_action" => $student['admin_action'],
                 "created_at" => $student['created_at'],
-                "modified_at" => $student['modified_at']
+                "modified_at" => $student['updated_at']
             ]
         ];
 

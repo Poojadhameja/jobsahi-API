@@ -8,7 +8,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'PUT' && $_SERVER['REQUEST_METHOD'] !== 'POST
 }
 
 // Debug: Check if Authorization header exists
-$headers = getallheaders();if (!isset($headers['Authorization']) && !isset($headers['authorization'])) {
+$headers = getallheaders();
+if (!isset($headers['Authorization']) && !isset($headers['authorization'])) {
     http_response_code(401);
     echo json_encode(array(
         "message" => "Authorization header missing", 
@@ -68,6 +69,7 @@ error_log("Current user role: " . $current_user['role']);
 error_log("Current user ID: " . $current_user['user_id']);
 error_log("Target user ID: " . $id);
 
+include "../db.php";
 
 // Validate input data
 if (empty($user_name) || empty($email) || empty($role) || empty($phone_number)) {
@@ -88,7 +90,7 @@ if ($id <= 0) {
     exit;
 }
 
-// Check if user exists - FIXED: Added missing placeholder
+// Check if user exists
 $check_sql = "SELECT id FROM users WHERE id = ?";
 if ($check_stmt = mysqli_prepare($conn, $check_sql)) {
     mysqli_stmt_bind_param($check_stmt, "i", $id);
@@ -122,7 +124,7 @@ if ($email_check_stmt = mysqli_prepare($conn, $email_check_sql)) {
     mysqli_stmt_close($email_check_stmt);
 }
 
-// Update query based on password
+// Update query based on password - NOW INCLUDING updated_at AND last_activity
 if (!empty($password)) {
     if (strlen($password) < 6) {
         http_response_code(400);
@@ -131,13 +133,13 @@ if (!empty($password)) {
     }
     
     $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-    $sql = "UPDATE users SET user_name = ?, email = ?, password = ?, role = ?, phone_number = ?, is_verified = ? WHERE id = ?";
+    $sql = "UPDATE users SET user_name = ?, email = ?, password = ?, role = ?, phone_number = ?, is_verified = ?, updated_at = NOW(), last_activity = NOW() WHERE id = ?";
     
     if ($stmt = mysqli_prepare($conn, $sql)) {
         mysqli_stmt_bind_param($stmt, "sssssii", $user_name, $email, $hashed_password, $role, $phone_number, $is_verified, $id);
     }
 } else {
-    $sql = "UPDATE users SET user_name = ?, email = ?, role = ?, phone_number = ?, is_verified = ? WHERE id = ?";
+    $sql = "UPDATE users SET user_name = ?, email = ?, role = ?, phone_number = ?, is_verified = ?, updated_at = NOW(), last_activity = NOW() WHERE id = ?";
     
     if ($stmt = mysqli_prepare($conn, $sql)) {
         mysqli_stmt_bind_param($stmt, "ssssii", $user_name, $email, $role, $phone_number, $is_verified, $id);
@@ -152,7 +154,9 @@ if (isset($stmt)) {
             http_response_code(200);
             echo json_encode(array(
                 "message" => "User updated successfully", 
-                "status" => true
+                "status" => true,
+                "updated_at" => date('Y-m-d H:i:s'),
+                "last_activity" => date('Y-m-d H:i:s')
             ));
         } else {
             http_response_code(200);
@@ -160,13 +164,21 @@ if (isset($stmt)) {
         }
     } else {
         http_response_code(500);
-        echo json_encode(array("message" => "Failed to update user", "status" => false));
+        echo json_encode(array(
+            "message" => "Failed to update user", 
+            "status" => false,
+            "error" => mysqli_error($conn)
+        ));
     }
     
     mysqli_stmt_close($stmt);
 } else {
     http_response_code(500);
-    echo json_encode(array("message" => "Failed to prepare update statement", "status" => false));
+    echo json_encode(array(
+        "message" => "Failed to prepare update statement", 
+        "status" => false,
+        "error" => mysqli_error($conn)
+    ));
 }
 
 mysqli_close($conn);

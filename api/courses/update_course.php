@@ -1,8 +1,9 @@
 <?php
 // update_course.php - Update existing course (Admin or Institute)
 require_once '../cors.php';
+require_once '../db.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATCH') {
+if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATCH' || $_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         // ✅ Authenticate JWT (Admin + Institute)
         $decoded = authenticateJWT(['admin', 'institute']); 
@@ -13,19 +14,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATC
         // ✅ Validate Course ID
         $course_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
         if ($course_id <= 0) {
-            echo json_encode([
-                "status" => false,
-                "message" => "Invalid or missing course ID"
-            ]);
+            echo json_encode(["status" => false, "message" => "Invalid or missing course ID"]);
             exit();
         }
 
-        // ✅ Parse JSON body
-        $data = json_decode(file_get_contents("php://input"), true);
+        // ✅ Support both JSON and form-data
+        if (isset($_SERVER["CONTENT_TYPE"]) && str_contains($_SERVER["CONTENT_TYPE"], "multipart/form-data")) {
+            $data = $_POST;
+        } else {
+            $data = json_decode(file_get_contents("php://input"), true);
+        }
 
-        // ✅ Extract and sanitize all fields
+        // ✅ Extract and sanitize fields
         $title        = trim($data['title'] ?? '');
-        $description  = trim(strip_tags($data['description'] ?? '')); // removes <p>, <br>, etc.
+        $description  = trim(strip_tags($data['description'] ?? ''));
         $duration     = trim($data['duration'] ?? '');
         $fee          = floatval($data['fee'] ?? 0);
         $category_id  = intval($data['category_id'] ?? 0);
@@ -37,15 +39,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATC
         $certification_allowed = isset($data['certification_allowed']) ? (int)$data['certification_allowed'] : 0;
         $module_title = trim($data['module_title'] ?? '');
         $module_description = trim(strip_tags($data['module_description'] ?? ''));
-        $media        = trim($data['media'] ?? '');
 
-        // ✅ Validate Required Fields
+        // ✅ Safe media handling (array / string / empty)
+        if (isset($data['media'])) {
+            if (is_array($data['media'])) {
+                $media = json_encode($data['media']);
+            } else {
+                $media = trim((string)$data['media']);
+            }
+        } else {
+            $media = '';
+        }
+
+        // ✅ File upload handling
+        $absoluteUploadPath = "C:\\xampp\\htdocs\\jobsahi-API\\api\\uploads\\institute_course_image";
+        $relativePathForDb  = "uploads/institute_course_image";
+        $allowedExt = ['jpg', 'jpeg', 'png', 'csv', 'doc'];
+        $media_files = [];
+
+        if (!is_dir($absoluteUploadPath)) {
+            mkdir($absoluteUploadPath, 0777, true);
+        }
+
+        if (!empty($_FILES['media']['name'][0])) {
+            foreach ($_FILES['media']['name'] as $key => $name) {
+                $tmpName = $_FILES['media']['tmp_name'][$key];
+                $error   = $_FILES['media']['error'][$key];
+                if ($error === UPLOAD_ERR_OK && is_uploaded_file($tmpName)) {
+                    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+                    if (in_array($ext, $allowedExt)) {
+                        $newName = uniqid("course_", true) . '.' . $ext;
+                        $targetPath = $absoluteUploadPath . DIRECTORY_SEPARATOR . $newName;
+                        if (move_uploaded_file($tmpName, $targetPath)) {
+                            $media_files[] = $relativePathForDb . '/' . $newName;
+                        }
+                    }
+                }
+            }
+        }
+
+        // ✅ Merge new uploaded files with existing media (if any)
+        if (!empty($media_files)) {
+            if (!empty($media)) {
+                $existing = json_decode($media, true);
+                if (is_array($existing)) {
+                    $merged = array_merge($existing, $media_files);
+                    $media = json_encode($merged);
+                } else {
+                    $media = json_encode($media_files);
+                }
+            } else {
+                $media = json_encode($media_files);
+            }
+        }
+
+        // ✅ Validate required fields
         if (empty($title) || empty($description) || empty($duration) ||
             $fee <= 0 || empty($instructor_name) || empty($mode)) {
-            echo json_encode([
-                "status" => false,
-                "message" => "All required fields must be filled properly."
-            ]);
+            echo json_encode(["status" => false, "message" => "All required fields must be filled properly."]);
             exit();
         }
 
@@ -54,32 +105,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATC
         $check->bind_param("i", $course_id);
         $check->execute();
         $result = $check->get_result();
-
         if ($result->num_rows === 0) {
-            echo json_encode([
-                "status" => false,
-                "message" => "Course not found"
-            ]);
+            echo json_encode(["status" => false, "message" => "Course not found"]);
             exit();
         }
-
         $course = $result->fetch_assoc();
-        $course_institute_id = intval($course['institute_id']);
         $current_admin_action = $course['admin_action'];
         $check->close();
 
-        // ✅ Permission check
-        if ($role === 'institute' && $course_institute_id !== intval($institute_id)) {
-            echo json_encode([
-                "status" => false,
-                "message" => "Unauthorized: You can only update your own courses"
-            ]);
-            exit();
-        }
-
         // ✅ Admin can modify admin_action; Institute cannot
-        $admin_action = ($role === 'admin') 
-            ? trim($data['admin_action'] ?? $current_admin_action) 
+        $admin_action = ($role === 'admin')
+            ? trim($data['admin_action'] ?? $current_admin_action)
             : $current_admin_action;
 
         // ✅ Update Query (16 fields)
@@ -104,34 +140,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATC
             WHERE id = ?
         ");
 
-        // ✅ Bind 16 parameters (16 placeholders, 16 variables)
         $stmt->bind_param(
             "sssdisssssissssi",
-            $title,                  // 1 s
-            $description,            // 2 s
-            $duration,               // 3 s
-            $fee,                    // 4 d
-            $category_id,            // 5 i
-            $tagged_skills,          // 6 s
-            $batch_limit,            // 7 i
-            $status,                 // 8 s
-            $instructor_name,        // 9 s
-            $mode,                   // 10 s
-            $certification_allowed,  // 11 i
-            $module_title,           // 12 s
-            $module_description,     // 13 s
-            $media,                  // 14 s
-            $admin_action,           // 15 s
-            $course_id               // 16 i
+            $title,
+            $description,
+            $duration,
+            $fee,
+            $category_id,
+            $tagged_skills,
+            $batch_limit,
+            $status,
+            $instructor_name,
+            $mode,
+            $certification_allowed,
+            $module_title,
+            $module_description,
+            $media,
+            $admin_action,
+            $course_id
         );
 
-        // ✅ Execute and Respond
+        // ✅ Execute
         if ($stmt->execute()) {
             echo json_encode([
                 "status" => true,
                 "message" => "✅ Course updated successfully!",
                 "course_id" => $course_id,
-                "updated_by" => $role
+                "updated_by" => $role,
+                "media_saved" => $media_files
             ]);
         } else {
             echo json_encode([
@@ -143,10 +179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATC
 
         $stmt->close();
     } catch (Exception $e) {
-        echo json_encode([
-            "status" => false,
-            "message" => "Error: " . $e->getMessage()
-        ]);
+        echo json_encode(["status" => false, "message" => "Error: " . $e->getMessage()]);
     }
 
     $conn->close();

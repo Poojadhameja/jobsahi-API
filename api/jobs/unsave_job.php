@@ -74,9 +74,10 @@ $student_profile = mysqli_fetch_assoc($student_result);
 $student_profile_id = $student_profile['id'];
 mysqli_stmt_close($check_student_stmt);
 
-// ✅ Check if job is saved by this student and get job title
-$check_sql = "SELECT sj.id, j.title FROM saved_jobs sj 
-              INNER JOIN jobs j ON sj.job_id = j.id 
+// ✅ Check if job is saved by this student
+$check_sql = "SELECT sj.id, j.title 
+              FROM saved_jobs sj
+              JOIN jobs j ON sj.job_id = j.id
               WHERE sj.student_id = ? AND sj.job_id = ?";
 $check_stmt = mysqli_prepare($conn, $check_sql);
 mysqli_stmt_bind_param($check_stmt, "ii", $student_profile_id, $job_id);
@@ -93,10 +94,10 @@ if (mysqli_num_rows($result) === 0) {
     exit;
 }
 
-$job_data = mysqli_fetch_assoc($result);
+$saved_job_data = mysqli_fetch_assoc($result);
 mysqli_stmt_close($check_stmt);
 
-// ✅ Delete from saved_jobs table
+// ✅ Hard delete from saved_jobs table
 $delete_sql = "DELETE FROM saved_jobs WHERE student_id = ? AND job_id = ?";
 $delete_stmt = mysqli_prepare($conn, $delete_sql);
 mysqli_stmt_bind_param($delete_stmt, "ii", $student_profile_id, $job_id);
@@ -107,7 +108,7 @@ if (mysqli_stmt_execute($delete_stmt)) {
         "status" => true,
         "data" => [
             "job_id" => $job_id,
-            "job_title" => $job_data['title'],
+            "job_title" => $saved_job_data['title'],
             "student_id" => $student_profile_id
         ],
         "timestamp" => date('Y-m-d H:i:s')

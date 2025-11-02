@@ -77,16 +77,13 @@ $sql = "SELECT
             (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id AND a.status = 'applied') AS pending_applications,
             (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id AND a.status = 'shortlisted') AS shortlisted_applications,
             (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id AND a.status = 'selected') AS selected_applications,
-            (SELECT COUNT(*) FROM saved_jobs sj WHERE sj.job_id = j.id) AS times_saved";
+            (SELECT COUNT(*) FROM jobs j2 WHERE j2.save_status = 1 AND j2.id = j.id) AS times_saved";
 
-// Add is_saved field for students using saved_jobs junction table
+// Add is_saved field for students
 if ($user_role === 'student' && $student_profile_id) {
     $sql .= ",
             CASE 
-                WHEN EXISTS (
-                    SELECT 1 FROM saved_jobs sj 
-                    WHERE sj.job_id = j.id AND sj.student_id = ?
-                ) THEN 1 
+                WHEN j.save_status = 1 AND j.saved_by_student_id = ? THEN 1 
                 ELSE 0 
             END as is_saved";
 }

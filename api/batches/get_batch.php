@@ -21,7 +21,6 @@ try {
             b.batch_time_slot,
             b.start_date,
             b.end_date,
-            b.media,
             b.admin_action,
             c.id AS course_id,
             c.title AS course_title,
@@ -61,20 +60,29 @@ try {
     // -------------------------------
     // Response formatting
     // -------------------------------
-    if ($batch_id > 0 && empty($batches)) {
+    if ($batch_id > 0) {
+        // ✅ Return single batch by ID
+        if (!empty($batches)) {
+            echo json_encode([
+                "status" => true,
+                "message" => "Batch fetched successfully.",
+                "batch" => $batches[0]
+            ], JSON_PRETTY_PRINT);
+        } else {
+            echo json_encode([
+                "status" => false,
+                "message" => "Batch not found or not accessible."
+            ], JSON_PRETTY_PRINT);
+        }
+    } else {
+        // ✅ Return all batches
         echo json_encode([
-            "status" => false,
-            "message" => "Batch not found or not accessible."
-        ]);
-        exit();
+            "status"  => true,
+            "role"    => $role,
+            "count"   => count($batches),
+            "batches" => $batches
+        ], JSON_PRETTY_PRINT);
     }
-
-    echo json_encode([
-        "status"  => true,
-        "role"    => $role,
-        "count"   => count($batches),
-        "batches" => $batches
-    ], JSON_PRETTY_PRINT);
 
     $stmt->close();
     $conn->close();

@@ -108,7 +108,7 @@ $sql = "UPDATE student_profiles SET
             latitude = ?, 
             longitude = ?, 
             location = ?, 
-            modified_at = NOW()
+            updated_at = NOW()
         WHERE id = ? AND deleted_at IS NULL";
 
 $stmt = mysqli_prepare($conn, $sql);

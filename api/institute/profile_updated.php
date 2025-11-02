@@ -1,154 +1,232 @@
 <?php
 require_once '../cors.php';
+require_once '../db.php';
 
+// ✅ Authenticate JWT (Admin / Institute)
 try {
-    // ✅ Authenticate JWT (allowed roles: admin, institute)
-    $current_user = authenticateJWT(['admin', 'institute']); 
-    $user_role = strtolower($current_user['role']);
-    $user_id = $current_user['user_id'] ?? null;
+    $decoded = authenticateJWT(['admin', 'institute']);
+    $user_role = strtolower($decoded['role']);
+    $user_id   = intval($decoded['user_id'] ?? 0);
 } catch (Exception $e) {
-    echo json_encode(["message" => "Authentication failed: " . $e->getMessage(), "status" => false]);
+    echo json_encode(["success" => false, "message" => "Authentication failed: " . $e->getMessage()]);
     exit;
 }
 
-// ✅ Allow only PUT requests
+// ✅ Allow only PUT
 if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
-    echo json_encode(["message" => "Only PUT requests allowed", "status" => false]);
+    echo json_encode(["success" => false, "message" => "Only PUT requests allowed"]);
     exit;
 }
 
-// ✅ Get institute profile ID from URL
+// ✅ Extract profile_id
 $request_uri = $_SERVER['REQUEST_URI'];
-$path_parts = explode('/', trim($request_uri, '/'));
-$profile_id = end($path_parts);
+$parts = explode('/', trim($request_uri, '/'));
+$profile_id = intval(end($parts));
 
-if (!$profile_id || !is_numeric($profile_id)) {
-    echo json_encode(["message" => "Invalid profile ID", "status" => false]);
+if ($profile_id <= 0) {
+    echo json_encode(["success" => false, "message" => "Invalid profile ID"]);
     exit;
 }
 
-// ✅ Get JSON input data
-$json_input = file_get_contents('php://input');
-$input_data = json_decode($json_input, true);
-
+// ✅ Decode JSON
+$input = json_decode(file_get_contents("php://input"), true);
 if (json_last_error() !== JSON_ERROR_NONE) {
-    echo json_encode(["message" => "Invalid JSON data", "status" => false]);
+    echo json_encode(["success" => false, "message" => "Invalid JSON input"]);
     exit;
 }
 
-
+// ✅ DB check
 if (!$conn) {
-    echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
+    echo json_encode(["success" => false, "message" => "Database connection failed: " . mysqli_connect_error()]);
     exit;
 }
 
-// ✅ Check if profile exists and get current data
+// ✅ Verify profile exists
 $check_sql = "SELECT id, user_id, admin_action FROM institute_profiles WHERE id = ? AND deleted_at IS NULL";
 $check_stmt = mysqli_prepare($conn, $check_sql);
 mysqli_stmt_bind_param($check_stmt, "i", $profile_id);
 mysqli_stmt_execute($check_stmt);
-$check_result = mysqli_stmt_get_result($check_stmt);
-
-if (mysqli_num_rows($check_result) == 0) {
-    echo json_encode(["message" => "Institute profile not found", "status" => false]);
-    mysqli_stmt_close($check_stmt);
-    mysqli_close($conn);
+$res = mysqli_stmt_get_result($check_stmt);
+if (mysqli_num_rows($res) === 0) {
+    echo json_encode(["success" => false, "message" => "Institute profile not found"]);
     exit;
 }
-
-$existing_profile = mysqli_fetch_assoc($check_result);
+$profile = mysqli_fetch_assoc($res);
 mysqli_stmt_close($check_stmt);
 
-// ✅ Permission check
-if ($user_role === 'institute' && $existing_profile['user_id'] != $user_id) {
-    echo json_encode(["message" => "Access denied: You can only update your own profile", "status" => false]);
-    mysqli_close($conn);
+// ✅ Restrict institute user
+if ($user_role === 'institute' && $profile['user_id'] !== $user_id) {
+    echo json_encode(["success" => false, "message" => "Access denied: You can update only your own profile"]);
     exit;
 }
 
-// ✅ Prepare update fields
-$allowed_fields = ['location', 'courses_offered'];
+// ✅ Begin transaction
+mysqli_autocommit($conn, false);
+$success = true;
+$error_message = "";
+
+// ✅ Profile fields
+$fields_map = [
+    'institute_name', 'institute_type', 'website', 'description', 'address',
+    'city', 'state', 'country', 'postal_code', 'contact_person',
+    'contact_designation', 'accreditation', 'established_year', 'location',
+    'courses_offered'
+];
+
 $update_fields = [];
 $update_values = [];
-$param_types = '';
+$types = "";
 
-foreach ($allowed_fields as $field) {
-    if (isset($input_data[$field])) {
+foreach ($fields_map as $field) {
+    if (isset($input[$field])) {
         $update_fields[] = "$field = ?";
-        $update_values[] = $input_data[$field];
-        $param_types .= 's';
+        $update_values[] = $input[$field];
+        $types .= "s";
     }
 }
 
-// ✅ Admin can update admin_action
-if ($user_role === 'admin' && isset($input_data['admin_action'])) {
-    $valid_actions = ['pending', 'approved', 'rejected'];
-    if (in_array($input_data['admin_action'], $valid_actions)) {
+// ✅ Admin can modify admin_action
+if ($user_role === 'admin' && isset($input['admin_action'])) {
+    $valid = ['pending', 'approved', 'rejected'];
+    if (in_array($input['admin_action'], $valid)) {
         $update_fields[] = "admin_action = ?";
-        $update_values[] = $input_data['admin_action'];
-        $param_types .= 's';
+        $update_values[] = $input['admin_action'];
+        $types .= "s";
     }
 }
 
-if (empty($update_fields)) {
-    echo json_encode(["message" => "No valid fields to update", "status" => false]);
+// ✅ No data to update
+if (empty($update_fields) && empty($input['email']) && empty($input['user_name']) && empty($input['phone_number'])) {
+    echo json_encode(["success" => false, "message" => "No valid fields to update"]);
     mysqli_close($conn);
     exit;
 }
 
-// ✅ Add modified_at timestamp
+// ✅ Add modified_at
 $update_fields[] = "modified_at = NOW()";
 
-// ✅ Build and execute update query
-$sql = "UPDATE institute_profiles SET " . implode(', ', $update_fields) . " WHERE id = ?";
-$update_values[] = $profile_id;
-$param_types .= 'i';
+// ✅ Update institute_profiles
+if (!empty($update_fields)) {
+    $sql = "UPDATE institute_profiles SET " . implode(", ", $update_fields) . " WHERE id = ?";
+    $update_values[] = $profile_id;
+    $types .= "i";
 
-$stmt = mysqli_prepare($conn, $sql);
-mysqli_stmt_bind_param($stmt, $param_types, ...$update_values);
-
-if (mysqli_stmt_execute($stmt)) {
-    if (mysqli_stmt_affected_rows($stmt) > 0) {
-        // ✅ Fetch updated profile
-        $fetch_sql = "SELECT 
-                        id, 
-                        user_id, 
-                        location, 
-                        courses_offered, 
-                        admin_action,
-                        created_at, 
-                        modified_at, 
-                        deleted_at
-                      FROM institute_profiles 
-                      WHERE id = ? AND deleted_at IS NULL";
-        
-        $fetch_stmt = mysqli_prepare($conn, $fetch_sql);
-        mysqli_stmt_bind_param($fetch_stmt, "i", $profile_id);
-        mysqli_stmt_execute($fetch_stmt);
-        $fetch_result = mysqli_stmt_get_result($fetch_stmt);
-        $updated_profile = mysqli_fetch_assoc($fetch_result);
-        mysqli_stmt_close($fetch_stmt);
-
-        echo json_encode([
-            "message" => "Institute profile updated successfully",
-            "status" => true,
-            "data" => $updated_profile,
-            "timestamp" => date('Y-m-d H:i:s')
-        ]);
+    $stmt = mysqli_prepare($conn, $sql);
+    if ($stmt) {
+        mysqli_stmt_bind_param($stmt, $types, ...$update_values);
+        if (!mysqli_stmt_execute($stmt)) {
+            $success = false;
+            $error_message = mysqli_stmt_error($stmt);
+        }
+        mysqli_stmt_close($stmt);
     } else {
-        echo json_encode([
-            "message" => "No changes were made to the profile",
-            "status" => true,
-            "timestamp" => date('Y-m-d H:i:s')
-        ]);
+        $success = false;
+        $error_message = mysqli_error($conn);
     }
-} else {
-    echo json_encode([
-        "message" => "Failed to update institute profile: " . mysqli_error($conn),
-        "status" => false
-    ]);
 }
 
-mysqli_stmt_close($stmt);
+// ✅ Update users table
+if ($success && ($input['email'] ?? $input['user_name'] ?? $input['phone_number'])) {
+    $user_update = [];
+    $u_values = [];
+    $u_types = "";
+
+    if (isset($input['email'])) {
+        $user_update[] = "email = ?";
+        $u_values[] = $input['email'];
+        $u_types .= "s";
+    }
+    if (isset($input['user_name'])) {
+        $user_update[] = "user_name = ?";
+        $u_values[] = $input['user_name'];
+        $u_types .= "s";
+    }
+    if (isset($input['phone_number'])) {
+        $user_update[] = "phone_number = ?";
+        $u_values[] = $input['phone_number'];
+        $u_types .= "s";
+    }
+
+    $u_values[] = $profile['user_id'];
+    $u_types .= "i";
+
+    $u_sql = "UPDATE users SET " . implode(", ", $user_update) . ", updated_at = NOW() WHERE id = ?";
+    $u_stmt = mysqli_prepare($conn, $u_sql);
+    mysqli_stmt_bind_param($u_stmt, $u_types, ...$u_values);
+    if (!mysqli_stmt_execute($u_stmt)) {
+        $success = false;
+        $error_message = mysqli_stmt_error($u_stmt);
+    }
+    mysqli_stmt_close($u_stmt);
+}
+
+// ✅ Commit & Fetch final record
+if ($success) {
+    mysqli_commit($conn);
+
+    $fetch_sql = "SELECT 
+        p.*, u.email, u.user_name, u.phone_number 
+        FROM institute_profiles p
+        INNER JOIN users u ON p.user_id = u.id
+        WHERE p.id = ? AND p.deleted_at IS NULL";
+
+    $fetch_stmt = mysqli_prepare($conn, $fetch_sql);
+    mysqli_stmt_bind_param($fetch_stmt, "i", $profile_id);
+    mysqli_stmt_execute($fetch_stmt);
+    $data = mysqli_fetch_assoc(mysqli_stmt_get_result($fetch_stmt));
+    mysqli_stmt_close($fetch_stmt);
+
+    // ✅ Final grouped response
+    $response = [
+        "personal_info" => [
+            "email" => $data['email'],
+            "user_name" => $data['user_name'],
+            "phone_number" => $data['phone_number']
+        ],
+        "institute_info" => [
+            "institute_name" => $data['institute_name'],
+            "institute_type" => $data['institute_type'],
+            "description" => $data['description'],
+            "courses_offered" => $data['courses_offered'],
+            "established_year" => $data['established_year'],
+            "accreditation" => $data['accreditation']
+        ],
+        "contact_info" => [
+            "website" => $data['website'],
+            "address" => $data['address'],
+            "city" => $data['city'],
+            "state" => $data['state'],
+            "country" => $data['country'],
+            "postal_code" => $data['postal_code'],
+            "contact_person" => $data['contact_person'],
+            "contact_designation" => $data['contact_designation']
+        ],
+        "location_info" => [
+            "location" => $data['location']
+        ],
+        "status" => [
+            "admin_action" => $data['admin_action'],
+            "created_at" => $data['created_at'],
+            "modified_at" => $data['modified_at']
+        ]
+    ];
+
+    echo json_encode([
+        "success" => true,
+        "message" => "Institute profile updated successfully",
+        "data" => $response,
+        "meta" => [
+            "profile_id" => $profile_id,
+            "updated_by" => $user_role,
+            "timestamp" => date('Y-m-d H:i:s'),
+            "api_version" => "1.0"
+        ]
+    ], JSON_PRETTY_PRINT);
+} else {
+    mysqli_rollback($conn);
+    echo json_encode(["success" => false, "message" => "Update failed: " . $error_message]);
+}
+
+mysqli_autocommit($conn, true);
 mysqli_close($conn);
 ?>

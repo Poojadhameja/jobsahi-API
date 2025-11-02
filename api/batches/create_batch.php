@@ -1,6 +1,7 @@
 <?php
 // create_batch.php - Create new batch (Admin, Institute access only)
 require_once '../cors.php';
+require_once '../db.php';
 
 try {
     // ✅ Authenticate JWT for admin or institute
@@ -25,7 +26,6 @@ try {
     $batch_time_slot = isset($data['batch_time_slot']) ? trim($data['batch_time_slot']) : '';
     $start_date      = isset($data['start_date']) ? $data['start_date'] : null;
     $end_date        = isset($data['end_date']) ? $data['end_date'] : null;
-    $media           = isset($data['media']) ? $data['media'] : null;
     $instructor_id   = isset($data['instructor_id']) ? intval($data['instructor_id']) : 0;
     $admin_action    = "approved"; // default status
 
@@ -58,28 +58,23 @@ try {
     }
     $check_instructor->close();
 
-    // ✅ Convert media to JSON if array
-    if (is_array($media)) {
-        $media = json_encode($media, JSON_UNESCAPED_UNICODE);
-    }
-
     // ✅ Insert new batch
     $stmt = $conn->prepare("
         INSERT INTO batches 
-        (course_id, name, batch_time_slot, start_date, end_date, media, instructor_id, admin_action)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (course_id, name, batch_time_slot, start_date, end_date, instructor_id, admin_action)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     ");
     $stmt->bind_param(
-        "isssssis",
-        $course_id,
-        $name,
-        $batch_time_slot,
-        $start_date,
-        $end_date,
-        $media,
-        $instructor_id,
-        $admin_action
-    );
+    "issssis",
+    $course_id,
+    $name,
+    $batch_time_slot,
+    $start_date,
+    $end_date,
+    $instructor_id,
+    $admin_action
+);
+
 
     // ✅ Execute insert
     if ($stmt->execute()) {

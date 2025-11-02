@@ -1,99 +1,170 @@
 <?php
 require_once '../cors.php';
+require_once '../db.php';
 
-$decoded = authenticateJWT(['admin', 'institute']); 
-$user_role = $decoded['role'] ?? '';  
-$user_id   = $decoded['user_id'] ?? 0;
+$decoded = authenticateJWT(['admin', 'institute']);
+$user_role = strtolower($decoded['role'] ?? '');
+$user_id   = intval($decoded['user_id'] ?? 0);
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
-    if (!in_array($user_role, ['admin', 'institute'])) {
-        echo json_encode(["status" => false, "message" => "Unauthorized"]);
-        exit();
-    }
-
-    $data = json_decode(file_get_contents("php://input"), true);
-
-    // ✅ Values fetch karna
-    $title          = trim($data['title'] ?? '');
-    $description    = trim($data['description'] ?? '');
-    $duration       = trim($data['duration'] ?? '');
-    $category_id    = !empty($data['category_id']) ? intval($data['category_id']) : null;
-    $tagged_skills  = trim($data['tagged_skills'] ?? '');
-    $batch_limit    = intval($data['batch_limit'] ?? 0);
-    $status         = trim($data['status'] ?? 'Active');
-    $instructor_name = trim($data['instructor_name'] ?? '');
-    $mode           = trim($data['mode'] ?? 'Offline');
-    $certification_allowed = isset($data['certification_allowed']) && $data['certification_allowed'] ? 1 : 0;
-    $module_title   = trim($data['module_title'] ?? '');
-    $module_description = trim($data['module_description'] ?? '');
-    $media          = trim($data['media'] ?? '');
-    $fee            = floatval($data['fee'] ?? 0);
-
-    $admin_action = 'pending';
-    $institute_id = ($user_role === 'institute') ? $user_id : 0;
-
-    // ✅ Debug line (sirf testing ke liye)
-    // file_put_contents('debug_log.txt', json_encode($data, JSON_PRETTY_PRINT));
-
-    if (empty($title) || empty($description) || empty($duration) || $fee <= 0 || empty($instructor_name)) {
-        echo json_encode(["status" => false, "message" => "All required fields must be filled"]);
-        exit();
-    }
-
-    try {
-        $stmt = $conn->prepare("
-            INSERT INTO courses (
-                institute_id, title, description, duration, category_id, tagged_skills, 
-                batch_limit, status, instructor_name, mode, certification_allowed, 
-                module_title, module_description, media, fee, admin_action
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ");
-
-        // ✅ Type string exact 16 chars
-        $stmt->bind_param(
-            "isssisisssisssds",
-            $institute_id,
-            $title,
-            $description,
-            $duration,
-            $category_id,
-            $tagged_skills,
-            $batch_limit,
-            $status,
-            $instructor_name,
-            $mode,
-            $certification_allowed,
-            $module_title,
-            $module_description,
-            $media,
-            $fee,
-            $admin_action
-        );
-
-        if ($stmt->execute()) {
-            echo json_encode([
-                "status" => true,
-                "message" => "Course created successfully",
-                "course_id" => $stmt->insert_id
-            ]);
-        } else {
-            echo json_encode([
-                "status" => false,
-                "message" => "Database insert failed",
-                "error"   => $stmt->error
-            ]);
-        }
-
-        $stmt->close();
-    } catch (Exception $e) {
-        echo json_encode([
-            "status" => false,
-            "message" => "Error: " . $e->getMessage()
-        ]);
-    }
-
-    $conn->close();
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    echo json_encode(["status" => false, "message" => "Only POST method allowed"]);
     exit();
 }
+
+if (!in_array($user_role, ['admin', 'institute'])) {
+    echo json_encode(["status" => false, "message" => "Unauthorized"]);
+    exit();
+}
+
+// ✅ Detect JSON or form-data
+if (isset($_SERVER["CONTENT_TYPE"]) && str_contains($_SERVER["CONTENT_TYPE"], "multipart/form-data")) {
+    $data = $_POST;
+} else {
+    $data = json_decode(file_get_contents("php://input"), true);
+}
+
+if (!$data) {
+    echo json_encode(["status" => false, "message" => "Invalid input"]);
+    exit();
+}
+
+// ✅ Extract fields
+$title          = trim($data['title'] ?? '');
+$description    = trim($data['description'] ?? '');
+$duration       = trim($data['duration'] ?? '');
+$category_input = trim($data['category'] ?? '');
+$tagged_skills  = trim($data['tagged_skills'] ?? '');
+$batch_limit    = intval($data['batch_limit'] ?? 0);
+$status         = trim($data['status'] ?? 'active');
+$instructor_name = trim($data['instructor_name'] ?? '');
+$mode           = trim($data['mode'] ?? 'offline');
+$certification_allowed = !empty($data['certification_allowed']) ? 1 : 0;
+$module_title   = trim($data['module_title'] ?? '');
+$module_description = trim($data['module_description'] ?? '');
+$fee            = floatval($data['fee'] ?? 0);
+$admin_action   = 'pending';
+
+// ✅ Validate required fields
+if (empty($title) || empty($description) || empty($duration) || empty($instructor_name) || $fee <= 0) {
+    echo json_encode(["status" => false, "message" => "Required fields missing"]);
+    exit();
+}
+
+// ✅ Get institute_id
+$institute_id = 0;
+if ($user_role === 'institute') {
+    $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($row = $result->fetch_assoc()) {
+        $institute_id = $row['id'];
+    } else {
+        echo json_encode(["status" => false, "message" => "Institute profile not found"]);
+        exit();
+    }
+    $stmt->close();
+}
+
+// ✅ Handle media upload (ACTUAL FILE SAVE)
+$absoluteUploadPath = "C:\\xampp\\htdocs\\jobsahi-API\\api\\uploads\\institute_course_image";
+$relativePathForDb  = "uploads/institute_course_image";
+$allowedExt = ['jpg', 'jpeg', 'png', 'csv', 'doc'];
+$media_files = [];
+
+if (!is_dir($absoluteUploadPath)) {
+    mkdir($absoluteUploadPath, 0777, true);
+}
+
+if (!empty($_FILES['media']['name'][0])) {
+    foreach ($_FILES['media']['name'] as $key => $name) {
+        $tmpName = $_FILES['media']['tmp_name'][$key];
+        $error   = $_FILES['media']['error'][$key];
+
+        if ($error === UPLOAD_ERR_OK && is_uploaded_file($tmpName)) {
+            $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+
+            if (in_array($ext, $allowedExt)) {
+                // ✅ Generate a unique safe filename
+                $newName = uniqid("course_", true) . '.' . $ext;
+                $targetPath = $absoluteUploadPath . DIRECTORY_SEPARATOR . $newName;
+
+                // ✅ Physically move the file to uploads folder
+                if (move_uploaded_file($tmpName, $targetPath)) {
+                    // ✅ Save relative path for DB
+                    $media_files[] = $relativePathForDb . '/' . $newName;
+                }
+            }
+        }
+    }
+}
+
+$media_json = !empty($media_files) ? json_encode($media_files) : '';
+
+// ✅ Ensure category exists
+$category_name = !empty($category_input) ? $category_input : 'Technical';
+$category_id = null;
+
+$stmt = $conn->prepare("SELECT id FROM course_category WHERE category_name = ? LIMIT 1");
+$stmt->bind_param("s", $category_name);
+$stmt->execute();
+$result = $stmt->get_result();
+if ($result->num_rows > 0) {
+    $row = $result->fetch_assoc();
+    $category_id = $row['id'];
+} else {
+    $stmt->close();
+    $stmt = $conn->prepare("INSERT INTO course_category (category_name) VALUES (?)");
+    $stmt->bind_param("s", $category_name);
+    $stmt->execute();
+    $category_id = $stmt->insert_id;
+}
+$stmt->close();
+
+// ✅ Insert course record
+$stmt = $conn->prepare("
+    INSERT INTO courses (
+        institute_id, title, description, duration, category_id,
+        tagged_skills, batch_limit, status, instructor_name, mode,
+        certification_allowed, module_title, module_description,
+        media, fee, admin_action, created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+");
+
+$stmt->bind_param(
+    "isssisisssisssds",
+    $institute_id,
+    $title,
+    $description,
+    $duration,
+    $category_id,
+    $tagged_skills,
+    $batch_limit,
+    $status,
+    $instructor_name,
+    $mode,
+    $certification_allowed,
+    $module_title,
+    $module_description,
+    $media_json,
+    $fee,
+    $admin_action
+);
+
+if ($stmt->execute()) {
+    echo json_encode([
+        "status" => true,
+        "message" => "Course created successfully",
+        "course_id" => $stmt->insert_id,
+        "category_id" => $category_id,
+        "category_name" => $category_name,
+        "media_files" => $media_files
+    ]);
+} else {
+    echo json_encode(["status" => false, "message" => "Insert failed", "error" => $stmt->error]);
+}
+
+$stmt->close();
+$conn->close();
 ?>

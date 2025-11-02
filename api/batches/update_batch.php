@@ -1,6 +1,7 @@
 <?php
 // update_batch.php - Update batch details (Auto-approve mode for Admin/Institute)
 require_once '../cors.php';
+require_once '../db.php';
 
 // ✅ Authenticate JWT (allow only admin and institute)
 $decoded = authenticateJWT(['admin', 'institute']);
@@ -33,11 +34,10 @@ $name            = isset($data['name']) ? trim($data['name']) : '';
 $batch_time_slot = isset($data['batch_time_slot']) ? trim($data['batch_time_slot']) : '';
 $start_date      = isset($data['start_date']) ? $data['start_date'] : null;
 $end_date        = isset($data['end_date']) ? $data['end_date'] : null;
-$media           = isset($data['media']) ? $data['media'] : null;
 $instructor_id   = isset($data['instructor_id']) ? intval($data['instructor_id']) : 0;
 
 // ✅ Force approved mode
-$admin_action = 'approved';
+$admin_action    = "approved"; // default status
 
 // ✅ Validate mandatory fields
 if ($course_id <= 0 || empty($name) || empty($batch_time_slot) || empty($start_date) || empty($end_date) || $instructor_id <= 0) {
@@ -81,12 +81,7 @@ if ($check_instructor->get_result()->num_rows === 0) {
 }
 $check_instructor->close();
 
-// ✅ Convert media to JSON if array
-if (is_array($media)) {
-    $media = json_encode($media, JSON_UNESCAPED_UNICODE);
-}
-
-// ✅ Prepare update query
+// ✅ Prepare update query (media removed)
 $sql = "
     UPDATE batches SET 
         course_id = ?, 
@@ -94,22 +89,20 @@ $sql = "
         batch_time_slot = ?, 
         start_date = ?, 
         end_date = ?, 
-        media = ?, 
         instructor_id = ?, 
-        admin_action = ?
+        admin_action = 'approved'
     WHERE id = ?
 ";
+
 $stmt = $conn->prepare($sql);
 $stmt->bind_param(
-    "issssssis",
+    "isssssi",
     $course_id,
     $name,
     $batch_time_slot,
     $start_date,
     $end_date,
-    $media,
     $instructor_id,
-    $admin_action,
     $batch_id
 );
 

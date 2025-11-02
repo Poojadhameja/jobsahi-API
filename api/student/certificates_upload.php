@@ -1,73 +1,123 @@
 <?php
 require_once '../cors.php';
+require_once '../db.php';
 
-// Authenticate JWT for student role
-$studentData = authenticateJWT(['admin', 'student']); // decoded JWT payload
+// ✅ Authenticate JWT for student role
+$studentData = authenticateJWT('student'); // decoded JWT payload
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(["message" => "Only POST requests allowed", "status" => false]);
     exit;
 }
 
-include "../db.php";
+// ✅ Directory Setup
+$upload_dir = realpath(__DIR__ . '/../uploads/student_certificate/') . DIRECTORY_SEPARATOR;
+$relative_path = '/uploads/student_certificate/';
 
-if (!$conn) {
-    echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
+if (!is_dir($upload_dir)) {
+    mkdir($upload_dir, 0777, true);
+}
+
+// ✅ Allowed file types
+$allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'];
+
+// ✅ File Upload Helper
+function uploadCertificate($key, $upload_dir, $relative_path, $allowed_extensions)
+{
+    if (!isset($_FILES[$key]) || $_FILES[$key]['error'] !== UPLOAD_ERR_OK) {
+        return null;
+    }
+
+    $tmp = $_FILES[$key]['tmp_name'];
+    $ext = strtolower(pathinfo($_FILES[$key]['name'], PATHINFO_EXTENSION));
+
+    if (!in_array($ext, $allowed_extensions)) {
+        echo json_encode([
+            "status" => false,
+            "message" => "Invalid file type. Allowed: PDF, JPG, JPEG, PNG, DOC, DOCX"
+        ]);
+        exit;
+    }
+
+    $filename = 'certificate_' . time() . '.' . $ext;
+    $destination = $upload_dir . $filename;
+
+    if (move_uploaded_file($tmp, $destination)) {
+        return $relative_path . $filename;
+    } else {
+        echo json_encode(["status" => false, "message" => "File upload failed"]);
+        exit;
+    }
+}
+
+// ✅ Check for file upload or JSON input
+$certificatePath = null;
+
+if (isset($_FILES['certificate'])) {
+    // File upload mode
+    $certificatePath = uploadCertificate('certificate', $upload_dir, $relative_path, $allowed_extensions);
+} else {
+    // JSON mode (in case you send a direct URL)
+    $input = json_decode(file_get_contents("php://input"), true);
+    $certificatePath = $input['certificates'] ?? null;
+}
+
+if (!$certificatePath) {
+    echo json_encode(["message" => "Certificate file or URL is required", "status" => false]);
     exit;
 }
 
-$input = json_decode(file_get_contents("php://input"), true);
+// ✅ Extract Student ID from Token
+$userId = $studentData['id'] ?? ($studentData['user_id'] ?? null);
 
-$certificatesPath = $input['certificates'] ?? null;
-
-if (!$certificatesPath) {
-    echo json_encode(["message" => "Certificates path is required", "status" => false]);
+if ($userId === null) {
+    echo json_encode(["message" => "Unauthorized: User ID missing in token", "status" => false]);
     exit;
 }
 
-// ✅ Use student ID directly from JWT (do not rely on frontend input)
-$studentId = $studentData['id'] ?? ($studentData['student_id'] ?? ($studentData['user_id'] ?? null));
+// ✅ Get student_profile ID using user_id
+$getStudent = $conn->prepare("SELECT id FROM student_profiles WHERE user_id = ? AND deleted_at IS NULL");
+$getStudent->bind_param("i", $userId);
+$getStudent->execute();
+$res = $getStudent->get_result();
 
-if ($studentId === null) {
-    echo json_encode(["message" => "Unauthorized: Student ID missing in token", "status" => false]);
+if ($res->num_rows === 0) {
+    echo json_encode(["message" => "No student profile found for this user", "status" => false]);
     exit;
 }
 
+$studentProfile = $res->fetch_assoc();
+$studentId = intval($studentProfile['id']); // Actual student_profiles.id
+
+// ✅ Update student profile with certificate path
 $sql = "UPDATE student_profiles 
-        SET certificates = ?, modified_at = NOW() 
+        SET certificates = ?, updated_at = NOW() 
         WHERE id = ? AND deleted_at IS NULL";
 
-$stmt = mysqli_prepare($conn, $sql);
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("si", $certificatePath, $studentId);
 
-if (!$stmt) {
-    echo json_encode([
-        "message" => "SQL prepare failed: " . mysqli_error($conn),
-        "status" => false
-    ]);
-    exit;
-}
-mysqli_stmt_bind_param($stmt, "si", $certificatesPath, $studentId);
-
-if (mysqli_stmt_execute($stmt)) {
-    if (mysqli_stmt_affected_rows($stmt) > 0) {
+if ($stmt->execute()) {
+    if ($stmt->affected_rows > 0) {
         echo json_encode([
-            "message" => "Certificates updated successfully",
+            "message" => "Certificate uploaded successfully",
             "status" => true,
-            "certificates_path" => $certificatesPath
+            "certificate_path" => $certificatePath
         ]);
     } else {
         echo json_encode([
-            "message" => "No rows updated (check if profile exists or same value submitted)",
-            "status" => false
+            "message" => "Certificate already up to date",
+            "status" => true,
+            "certificate_path" => $certificatePath
         ]);
     }
 } else {
     echo json_encode([
-        "message" => "Query failed: " . mysqli_error($conn),
+        "message" => "Database error: " . $stmt->error,
         "status" => false
     ]);
 }
 
-mysqli_stmt_close($stmt);
-mysqli_close($conn);
+$stmt->close();
+$conn->close();
 ?>

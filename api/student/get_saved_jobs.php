@@ -60,7 +60,7 @@ $offset = isset($_GET['offset']) ? intval($_GET['offset']) : 0;
 $limit = max(1, min(100, $limit)); // Limit between 1-100
 $offset = max(0, $offset);
 
-// Get saved jobs with job details using saved_jobs junction table
+// Get saved jobs with job details from saved_jobs table
 $sql = "SELECT 
             j.id,
             j.title,
@@ -76,7 +76,8 @@ $sql = "SELECT
             j.no_of_vacancies,
             j.status,
             j.created_at,
-            sj.created_at as saved_at,
+            sj.id as saved_job_id,
+            sj.saved_at,
             rp.company_name,
             rp.company_logo,
             rp.industry,
@@ -87,7 +88,7 @@ $sql = "SELECT
         WHERE sj.student_id = ?
         AND j.admin_action = 'approved'
         AND j.status = 'open'
-        ORDER BY sj.created_at DESC
+        ORDER BY sj.saved_at DESC
         LIMIT ? OFFSET ?";
 
 $stmt = mysqli_prepare($conn, $sql);
@@ -103,6 +104,7 @@ $result = mysqli_stmt_get_result($stmt);
 $saved_jobs = [];
 while ($row = mysqli_fetch_assoc($result)) {
     $saved_jobs[] = [
+        'saved_job_id' => intval($row['saved_job_id']),
         'job_id' => intval($row['id']),
         'title' => $row['title'],
         'description' => $row['description'],
@@ -116,7 +118,7 @@ while ($row = mysqli_fetch_assoc($result)) {
         'is_remote' => (bool)$row['is_remote'],
         'no_of_vacancies' => intval($row['no_of_vacancies']),
         'status' => $row['status'],
-        'created_at' => $row['created_at'],
+        'job_created_at' => $row['created_at'],
         'saved_at' => $row['saved_at'],
         'company' => [
             'company_name' => $row['company_name'],
@@ -130,9 +132,12 @@ while ($row = mysqli_fetch_assoc($result)) {
 mysqli_stmt_close($stmt);
 
 // Get total count for pagination
-$count_sql = "SELECT COUNT(*) as total FROM saved_jobs sj 
-              INNER JOIN jobs j ON sj.job_id = j.id 
-              WHERE sj.student_id = ? AND j.admin_action = 'approved' AND j.status = 'open'";
+$count_sql = "SELECT COUNT(*) as total 
+              FROM saved_jobs sj
+              INNER JOIN jobs j ON sj.job_id = j.id
+              WHERE sj.student_id = ?
+              AND j.admin_action = 'approved'
+              AND j.status = 'open'";
 $count_stmt = mysqli_prepare($conn, $count_sql);
 mysqli_stmt_bind_param($count_stmt, "i", $student_id);
 mysqli_stmt_execute($count_stmt);

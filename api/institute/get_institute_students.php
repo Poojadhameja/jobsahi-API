@@ -1,16 +1,50 @@
 <?php
 require_once '../cors.php';
-$decoded = authenticateJWT(['admin', 'institute']);
-$institute_id = intval($decoded['institute_id'] ?? 0);
+require_once '../db.php';
 
 try {
-    // ✅ Simplified Query
+    // ✅ Authenticate JWT for admin or institute
+    $decoded = authenticateJWT(['admin', 'institute']);
+    $role = strtolower($decoded['role'] ?? '');
+
+    // -------------------------------
+    // ✅ Determine institute_id from JWT (automatic)
+    // -------------------------------
+    $user_id = intval($decoded['user_id'] ?? ($decoded['id'] ?? 0));
+    $institute_id = 0;
+
+    if ($role === 'institute') {
+        // Fetch institute_id from institute_profiles linked to this user
+        $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($row = $result->fetch_assoc()) {
+            $institute_id = intval($row['id']);
+        }
+        $stmt->close();
+    } elseif ($role === 'admin') {
+        $institute_id = 0; // Admin can view all
+    }
+
+    // ❌ Stop if institute_id not found for institute role
+    if ($role === 'institute' && $institute_id <= 0) {
+        echo json_encode([
+            "status" => false,
+            "message" => "Institute ID missing or invalid in token"
+        ]);
+        exit;
+    }
+
+    // -------------------------------
+    // ✅ Build the SQL query
+    // -------------------------------
     $sql = "
         SELECT 
             sp.id AS student_id,
             sp.user_id,
             u.user_name AS student_name,
-            u.email AS email,
+            u.email,
             u.phone_number AS phone,
             sp.trade,
             sp.education,
@@ -33,7 +67,7 @@ try {
         INNER JOIN courses c 
             ON e.course_id = c.id 
             AND c.admin_action = 'approved'
-            AND c.institute_id = ?
+            " . ($role === 'institute' ? "AND c.institute_id = ?" : "") . "
         LEFT JOIN student_batches sb
             ON sp.id = sb.student_id
         LEFT JOIN batches b 
@@ -44,94 +78,48 @@ try {
         ORDER BY u.user_name ASC
     ";
 
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $institute_id);
+    if ($role === 'institute') {
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $institute_id);
+    } else {
+        $stmt = $conn->prepare($sql);
+    }
+
     $stmt->execute();
     $result = $stmt->get_result();
 
     $students = [];
-    $current_date = new DateTime();
 
     while ($row = $result->fetch_assoc()) {
-
-        $progress_percent = 0;
-        $status_text = "Not Started";
-
-        // ✅ Calculate progress based on batch dates
-        if (!empty($row['start_date']) && !empty($row['end_date'])) {
-            try {
-                $start_date = new DateTime($row['start_date']);
-                $end_date = new DateTime($row['end_date']);
-
-                if ($current_date < $start_date) {
-                    $progress_percent = 0;
-                    $status_text = "Not Started";
-                } elseif ($current_date >= $end_date) {
-                    $progress_percent = 100;
-                    $status_text = "Completed";
-                } else {
-                    $total_days = $start_date->diff($end_date)->days;
-                    $elapsed_days = $start_date->diff($current_date)->days;
-                    
-                    if ($total_days > 0) {
-                        $progress_percent = round(($elapsed_days / $total_days) * 100, 2);
-                    }
-                    $status_text = "Ongoing";
-                }
-            } catch (Exception $e) {
-                // Date parsing failed, skip to fallback
-            }
-        } 
-        // ✅ Fallback to enrollment date (FIXED)
-        elseif (!empty($row['enrollment_date'])) {
-            try {
-                $enrollment_date = new DateTime($row['enrollment_date']);
-                $days_since_enrollment = $enrollment_date->diff($current_date)->days;
-                
-                // ✅ Extract numeric value from course_duration (handles "6 months", "12", etc.)
-                $duration_value = 6; // default
-                if (!empty($row['course_duration'])) {
-                    // Extract first number from string
-                    preg_match('/\d+/', $row['course_duration'], $matches);
-                    if (!empty($matches[0])) {
-                        $duration_value = intval($matches[0]);
-                    }
-                }
-                
-                $course_duration_days = $duration_value * 30;
-                
-                if ($course_duration_days > 0) {
-                    if ($days_since_enrollment >= $course_duration_days) {
-                        $progress_percent = 100;
-                        $status_text = "Completed";
-                    } else {
-                        $progress_percent = round(($days_since_enrollment / $course_duration_days) * 100, 2);
-                        $status_text = "Ongoing";
-                    }
-                }
-            } catch (Exception $e) {
-                // Keep default values
-            }
-        }
-
         $students[] = [
-            "student_id" => $row['student_id'],
-            "name" => $row['student_name'],
-            "email" => $row['email'],
-            "phone" => $row['phone'],
-            "trade" => $row['trade'],
-            "course" => $row['course_title'] ?? "Not Assigned",
-            "batch" => $row['batch_name'] ?? "Not Assigned",
-            "progress" => $progress_percent,
-            "status" => $status_text
+            "student_id"       => $row['student_id'],
+            "name"             => $row['student_name'],
+            "email"            => $row['email'],
+            "phone"            => $row['phone'],
+            "trade"            => $row['trade'],
+            "education"        => $row['education'],
+            "course"           => $row['course_title'] ?? "Not Assigned",
+            "batch"            => $row['batch_name'] ?? "Not Assigned",
+            "status"           => ucfirst($row['enrollment_status'] ?? "Unknown"),
+            "enrollment_date"  => $row['enrollment_date'] ?? null,
+            "start_date"       => $row['start_date'] ?? null,
+            "end_date"         => $row['end_date'] ?? null
         ];
     }
 
+    // -------------------------------
+    // ✅ Return Response
+    // -------------------------------
     echo json_encode([
         "status" => true,
+        "message" => "Enrolled students fetched successfully.",
+        "role" => $role,
         "count" => count($students),
         "data" => $students
     ], JSON_PRETTY_PRINT);
+
+    $stmt->close();
+    $conn->close();
 
 } catch (Exception $e) {
     http_response_code(500);
