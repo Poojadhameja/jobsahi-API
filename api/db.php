@@ -5,7 +5,7 @@ require_once $BASE_DIR . "../vendor/autoload.php";
 // Database Configuration
 $dbHost = '127.0.0.1';
 $dbPort = '3306';
-$dbName = 'jobsahi_database';
+$dbName = 'jobsahi_database_shared_db';
 $dbUser = 'root';
 $dbPass = '';
 

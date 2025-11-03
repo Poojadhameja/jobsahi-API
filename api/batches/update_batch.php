@@ -3,6 +3,7 @@
 require_once '../cors.php';
 require_once '../db.php';
 
+
 // ✅ Authenticate JWT (allow only admin and institute)
 $decoded = authenticateJWT(['admin', 'institute']);
 $user_role = strtolower($decoded['role'] ?? '');

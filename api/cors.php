@@ -5,7 +5,8 @@ ini_set('display_errors', 1);
 $BASE_DIR = dirname(__DIR__);
 require_once $BASE_DIR . "../vendor/autoload.php";
 
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
+
 
 // Allow specific prod origins
 $strictAllowed = [
