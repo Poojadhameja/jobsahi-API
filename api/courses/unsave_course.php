@@ -1,5 +1,5 @@
 <?php
-// unsave_job.php - Remove saved job for student (JWT required)
+// unsave_course.php - Remove saved course for student (JWT required)
 require_once '../cors.php';
 
 // ✅ Authenticate JWT (only student can access)
@@ -25,7 +25,7 @@ if (!$student_id) {
 
 // Get input data - Handle both JSON and form data
 $content_type = isset($_SERVER["CONTENT_TYPE"]) ? trim($_SERVER["CONTENT_TYPE"]) : '';
-$job_id = null;
+$course_id = null;
 
 if (strpos($content_type, "application/json") !== false) {
     $raw_input = file_get_contents('php://input');
@@ -36,17 +36,17 @@ if (strpos($content_type, "application/json") !== false) {
         exit;
     }
     
-    $job_id = isset($input['job_id']) ? intval($input['job_id']) : null;
+    $course_id = isset($input['course_id']) ? intval($input['course_id']) : null;
 } else {
-    $job_id = isset($_POST['job_id']) ? intval($_POST['job_id']) : null;
+    $course_id = isset($_POST['course_id']) ? intval($_POST['course_id']) : null;
 }
 
 // Validation
-if (!$job_id || $job_id <= 0) {
+if (!$course_id || $course_id <= 0) {
     echo json_encode([
-        "message" => "Job ID is required and must be a positive integer",
+        "message" => "Course ID is required and must be a positive integer",
         "status" => false,
-        "received_job_id" => $job_id
+        "received_course_id" => $course_id
     ]);
     exit;
 }
@@ -74,19 +74,19 @@ $student_profile = mysqli_fetch_assoc($student_result);
 $student_profile_id = $student_profile['id'];
 mysqli_stmt_close($check_student_stmt);
 
-// ✅ Check if job is saved by this student
-$check_sql = "SELECT sj.id, j.title 
-              FROM saved_jobs sj
-              JOIN jobs j ON sj.job_id = j.id
-              WHERE sj.student_id = ? AND sj.job_id = ?";
+// ✅ Check if course is saved by this student
+$check_sql = "SELECT sc.id, c.title 
+              FROM saved_courses sc
+              JOIN courses c ON sc.course_id = c.id
+              WHERE sc.student_id = ? AND sc.course_id = ?";
 $check_stmt = mysqli_prepare($conn, $check_sql);
-mysqli_stmt_bind_param($check_stmt, "ii", $student_profile_id, $job_id);
+mysqli_stmt_bind_param($check_stmt, "ii", $student_profile_id, $course_id);
 mysqli_stmt_execute($check_stmt);
 $result = mysqli_stmt_get_result($check_stmt);
 
 if (mysqli_num_rows($result) === 0) {
     echo json_encode([
-        "message" => "Job is not saved by you or doesn't exist",
+        "message" => "Course is not saved by you or doesn't exist",
         "status" => false
     ]);
     mysqli_stmt_close($check_stmt);
@@ -94,29 +94,31 @@ if (mysqli_num_rows($result) === 0) {
     exit;
 }
 
-$saved_job_data = mysqli_fetch_assoc($result);
+$saved_course_data = mysqli_fetch_assoc($result);
 mysqli_stmt_close($check_stmt);
 
-// ✅ Hard delete from saved_jobs table
-$delete_sql = "DELETE FROM saved_jobs WHERE student_id = ? AND job_id = ?";
+// ✅ Hard delete from saved_courses table
+$delete_sql = "DELETE FROM saved_courses WHERE student_id = ? AND course_id = ?";
 $delete_stmt = mysqli_prepare($conn, $delete_sql);
-mysqli_stmt_bind_param($delete_stmt, "ii", $student_profile_id, $job_id);
+mysqli_stmt_bind_param($delete_stmt, "ii", $student_profile_id, $course_id);
 
 if (mysqli_stmt_execute($delete_stmt)) {
     echo json_encode([
-        "message" => "Job removed from saved list successfully",
+        "message" => "Course removed from saved list successfully",
         "status" => true,
         "data" => [
-            "job_id" => $job_id,
-            "job_title" => $saved_job_data['title'],
+            "course_id" => $course_id,
+            "course_title" => $saved_course_data['title'],
             "student_id" => $student_profile_id
         ],
         "timestamp" => date('Y-m-d H:i:s')
     ]);
 } else {
-    echo json_encode(["message" => "Failed to remove job: " . mysqli_stmt_error($delete_stmt), "status" => false]);
+    echo json_encode(["message" => "Failed to remove course: " . mysqli_stmt_error($delete_stmt), "status" => false]);
 }
 
 mysqli_stmt_close($delete_stmt);
 mysqli_close($conn);
 ?>
+
+

@@ -3,7 +3,7 @@
 require_once '../cors.php';
 
 // ✅ Authenticate all roles
-$decoded = authenticateJWT(['student', 'admin', 'recruiter', 'institute']);  // decoded JWT payload
+$decoded = authenticateJWT(['student', 'admin', 'recruiter', 'institute']);
 
 // Ensure we got the role correctly
 $userRole = isset($decoded['role']) ? $decoded['role'] : null;
@@ -46,7 +46,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     echo json_encode(["message" => "Only GET requests allowed", "status" => false]);
     exit;
 }
-
 
 if (!$conn) {
     echo json_encode(["message" => "DB connection failed: " . mysqli_connect_error(), "status" => false]);
@@ -129,17 +128,13 @@ $sql = "SELECT
             j.is_featured,
             j.created_at,
             (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS views,
-            -- Company name only
             rp.company_name";
 
-// Add save_status for students using saved_jobs junction table
+// Check if job is saved for students - using saved_jobs table
 if ($userRole === 'student' && $student_profile_id) {
     $sql .= ",
             CASE 
-                WHEN EXISTS (
-                    SELECT 1 FROM saved_jobs sj 
-                    WHERE sj.job_id = j.id AND sj.student_id = ?
-                ) THEN 1 
+                WHEN EXISTS (SELECT 1 FROM saved_jobs sj WHERE sj.student_id = ? AND sj.job_id = j.id) THEN 1 
                 ELSE 0 
             END as is_saved";
 }

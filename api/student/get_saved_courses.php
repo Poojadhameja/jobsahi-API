@@ -1,5 +1,5 @@
 <?php
-// get_saved_jobs.php - Get student's saved jobs list
+// get_saved_courses.php - Get student's saved courses list
 require_once '../cors.php';
 
 // ✅ Authenticate JWT (only student can access)
@@ -60,35 +60,29 @@ $offset = isset($_GET['offset']) ? intval($_GET['offset']) : 0;
 $limit = max(1, min(100, $limit)); // Limit between 1-100
 $offset = max(0, $offset);
 
-// Get saved jobs with job details from saved_jobs table
+// Get saved courses with course details
 $sql = "SELECT 
-            j.id,
-            j.title,
-            j.description,
-            j.location,
-            j.skills_required,
-            j.salary_min,
-            j.salary_max,
-            j.job_type,
-            j.experience_required,
-            j.application_deadline,
-            j.is_remote,
-            j.no_of_vacancies,
-            j.status,
-            j.created_at,
-            sj.id as saved_job_id,
-            sj.saved_at,
-            rp.company_name,
-            rp.company_logo,
-            rp.industry,
-            rp.website
-        FROM saved_jobs sj
-        INNER JOIN jobs j ON sj.job_id = j.id
-        LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
-        WHERE sj.student_id = ?
-        AND j.admin_action = 'approved'
-        AND j.status = 'open'
-        ORDER BY sj.saved_at DESC
+            c.id,
+            c.title,
+            c.description,
+            c.duration,
+            c.mode,
+            c.fee,
+            c.status,
+            c.admin_action,
+            c.created_at,
+            sc.id as saved_course_id,
+            sc.saved_at,
+            cc.category_name,
+            ip.institute_name
+        FROM saved_courses sc
+        INNER JOIN courses c ON sc.course_id = c.id
+        LEFT JOIN course_category cc ON c.category_id = cc.id
+        LEFT JOIN institute_profiles ip ON c.institute_id = ip.id
+        WHERE sc.student_id = ?
+        AND c.admin_action = 'approved'
+        AND c.status = 'active'
+        ORDER BY sc.saved_at DESC
         LIMIT ? OFFSET ?";
 
 $stmt = mysqli_prepare($conn, $sql);
@@ -101,31 +95,21 @@ mysqli_stmt_bind_param($stmt, "iii", $student_id, $limit, $offset);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 
-$saved_jobs = [];
+$saved_courses = [];
 while ($row = mysqli_fetch_assoc($result)) {
-    $saved_jobs[] = [
-        'saved_job_id' => intval($row['saved_job_id']),
-        'job_id' => intval($row['id']),
+    $saved_courses[] = [
+        'saved_course_id' => intval($row['saved_course_id']),
+        'course_id' => intval($row['id']),
         'title' => $row['title'],
         'description' => $row['description'],
-        'location' => $row['location'],
-        'skills_required' => !empty($row['skills_required']) ? array_map('trim', explode(',', $row['skills_required'])) : [],
-        'salary_min' => floatval($row['salary_min']),
-        'salary_max' => floatval($row['salary_max']),
-        'job_type' => $row['job_type'],
-        'experience_required' => $row['experience_required'],
-        'application_deadline' => $row['application_deadline'],
-        'is_remote' => (bool)$row['is_remote'],
-        'no_of_vacancies' => intval($row['no_of_vacancies']),
+        'duration' => $row['duration'],
+        'mode' => $row['mode'],
+        'fee' => floatval($row['fee']),
         'status' => $row['status'],
-        'job_created_at' => $row['created_at'],
+        'course_created_at' => $row['created_at'],
         'saved_at' => $row['saved_at'],
-        'company' => [
-            'company_name' => $row['company_name'],
-            'company_logo' => $row['company_logo'],
-            'industry' => $row['industry'],
-            'website' => $row['website']
-        ]
+        'category_name' => $row['category_name'],
+        'institute_name' => $row['institute_name']
     ];
 }
 
@@ -133,11 +117,11 @@ mysqli_stmt_close($stmt);
 
 // Get total count for pagination
 $count_sql = "SELECT COUNT(*) as total 
-              FROM saved_jobs sj
-              INNER JOIN jobs j ON sj.job_id = j.id
-              WHERE sj.student_id = ?
-              AND j.admin_action = 'approved'
-              AND j.status = 'open'";
+              FROM saved_courses sc
+              INNER JOIN courses c ON sc.course_id = c.id
+              WHERE sc.student_id = ?
+              AND c.admin_action = 'approved'
+              AND c.status = 'active'";
 $count_stmt = mysqli_prepare($conn, $count_sql);
 mysqli_stmt_bind_param($count_stmt, "i", $student_id);
 mysqli_stmt_execute($count_stmt);
@@ -148,9 +132,9 @@ mysqli_stmt_close($count_stmt);
 mysqli_close($conn);
 
 echo json_encode([
-    "message" => "Saved jobs retrieved successfully",
+    "message" => "Saved courses retrieved successfully",
     "status" => true,
-    "data" => $saved_jobs,
+    "data" => $saved_courses,
     "pagination" => [
         "total" => intval($total_count),
         "limit" => $limit,
@@ -160,3 +144,5 @@ echo json_encode([
     "timestamp" => date('Y-m-d H:i:s')
 ]);
 ?>
+
+
