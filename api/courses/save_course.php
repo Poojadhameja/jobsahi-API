@@ -1,5 +1,5 @@
 <?php
-// save_job.php - Save job for student (JWT required)
+// save_course.php - Save course for student (JWT required)
 require_once '../cors.php';
 
 // ✅ Authenticate JWT (only student can access)
@@ -25,7 +25,7 @@ if (!$student_id) {
 
 // Get input data - Handle both JSON and form data
 $content_type = isset($_SERVER["CONTENT_TYPE"]) ? trim($_SERVER["CONTENT_TYPE"]) : '';
-$job_id = null;
+$course_id = null;
 
 if (strpos($content_type, "application/json") !== false) {
     $raw_input = file_get_contents('php://input');
@@ -36,17 +36,17 @@ if (strpos($content_type, "application/json") !== false) {
         exit;
     }
     
-    $job_id = isset($input['job_id']) ? intval($input['job_id']) : null;
+    $course_id = isset($input['course_id']) ? intval($input['course_id']) : null;
 } else {
-    $job_id = isset($_POST['job_id']) ? intval($_POST['job_id']) : null;
+    $course_id = isset($_POST['course_id']) ? intval($_POST['course_id']) : null;
 }
 
 // Validation
-if (!$job_id || $job_id <= 0) {
+if (!$course_id || $course_id <= 0) {
     echo json_encode([
-        "message" => "Job ID is required and must be a positive integer", 
+        "message" => "Course ID is required and must be a positive integer", 
         "status" => false,
-        "received_job_id" => $job_id
+        "received_course_id" => $course_id
     ]);
     exit;
 }
@@ -74,33 +74,33 @@ $student_profile = mysqli_fetch_assoc($student_result);
 $student_profile_id = $student_profile['id'];
 mysqli_stmt_close($check_student_stmt);
 
-// ✅ Check if job exists and is approved
-$check_job_sql = "SELECT id, title FROM jobs WHERE id = ? AND status = 'open' AND admin_action = 'approved'";
-$check_job_stmt = mysqli_prepare($conn, $check_job_sql);
-mysqli_stmt_bind_param($check_job_stmt, "i", $job_id);
-mysqli_stmt_execute($check_job_stmt);
-$job_result = mysqli_stmt_get_result($check_job_stmt);
+// ✅ Check if course exists and is approved/active
+$check_course_sql = "SELECT id, title FROM courses WHERE id = ? AND status = 'active' AND admin_action = 'approved'";
+$check_course_stmt = mysqli_prepare($conn, $check_course_sql);
+mysqli_stmt_bind_param($check_course_stmt, "i", $course_id);
+mysqli_stmt_execute($check_course_stmt);
+$course_result = mysqli_stmt_get_result($check_course_stmt);
 
-if (mysqli_num_rows($job_result) === 0) {
-    echo json_encode(["message" => "Job not found or not available for saving", "status" => false]);
-    mysqli_stmt_close($check_job_stmt);
+if (mysqli_num_rows($course_result) === 0) {
+    echo json_encode(["message" => "Course not found or not available for saving", "status" => false]);
+    mysqli_stmt_close($check_course_stmt);
     mysqli_close($conn);
     exit;
 }
 
-$job_data = mysqli_fetch_assoc($job_result);
-mysqli_stmt_close($check_job_stmt);
+$course_data = mysqli_fetch_assoc($course_result);
+mysqli_stmt_close($check_course_stmt);
 
 // ✅ Check if already saved by this student
-$check_saved_sql = "SELECT id FROM saved_jobs WHERE student_id = ? AND job_id = ?";
+$check_saved_sql = "SELECT id FROM saved_courses WHERE student_id = ? AND course_id = ?";
 $check_saved_stmt = mysqli_prepare($conn, $check_saved_sql);
-mysqli_stmt_bind_param($check_saved_stmt, "ii", $student_profile_id, $job_id);
+mysqli_stmt_bind_param($check_saved_stmt, "ii", $student_profile_id, $course_id);
 mysqli_stmt_execute($check_saved_stmt);
 $saved_result = mysqli_stmt_get_result($check_saved_stmt);
 
 if (mysqli_num_rows($saved_result) > 0) {
     echo json_encode([
-        "message" => "Job is already saved by you", 
+        "message" => "Course is already saved by you", 
         "status" => false,
         "already_saved" => true
     ]);
@@ -110,53 +110,55 @@ if (mysqli_num_rows($saved_result) > 0) {
 }
 mysqli_stmt_close($check_saved_stmt);
 
-// ✅ Insert into saved_jobs table
-$insert_sql = "INSERT INTO saved_jobs (student_id, job_id, saved_at) VALUES (?, ?, NOW())";
+// ✅ Insert into saved_courses table
+$insert_sql = "INSERT INTO saved_courses (student_id, course_id, saved_at) VALUES (?, ?, NOW())";
 $insert_stmt = mysqli_prepare($conn, $insert_sql);
-mysqli_stmt_bind_param($insert_stmt, "ii", $student_profile_id, $job_id);
+mysqli_stmt_bind_param($insert_stmt, "ii", $student_profile_id, $course_id);
 
 if (mysqli_stmt_execute($insert_stmt)) {
-    $saved_job_id = mysqli_insert_id($conn);
+    $saved_course_id = mysqli_insert_id($conn);
     
-    // Fetch saved job details with job info
-    $get_saved_sql = "SELECT sj.id, sj.student_id, sj.job_id, sj.saved_at,
-                             j.title, j.location, j.job_type, j.salary_min, j.salary_max
-                      FROM saved_jobs sj
-                      JOIN jobs j ON sj.job_id = j.id
-                      WHERE sj.id = ?";
+    // Fetch saved course details with course info
+    $get_saved_sql = "SELECT sc.id, sc.student_id, sc.course_id, sc.saved_at,
+                             c.title, c.duration, c.mode, c.fee
+                      FROM saved_courses sc
+                      JOIN courses c ON sc.course_id = c.id
+                      WHERE sc.id = ?";
     $get_saved_stmt = mysqli_prepare($conn, $get_saved_sql);
     
     if ($get_saved_stmt) {
-        mysqli_stmt_bind_param($get_saved_stmt, "i", $saved_job_id);
+        mysqli_stmt_bind_param($get_saved_stmt, "i", $saved_course_id);
         mysqli_stmt_execute($get_saved_stmt);
-        $saved_job_result = mysqli_stmt_get_result($get_saved_stmt);
-        $saved_job_data = mysqli_fetch_assoc($saved_job_result);
+        $saved_course_result = mysqli_stmt_get_result($get_saved_stmt);
+        $saved_course_data = mysqli_fetch_assoc($saved_course_result);
 
         echo json_encode([
-            "message" => "Job saved successfully",
+            "message" => "Course saved successfully",
             "status" => true,
             "data" => [
-                "saved_job_id" => intval($saved_job_data['id']),
-                "job_id" => intval($saved_job_data['job_id']),
-                "job_title" => $saved_job_data['title'],
-                "student_id" => intval($saved_job_data['student_id']),
-                "saved_at" => $saved_job_data['saved_at']
+                "saved_course_id" => intval($saved_course_data['id']),
+                "course_id" => intval($saved_course_data['course_id']),
+                "course_title" => $saved_course_data['title'],
+                "student_id" => intval($saved_course_data['student_id']),
+                "saved_at" => $saved_course_data['saved_at']
             ],
             "timestamp" => date('Y-m-d H:i:s')
         ]);
         mysqli_stmt_close($get_saved_stmt);
     } else {
         echo json_encode([
-            "message" => "Job saved successfully but couldn't fetch details",
+            "message" => "Course saved successfully but couldn't fetch details",
             "status" => true,
-            "saved_job_id" => $saved_job_id,
+            "saved_course_id" => $saved_course_id,
             "timestamp" => date('Y-m-d H:i:s')
         ]);
     }
 } else {
-    echo json_encode(["message" => "Failed to save job: " . mysqli_stmt_error($insert_stmt), "status" => false]);
+    echo json_encode(["message" => "Failed to save course: " . mysqli_stmt_error($insert_stmt), "status" => false]);
 }
 
 mysqli_stmt_close($insert_stmt);
 mysqli_close($conn);
 ?>
+
+

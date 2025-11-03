@@ -6,35 +6,37 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     public function up(): void {
-        Schema::create('saved_jobs', function (Blueprint $table) {
+        Schema::create('saved_courses', function (Blueprint $table) {
             $table->id();
-            
-            // ✅ Foreign Keys
+
+            // Foreign Keys
             $table->unsignedBigInteger('student_id');
-            $table->unsignedBigInteger('job_id');
-            
-            // ✅ Timestamps
+            $table->unsignedBigInteger('course_id');
+
+            // Timestamps
             $table->dateTime('saved_at')->useCurrent();
-            
-            // ✅ Foreign Key Constraints
+
+            // Constraints
             $table->foreign('student_id')
                 ->references('id')
                 ->on('student_profiles')
                 ->onDelete('cascade');
-                
-            $table->foreign('job_id')
+
+            $table->foreign('course_id')
                 ->references('id')
-                ->on('jobs')
+                ->on('courses')
                 ->onDelete('cascade');
-            
-            // ✅ Indexes
+
+            // Indexes
             $table->index('student_id');
-            $table->index('job_id');
+            $table->index('course_id');
+            $table->unique(['student_id', 'course_id']);
         });
     }
 
     public function down(): void {
-        Schema::dropIfExists('saved_jobs');
+        Schema::dropIfExists('saved_courses');
     }
 };
+
 
