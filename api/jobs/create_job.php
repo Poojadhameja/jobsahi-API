@@ -51,7 +51,7 @@ $experience_required = $input['experience_required'] ?? '';
 $application_deadline = $input['application_deadline'] ?? null;
 $is_remote = $input['is_remote'] ?? 0;
 $no_of_vacancies = $input['no_of_vacancies'] ?? 1;
-$status = 'open';
+$vacancyStatus = $input['vacancyStatus'] ?? '';
 $admin_action = 'pending';
 
 // Recruiter info
@@ -81,27 +81,32 @@ try {
     }
 
     // 2️⃣ Insert into jobs (without company_info_id first)
-    $job_sql = "INSERT INTO jobs (recruiter_id, category_id, title, description, location, skills_required, salary_min, salary_max, job_type, experience_required, application_deadline, is_remote, no_of_vacancies, status, admin_action)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-    $job_stmt = $conn->prepare($job_sql);
-    $job_stmt->bind_param(
-        "iissssddsssiiis",
-        $recruiter_id,
-        $category_id,
-        $title,
-        $description,
-        $location,
-        $skills_required,
-        $salary_min,
-        $salary_max,
-        $job_type,
-        $experience_required,
-        $application_deadline,
-        $is_remote,
-        $no_of_vacancies,
-        $status,
-        $admin_action
-    );
+    $job_sql = "INSERT INTO jobs (
+    recruiter_id, category_id, title, description, location, skills_required,
+    salary_min, salary_max, job_type, experience_required, application_deadline,
+    is_remote, no_of_vacancies, status, admin_action
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+$job_stmt = $conn->prepare($job_sql);
+$job_stmt->bind_param(
+    "iissssddsssiiss",
+    $recruiter_id,
+    $category_id,
+    $title,
+    $description,
+    $location,
+    $skills_required,
+    $salary_min,
+    $salary_max,
+    $job_type,
+    $experience_required,
+    $application_deadline,
+    $is_remote,
+    $no_of_vacancies,
+    $vacancyStatus,
+    $admin_action
+);
+
     $job_stmt->execute();
     $job_id = $job_stmt->insert_id;
     $job_stmt->close();

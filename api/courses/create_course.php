@@ -105,21 +105,48 @@ $media_json = !empty($media_files) ? json_encode($media_files) : '';
 $category_name = !empty($category_input) ? $category_input : 'Technical';
 $category_id = null;
 
+// $stmt = $conn->prepare("SELECT id FROM course_category WHERE category_name = ? LIMIT 1");
+// $stmt->bind_param("s", $category_name);
+// $stmt->execute();
+// $result = $stmt->get_result();
+// if ($result->num_rows > 0) {
+//     $row = $result->fetch_assoc();
+//     $category_id = $row['id'];
+// } else {
+//     $stmt->close();
+//     $stmt = $conn->prepare("INSERT INTO course_category (category_name) VALUES (?)");
+//     $stmt->bind_param("s", $category_name);
+//     $stmt->execute();
+//     $category_id = $stmt->insert_id;
+// }
+// $stmt->close();
+// ✅ Ensure category exists
+$category_name = !empty($category_input) ? $category_input : 'Technical';
+$category_id = null;
+
 $stmt = $conn->prepare("SELECT id FROM course_category WHERE category_name = ? LIMIT 1");
 $stmt->bind_param("s", $category_name);
 $stmt->execute();
 $result = $stmt->get_result();
-if ($result->num_rows > 0) {
+
+if ($result && $result->num_rows > 0) {
     $row = $result->fetch_assoc();
     $category_id = $row['id'];
-} else {
+    $stmt->free_result(); // 👈 clear previous result buffer
     $stmt->close();
-    $stmt = $conn->prepare("INSERT INTO course_category (category_name) VALUES (?)");
-    $stmt->bind_param("s", $category_name);
-    $stmt->execute();
-    $category_id = $stmt->insert_id;
+} else {
+    $stmt->close(); // 👈 close old one completely
+    $insertStmt = $conn->prepare("INSERT INTO course_category (category_name) VALUES (?)");
+    $insertStmt->bind_param("s", $category_name);
+    if ($insertStmt->execute()) {
+        $category_id = $insertStmt->insert_id;
+    } else {
+        echo json_encode(["status" => false, "message" => "Category insert failed", "error" => $insertStmt->error]);
+        exit();
+    }
+    $insertStmt->close();
 }
-$stmt->close();
+
 
 // ✅ Insert course record
 $stmt = $conn->prepare("

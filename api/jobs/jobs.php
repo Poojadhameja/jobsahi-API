@@ -59,7 +59,7 @@ $params = [];
 $types  = "";
 
 // ✅ Role-based filter for admin_action
-if ($userRole === 'admin') {
+if (in_array($userRole, ['admin', 'recruiter']))  {
     // Admin sees both pending + approved
     $filters[] = "(j.admin_action = 'pending' OR j.admin_action = 'approved')";
 } else {
