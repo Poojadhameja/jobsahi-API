@@ -1,156 +1,137 @@
 <?php
-// get_courses_feedback.php - Fetch feedback for a course with role-based visibility
+// get_courses_feedback.php - Fetch all or specific course feedback (admin & student)
 require_once '../cors.php';
+require_once '../db.php';
 
-// Authenticate and get user info (admin, student)
-$user = authenticateJWT(['admin','student']); 
+// ✅ Authenticate roles
+$user = authenticateJWT(['admin', 'student']);
 $user_role = $user['role'] ?? null;
 
-// GET THE COURSE ID FROM REQUEST - THIS WAS MISSING!
+// ✅ Optional course ID
 $course_id = isset($_GET['id']) ? intval($_GET['id']) : null;
 
-// Validate course_id
-if (!$course_id || $course_id <= 0) {
-    http_response_code(400);
-    echo json_encode([
-        "status" => false,
-        "message" => "Invalid or missing course ID"
-    ]);
-    exit();
-}
-
-// Optional pagination/filter params
-$page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
-$limit = isset($_GET['limit']) ? min(100, max(1, intval($_GET['limit']))) : 10;
+// ✅ Optional filters
 $rating_filter = isset($_GET['rating']) && is_numeric($_GET['rating']) ? intval($_GET['rating']) : null;
 $order_by = isset($_GET['order_by']) && in_array($_GET['order_by'], ['created_at', 'rating']) ? $_GET['order_by'] : 'created_at';
 $order_dir = isset($_GET['order_dir']) && strtoupper($_GET['order_dir']) === 'ASC' ? 'ASC' : 'DESC';
-$offset = ($page - 1) * $limit;
 
-// Check if course exists
-$course_check_sql = "SELECT id FROM courses WHERE id = ?";
-$course_stmt = mysqli_prepare($conn, $course_check_sql);
-mysqli_stmt_bind_param($course_stmt, "i", $course_id);
-mysqli_stmt_execute($course_stmt);
-$course_result = mysqli_stmt_get_result($course_stmt);
+// ✅ Build base query
+$where_conditions = [];
+$params = [];
+$param_types = "";
 
-if (mysqli_num_rows($course_result) == 0) {
-    http_response_code(404);
-    echo json_encode([
-        "status" => false,
-        "message" => "Course not found"
-    ]);
-    mysqli_stmt_close($course_stmt);
-    mysqli_close($conn);
-    exit();
+// Add course filter (if provided)
+if ($course_id) {
+    $where_conditions[] = "cf.course_id = ?";
+    $params[] = $course_id;
+    $param_types .= "i";
 }
-mysqli_stmt_close($course_stmt);
 
-// Build WHERE clause
-$where_conditions = ["course_id = ?"];
-$params = [$course_id];
-$param_types = "i";
-
-// Rating filter
+// Add rating filter
 if ($rating_filter !== null && $rating_filter >= 1 && $rating_filter <= 5) {
-    $where_conditions[] = "rating = ?";
+    $where_conditions[] = "cf.rating = ?";
     $params[] = $rating_filter;
     $param_types .= "i";
 }
 
-// Role-based admin_action filter
+// Role-based visibility
 if ($user_role === 'admin') {
-    // Admin sees all: pending + approved
-    $where_conditions[] = "(admin_action = 'approved' OR admin_action = 'pending')";
+    $where_conditions[] = "(cf.admin_action = 'approved' OR cf.admin_action = 'pending')";
 } else {
-    // Others see only approved
-    $where_conditions[] = "admin_action = 'approved'";
+    $where_conditions[] = "cf.admin_action = 'approved'";
 }
 
-$where_clause = implode(" AND ", $where_conditions);
+$where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
-// Get total count for pagination
-$count_sql = "SELECT COUNT(*) as total FROM course_feedback WHERE $where_clause";
-$count_stmt = mysqli_prepare($conn, $count_sql);
-if (!empty($params)) {
-    mysqli_stmt_bind_param($count_stmt, $param_types, ...$params);
-}
-mysqli_stmt_execute($count_stmt);
-$count_result = mysqli_stmt_get_result($count_stmt);
-$total_feedback = mysqli_fetch_assoc($count_result)['total'];
-mysqli_stmt_close($count_stmt);
+// ✅ Fetch feedback data (no limit or offset)
+$sql = "
+    SELECT 
+        cf.id,
+        cf.course_id,
+        c.title AS course_name,
+        u.user_name AS student_name,
+        cf.rating,
+        cf.feedback,
+        cf.admin_action,
+        cf.created_at
+    FROM course_feedback cf
+    JOIN student_profiles sp ON cf.student_id = sp.id
+    JOIN users u ON sp.user_id = u.id
+    JOIN courses c ON cf.course_id = c.id
+    $where_clause
+    ORDER BY cf.$order_by $order_dir
+";
 
-// Get feedback records
-$sql = "SELECT 
-            id,
-            student_id,
-            rating,
-            feedback,
-            admin_action,
-            created_at
-        FROM course_feedback
-        WHERE $where_clause
-        ORDER BY $order_by $order_dir
-        LIMIT ? OFFSET ?";
+$stmt = $conn->prepare($sql);
+if (!empty($params)) $stmt->bind_param($param_types, ...$params);
+$stmt->execute();
+$result = $stmt->get_result();
 
-$params[] = $limit;
-$params[] = $offset;
-$param_types .= "ii";
-
-$stmt = mysqli_prepare($conn, $sql);
-mysqli_stmt_bind_param($stmt, $param_types, ...$params);
-mysqli_stmt_execute($stmt);
-$result = mysqli_stmt_get_result($stmt);
-
-$feedback_list = [];
-while ($row = mysqli_fetch_assoc($result)) {
-    $feedback_list[] = [
-        "id" => intval($row['id']),
-        "student_id" => intval($row['student_id']),
+// ✅ Structure data
+$feedback_data = [];
+while ($row = $result->fetch_assoc()) {
+    $feedback_data[] = [
+        "feedback_id" => intval($row['id']),
+        "course_id" => intval($row['course_id']),
+        "course_name" => $row['course_name'],
+        "student_name" => $row['student_name'],
         "rating" => intval($row['rating']),
         "feedback" => $row['feedback'],
         "admin_action" => $row['admin_action'],
         "created_at" => $row['created_at']
     ];
 }
-mysqli_stmt_close($stmt);
+$stmt->close();
 
-// Pagination info
-$total_pages = ceil($total_feedback / $limit);
+// ✅ If course_id is provided → show extra stats
+if ($course_id) {
+    // Average rating
+    $avg_sql = "
+        SELECT AVG(rating) AS avg_rating 
+        FROM course_feedback 
+        WHERE course_id = ? AND " . 
+        ($user_role === 'admin' ? "(admin_action IN ('approved','pending'))" : "admin_action = 'approved'");
+    $avg_stmt = $conn->prepare($avg_sql);
+    $avg_stmt->bind_param("i", $course_id);
+    $avg_stmt->execute();
+    $avg_res = $avg_stmt->get_result();
+    $avg_rating = round($avg_res->fetch_assoc()['avg_rating'], 2);
+    $avg_stmt->close();
 
-// Average rating
-$avg_sql = "SELECT AVG(rating) as avg_rating FROM course_feedback WHERE course_id = ? AND " . ($user_role === 'admin' ? "(admin_action = 'approved' OR admin_action = 'pending')" : "admin_action = 'approved'");
-$avg_stmt = mysqli_prepare($conn, $avg_sql);
-mysqli_stmt_bind_param($avg_stmt, "i", $course_id);
-mysqli_stmt_execute($avg_stmt);
-$avg_result = mysqli_stmt_get_result($avg_stmt);
-$avg_rating = mysqli_fetch_assoc($avg_result)['avg_rating'];
-mysqli_stmt_close($avg_stmt);
-
-// Rating distribution
-$dist_sql = "SELECT rating, COUNT(*) as count 
-             FROM course_feedback 
-             WHERE course_id = ? AND " . ($user_role === 'admin' ? "(admin_action = 'approved' OR admin_action = 'pending')" : "admin_action = 'approved'") . " 
-             GROUP BY rating ORDER BY rating DESC";
-$rating_distribution = [];
-$dist_stmt = mysqli_prepare($conn, $dist_sql);
-mysqli_stmt_bind_param($dist_stmt, "i", $course_id);
-mysqli_stmt_execute($dist_stmt);
-$dist_result = mysqli_stmt_get_result($dist_stmt);
-while ($row = mysqli_fetch_assoc($dist_result)) {
-    $rating_distribution[intval($row['rating'])] = intval($row['count']);
+    // Rating distribution
+    $dist_sql = "
+        SELECT rating, COUNT(*) AS count 
+        FROM course_feedback 
+        WHERE course_id = ? AND " . 
+        ($user_role === 'admin' ? "(admin_action IN ('approved','pending'))" : "admin_action = 'approved'") . " 
+        GROUP BY rating ORDER BY rating DESC";
+    $dist_stmt = $conn->prepare($dist_sql);
+    $dist_stmt->bind_param("i", $course_id);
+    $dist_stmt->execute();
+    $dist_res = $dist_stmt->get_result();
+    $rating_distribution = [];
+    while ($r = $dist_res->fetch_assoc()) {
+        $rating_distribution[intval($r['rating'])] = intval($r['count']);
+    }
+    $dist_stmt->close();
 }
-mysqli_stmt_close($dist_stmt);
 
 mysqli_close($conn);
 
-// Response
-http_response_code(200);
-echo json_encode([
+// ✅ Final Response
+$response = [
     "status" => true,
-    "data" => [
-        "course_id" => $course_id,
-        "feedback" => $feedback_list
-    ]
-]);
+    "message" => $course_id ? "Course feedback fetched successfully" : "All feedback fetched successfully",
+    "data" => $feedback_data
+];
+
+if ($course_id) {
+    $response["stats"] = [
+        "average_rating" => $avg_rating ?? 0,
+        "rating_distribution" => $rating_distribution ?? []
+    ];
+}
+
+http_response_code(200);
+echo json_encode($response);
 ?>

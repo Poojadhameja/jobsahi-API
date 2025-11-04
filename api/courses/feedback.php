@@ -1,42 +1,65 @@
 <?php
-// courses_feedback.php - Submit and fetch course feedback with role-based visibility
+// courses_feedback.php - Create and update course feedback (POST, PUT only)
 require_once '../cors.php';
+require_once '../db.php';
 
-// Parse request method
+// Detect HTTP method
 $method = $_SERVER['REQUEST_METHOD'];
 
+// ✅ Allow only POST and PUT methods
+if (!in_array($method, ['POST', 'PUT'])) {
+    http_response_code(405);
+    echo json_encode([
+        "status" => false,
+        "message" => "Only POST and PUT methods are allowed"
+    ]);
+    exit();
+}
+
 if ($method === 'POST') {
-    // Authenticate and check for student role
-    authenticateJWT('student');
 
-    // Validate course_id from URL: /api/v1/courses/{id}/feedback
-    if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
-        http_response_code(400);
-        echo json_encode([
-            "status" => false,
-            "message" => "Invalid or missing course ID"
-        ]);
-        exit();
-    }
-    $course_id = intval($_GET['id']);
+    // ✅ Authenticate (only students can post feedback)
+    $decoded = authenticateJWT(['student']);
+    $student_user_id = intval($decoded['user_id']);
 
-    // Parse JSON body
+    // ✅ Parse JSON body
     $data = json_decode(file_get_contents("php://input"), true);
 
-    if (!$data || !isset($data['student_id']) || !isset($data['rating']) || !isset($data['feedback'])) {
+    if (!$data || !isset($data['course_id']) || !isset($data['rating']) || !isset($data['feedback'])) {
         http_response_code(400);
         echo json_encode([
             "status" => false,
-            "message" => "Required fields: student_id, rating, feedback"
+            "message" => "Required fields: course_id, rating, feedback"
         ]);
         exit();
     }
 
-    $student_id = intval($data['student_id']);
+    $course_id = intval($data['course_id']);
     $rating = intval($data['rating']);
     $feedback = trim($data['feedback']);
+    $admin_action = isset($data['admin_action']) && !empty(trim($data['admin_action'])) 
+                    ? trim($data['admin_action']) 
+                    : 'approved';  // ✅ Default to approved if not provided
 
-    // Validate rating range
+    // ✅ Fetch student_id from student_profiles using user_id
+    $stmt = $conn->prepare("SELECT id FROM student_profiles WHERE user_id = ?");
+    $stmt->bind_param("i", $student_user_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+
+    if ($res->num_rows === 0) {
+        echo json_encode([
+            "status" => false,
+            "message" => "Student profile not found for this user"
+        ]);
+        exit();
+    }
+
+    $student = $res->fetch_assoc();
+    $student_id = intval($student['id']);
+    $stmt->close();
+
+    // ✅ Validate rating range
     if ($rating < 1 || $rating > 5) {
         http_response_code(400);
         echo json_encode([
@@ -46,89 +69,122 @@ if ($method === 'POST') {
         exit();
     }
 
-    // Insert into course_feedback with default admin_action = 'pending'
-    $sql = "INSERT INTO course_feedback (course_id, student_id, rating, feedback, admin_action, created_at) 
-            VALUES (?, ?, ?, ?, 'pending', NOW())";
+    // ✅ Insert feedback
+    $sql = "INSERT INTO course_feedback (course_id, student_id, rating, feedback, admin_action, created_at)
+            VALUES (?, ?, ?, ?, ?, NOW())";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("iiiss", $course_id, $student_id, $rating, $feedback, $admin_action);
 
-    if ($stmt = mysqli_prepare($conn, $sql)) {
-        mysqli_stmt_bind_param($stmt, "iiis", $course_id, $student_id, $rating, $feedback);
-
-        if (mysqli_stmt_execute($stmt)) {
-            http_response_code(201);
-            echo json_encode([
-                "status" => true,
-                "message" => "Feedback submitted successfully"
-            ]);
-        } else {
-            http_response_code(500);
-            echo json_encode([
-                "status" => false,
-                "message" => "Database error: " . mysqli_error($conn)
-            ]);
-        }
-        mysqli_stmt_close($stmt);
+    if ($stmt->execute()) {
+        http_response_code(201);
+        echo json_encode([
+            "status" => true,
+            "message" => "Feedback submitted successfully",
+            "admin_action" => $admin_action
+        ]);
     } else {
         http_response_code(500);
         echo json_encode([
             "status" => false,
-            "message" => "Failed to prepare statement: " . mysqli_error($conn)
+            "message" => "Database error: " . $stmt->error
         ]);
     }
-} elseif ($method === 'GET') {
-    // Authenticate any role (admin, student, recruiter, institute)
-    $user_role = authenticateJWT(['admin', 'student', 'recruiter', 'institute']);
+    $stmt->close();
 
-    // Validate course_id from URL: /api/v1/courses/{id}/feedback
-    if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
-        http_response_code(400);
+} elseif ($method === 'PUT') {
+    // ✅ Update feedback by student or admin
+    $decoded = authenticateJWT(['admin', 'student']);
+    $user_role = strtolower($decoded['role']);
+    $user_id = intval($decoded['user_id']);
+
+    // ✅ Parse body
+    $data = json_decode(file_get_contents("php://input"), true);
+
+    if (!$data || !isset($data['feedback_id'])) {
         echo json_encode([
             "status" => false,
-            "message" => "Invalid or missing course ID"
+            "message" => "feedback_id is required"
         ]);
         exit();
     }
-    $course_id = intval($_GET['id']);
 
-    // Build SQL with role-based visibility
-    if ($user_role === 'admin') {
-        // Admin sees all feedback
-        $sql = "SELECT * FROM course_feedback WHERE course_id = ?";
-    } else {
-        // Others see only approved feedback
-        $sql = "SELECT * FROM course_feedback WHERE course_id = ? AND admin_action = 'approved'";
+    $feedback_id = intval($data['feedback_id']);
+    $rating = isset($data['rating']) ? intval($data['rating']) : null;
+    $feedback = isset($data['feedback']) ? trim($data['feedback']) : null;
+    $admin_action = isset($data['admin_action']) ? trim($data['admin_action']) : null;
+
+    // ✅ Check permission: student can update only their own feedback
+    if ($user_role === 'student') {
+        $check_stmt = $conn->prepare("
+            SELECT cf.id 
+            FROM course_feedback cf
+            JOIN student_profiles sp ON cf.student_id = sp.id
+            WHERE cf.id = ? AND sp.user_id = ?
+        ");
+        $check_stmt->bind_param("ii", $feedback_id, $user_id);
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
+
+        if ($check_result->num_rows === 0) {
+            echo json_encode([
+                "status" => false,
+                "message" => "You can only update your own feedback"
+            ]);
+            exit();
+        }
     }
 
-    if ($stmt = mysqli_prepare($conn, $sql)) {
-        mysqli_stmt_bind_param($stmt, "i", $course_id);
-        mysqli_stmt_execute($stmt);
-        $result = mysqli_stmt_get_result($stmt);
+    // ✅ Build dynamic update query
+    $fields = [];
+    $params = [];
+    $types = "";
 
-        $feedbacks = [];
-        while ($row = mysqli_fetch_assoc($result)) {
-            $feedbacks[] = $row;
-        }
+    if ($rating !== null) {
+        $fields[] = "rating = ?";
+        $params[] = $rating;
+        $types .= "i";
+    }
+    if ($feedback !== null) {
+        $fields[] = "feedback = ?";
+        $params[] = $feedback;
+        $types .= "s";
+    }
+    if ($admin_action !== null && $user_role === 'admin') {
+        $fields[] = "admin_action = ?";
+        $params[] = $admin_action;
+        $types .= "s";
+    }
 
-        http_response_code(200);
-        echo json_encode([
-            "status" => true,
-            "data" => $feedbacks
-        ]);
-
-        mysqli_stmt_close($stmt);
-    } else {
-        http_response_code(500);
+    if (empty($fields)) {
         echo json_encode([
             "status" => false,
-            "message" => "Failed to fetch feedback: " . mysqli_error($conn)
+            "message" => "No fields to update"
+        ]);
+        exit();
+    }
+
+    $query = "UPDATE course_feedback SET " . implode(", ", $fields) . ", modified_at = NOW() WHERE id = ?";
+    $params[] = $feedback_id;
+    $types .= "i";
+
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param($types, ...$params);
+
+    if ($stmt->execute()) {
+        echo json_encode([
+            "status" => true,
+            "message" => "Feedback updated successfully"
+        ]);
+    } else {
+        echo json_encode([
+            "status" => false,
+            "message" => "Failed to update feedback",
+            "error" => $stmt->error
         ]);
     }
-} else {
-    http_response_code(405);
-    echo json_encode([
-        "status" => false,
-        "message" => "Only POST and GET methods are allowed"
-    ]);
+
+    $stmt->close();
 }
 
-mysqli_close($conn);
+$conn->close();
 ?>

@@ -52,6 +52,79 @@ if (!$conn) {
     exit;
 }
 
+// ✅ Check if job ID is passed (job_by_id)
+$job_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+
+if ($job_id > 0) {
+    // Single Job Details Mode
+    $sql = "SELECT 
+                j.id,
+                j.recruiter_id,
+                j.title,
+                j.description,
+                j.location,
+                j.skills_required,
+                j.salary_min,
+                j.salary_max,
+                j.job_type,
+                j.experience_required,
+                j.application_deadline,
+                j.is_remote,
+                j.no_of_vacancies,
+                j.status,
+                j.admin_action,
+                j.is_featured,
+                j.created_at,
+                rp.company_name,
+                (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS views
+            FROM jobs j
+            LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
+            WHERE j.id = ?";
+
+    // ✅ Role-based visibility filter
+    if (!in_array($userRole, ['admin', 'recruiter'])) {
+        $sql .= " AND j.admin_action = 'approved'";
+    }
+
+    $stmt = mysqli_prepare($conn, $sql);
+    mysqli_stmt_bind_param($stmt, "i", $job_id);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+
+    if (mysqli_num_rows($result) === 0) {
+        echo json_encode(["status" => false, "message" => "Job not found or not accessible"]);
+        exit;
+    }
+
+    $job = mysqli_fetch_assoc($result);
+
+    // ✅ Add "is_saved" flag for students
+    if ($userRole === 'student' && $student_profile_id) {
+        $check_saved_sql = "SELECT 1 FROM saved_jobs WHERE student_id = ? AND job_id = ?";
+        $check_stmt = mysqli_prepare($conn, $check_saved_sql);
+        mysqli_stmt_bind_param($check_stmt, "ii", $student_profile_id, $job_id);
+        mysqli_stmt_execute($check_stmt);
+        $check_result = mysqli_stmt_get_result($check_stmt);
+        $job['is_saved'] = (mysqli_num_rows($check_result) > 0) ? 1 : 0;
+        mysqli_stmt_close($check_stmt);
+    }
+
+    mysqli_stmt_close($stmt);
+    mysqli_close($conn);
+
+    echo json_encode([
+        "status" => true,
+        "message" => "Job details fetched successfully",
+        "data" => $job,
+        "timestamp" => date('Y-m-d H:i:s')
+    ]);
+    exit;
+}
+
+// -------------------------------------------------------------
+// ✅ ELSE: Default Listing (Existing Logic)
+// -------------------------------------------------------------
+
 // Collect filters from query params
 $filters = [];
 $params = [];

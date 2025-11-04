@@ -29,7 +29,7 @@ try {
     }
 
     // ✅ If no course_id → overview; if course_id passed → detailed view
-    $course_id = isset($_GET['course_id']) ? intval($_GET['course_id']) : 0;
+    $course_id = isset($_GET['id']) ? intval($_GET['id']) : (isset($_GET['course_id']) ? intval($_GET['course_id']) : 0);
     $current_date = new DateTime();
 
     // ----------------------------------------------------------
