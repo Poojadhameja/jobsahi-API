@@ -1,5 +1,5 @@
 <?php
-// get_course_batch_students_nested.php
+// get_course_batch_students.php
 require_once '../cors.php';
 require_once '../db.php';
 
