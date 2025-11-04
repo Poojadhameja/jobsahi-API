@@ -2,53 +2,39 @@
 // schedule_interview.php - Schedule interview for candidate (Admin, Recruiter access with role-based visibility)
 require_once '../cors.php';
 
-// ✅ Authenticate JWT and allow multiple roles
+// ✅ Authenticate JWT (admin + recruiter)
 $decoded = authenticateJWT(['admin', 'recruiter']); 
 $user_id = $decoded['user_id'];
+$user_role = $decoded['role'];
 
-// Get application ID from URL parameter
-$application_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+// ✅ Get POST data
+$data = json_decode(file_get_contents("php://input"), true);
+
+$application_id = isset($data['application_id']) ? intval($data['application_id']) : 0;
+$scheduled_at   = isset($data['scheduled_at']) ? trim($data['scheduled_at']) : '';
+$mode           = isset($data['mode']) ? trim($data['mode']) : 'online';
+$location       = isset($data['location']) ? trim($data['location']) : '';
+$status         = isset($data['status']) ? trim($data['status']) : 'scheduled';
+$feedback       = isset($data['feedback']) ? trim($data['feedback']) : '';
 
 if ($application_id <= 0) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Invalid application ID"
-    ]);
+    echo json_encode(["status" => false, "message" => "Missing or invalid application_id"]);
     exit();
 }
 
-// Get POST data
-$data = json_decode(file_get_contents("php://input"), true);
-
-$scheduled_at = isset($data['scheduled_at']) ? $data['scheduled_at'] : '';
-$mode = isset($data['mode']) ? $data['mode'] : 'online'; // online, offline, phone
-$location = isset($data['location']) ? $data['location'] : '';
-$status = isset($data['status']) ? $data['status'] : 'scheduled';
-$feedback = isset($data['feedback']) ? $data['feedback'] : '';
-
-// Validate required fields
 if (empty($scheduled_at)) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Scheduled date and time are required"
-    ]);
+    echo json_encode(["status" => false, "message" => "Scheduled date and time are required"]);
     exit();
 }
 
 try {
-    // ✅ Visibility filter using admin_action
+    // ✅ Step 1: Admin can see all; Recruiter only approved apps
     if ($user_role === 'admin') {
-        // Admin can see pending & approved
-        $check_sql = "SELECT a.id, a.admin_action 
-                      FROM applications a
-                      WHERE a.id = ?";
+        $check_sql = "SELECT id, admin_action FROM applications WHERE id = ?";
         $check_stmt = $conn->prepare($check_sql);
         $check_stmt->bind_param("i", $application_id);
     } else {
-        // Recruiter, Institute, Student → Only see if admin_action = 'approved'
-        $check_sql = "SELECT a.id, a.admin_action 
-                      FROM applications a
-                      WHERE a.id = ? AND a.admin_action = 'approved'";
+        $check_sql = "SELECT id, admin_action FROM applications WHERE id = ? AND admin_action = 'approved'";
         $check_stmt = $conn->prepare($check_sql);
         $check_stmt->bind_param("i", $application_id);
     }
@@ -57,55 +43,76 @@ try {
     $result = $check_stmt->get_result();
 
     if ($result->num_rows === 0) {
-        echo json_encode([
-            "status" => false,
-            "message" => "Application not found or access denied (based on admin_action)"
-        ]);
+        echo json_encode(["status" => false, "message" => "Application not found or not approved yet"]);
         exit();
     }
 
-    // Extra recruiter ownership check
+    // ✅ Step 2: Recruiter ownership check (only if recruiter)
     if ($user_role === 'recruiter') {
-        $check_recruiter = $conn->prepare("SELECT a.id 
-                                          FROM applications a 
-                                          JOIN jobs j ON a.job_id = j.id 
-                                          WHERE a.id = ? AND j.recruiter_id = ?");
-        $check_recruiter->bind_param("ii", $application_id, $user_id);
+        $rec_profile_stmt = $conn->prepare("SELECT id FROM recruiter_profiles WHERE user_id = ?");
+        $rec_profile_stmt->bind_param("i", $user_id);
+        $rec_profile_stmt->execute();
+        $rec_profile_result = $rec_profile_stmt->get_result();
+
+        if ($rec_profile_result->num_rows === 0) {
+            echo json_encode(["status" => false, "message" => "Recruiter profile not found"]);
+            exit();
+        }
+
+        $rec_profile_row = $rec_profile_result->fetch_assoc();
+        $recruiter_profile_id = $rec_profile_row['id'];
+
+        // ✅ Verify recruiter owns this application
+        $check_recruiter = $conn->prepare("
+            SELECT a.id 
+            FROM applications a 
+            JOIN jobs j ON a.job_id = j.id 
+            WHERE a.id = ? AND j.recruiter_id = ?
+        ");
+        $check_recruiter->bind_param("ii", $application_id, $recruiter_profile_id);
         $check_recruiter->execute();
         $rec_result = $check_recruiter->get_result();
 
         if ($rec_result->num_rows === 0) {
-            echo json_encode([
-                "status" => false,
-                "message" => "Recruiter does not own this application"
-            ]);
+            echo json_encode(["status" => false, "message" => "Recruiter does not own this application"]);
             exit();
         }
     }
 
-    // Insert interview record
-    $stmt = $conn->prepare("INSERT INTO interviews (application_id, scheduled_at, mode, location, status, feedback, created_at, modified_at)
-                            VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())");
+    // ✅ Step 3: Insert interview record
+    $stmt = $conn->prepare("
+        INSERT INTO interviews (application_id, scheduled_at, mode, location, status, feedback, created_at, modified_at)
+        VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+    ");
     $stmt->bind_param("isssss", $application_id, $scheduled_at, $mode, $location, $status, $feedback);
-    
+
     if ($stmt->execute()) {
-        // Update application status to 'interview_scheduled'
-        $update_stmt = $conn->prepare("UPDATE applications SET status = 'interview_scheduled' WHERE id = ?");
-        $update_stmt->bind_param("i", $application_id);
+        $interview_id = $stmt->insert_id;
+
+        // ✅ Step 4: Update only interview_id and status in applications
+        $update_stmt = $conn->prepare("
+            UPDATE applications 
+            SET status = 'shortlisted',
+                interview_id = ?,
+                modified_at = NOW()
+            WHERE id = ?
+        ");
+        $update_stmt->bind_param("ii", $interview_id, $application_id);
         $update_stmt->execute();
-        
+
         echo json_encode([
             "status" => true,
             "message" => "Interview scheduled successfully",
-            "interview_id" => $stmt->insert_id
+            "interview_id" => $interview_id
         ]);
     } else {
         echo json_encode([
             "status" => false,
             "message" => "Failed to schedule interview",
-            "error" => $stmt->error
+            "error"   => $stmt->error
         ]);
     }
+
 } catch (Exception $e) {
     echo json_encode([
         "status" => false,
