@@ -3,11 +3,11 @@
 require_once '../cors.php';
 
 // Authenticate JWT and allow multiple roles
-$decoded = authenticateJWT(); // returns array
+$decoded = authenticateJWT(['admin', 'institute','recruiter','student']); // returns array
 $user_role = $decoded['role'] ?? '';  // assuming 'role' exists in JWT
 $user_id   = $decoded['user_id'] ?? 0;
 
-// ---------- POST: Create Transaction (Admin / Institute only) ----------
+// ---------- POST: Create Transaction (Admin/Recruiter/Student/ Institute only) ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $data = json_decode(file_get_contents("php://input"), true);
@@ -16,7 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $method      = isset($data['method']) ? trim($data['method']) : '';
     $purpose     = isset($data['purpose']) ? trim($data['purpose']) : '';
     $status      = isset($data['status']) ? trim($data['status']) : 'pending';
-    $admin_action = 'pending'; // New transactions default to 'pending'
+    $admin_action = 'approved'; // New transactions default to 'pending'
 
     if (empty($method) || empty($purpose) || $amount <= 0) {
         echo json_encode([

@@ -3,7 +3,7 @@
 require_once '../cors.php';
 
 // ✅ Authenticate JWT (any valid user can access transactions)
-$decoded = authenticateJWT(); // returns array with user data
+$decoded = authenticateJWT(['admin', 'institute','recruiter','student']); // returns array with user data
 $userRole = isset($decoded['role']) ? strtolower($decoded['role']) : null;
 
 try {
