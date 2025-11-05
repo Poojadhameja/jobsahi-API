@@ -1,135 +1,112 @@
 <?php
-// add_interview_panel.php - Add interview panel member/feedback (Admin, Recruiter access)
+// add_interview_panel.php - Add or update interview panel feedback (Admin, Recruiter, Institute, Student access)
 require_once '../cors.php';
+require_once '../db.php';
 
-// ✅ Authenticate JWT and allow multiple roles
+// ✅ Authenticate JWT for multiple roles
 $decoded = authenticateJWT(['admin', 'recruiter', 'institute', 'student']); 
-$user_id = $decoded['user_id']; 
-$user_role = $decoded['role'];
+$user_id = $decoded['user_id'];
+$user_role = strtolower($decoded['role'] ?? '');
 
-// Get interview ID from URL parameter
-$interview_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+// ✅ Read JSON input
+$data = json_decode(file_get_contents("php://input"), true);
+
+// ✅ Extract required fields
+$interview_id   = intval($data['interview_id'] ?? 0);
+$panelist_name  = trim($data['panelist_name'] ?? '');
+$feedback       = trim($data['feedback'] ?? '');
+$rating         = isset($data['rating']) ? floatval($data['rating']) : 0;
+$notes          = trim($data['notes'] ?? '');
+$admin_action   = "approved"; // default value
+$created_at     = date('Y-m-d H:i:s');
+
+// ✅ Validate required inputs
 if ($interview_id <= 0) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Invalid interview ID"
-    ]);
+    echo json_encode(["status" => false, "message" => "Interview ID is required"]);
     exit();
 }
 
-// Get POST data
-$data = json_decode(file_get_contents("php://input"), true);
-$panelist_name = isset($data['panelist_name']) ? trim($data['panelist_name']) : '';
-$feedback = isset($data['feedback']) ? trim($data['feedback']) : '';
-$rating = isset($data['rating']) && $data['rating'] !== '' ? floatval($data['rating']) : null;
-
-// Validate required fields
-if (empty($panelist_name)) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Panelist name is required"
-    ]);
+if (empty($panelist_name) || empty($feedback)) {
+    echo json_encode(["status" => false, "message" => "Panelist name and feedback are required"]);
     exit();
 }
 
 try {
-    // Check if interview exists and belongs to recruiter (if recruiter role)
+    // 🔹 If recruiter, ensure they own this interview
     if ($user_role === 'recruiter') {
-        $check_stmt = $conn->prepare("
-            SELECT i.id FROM interviews i 
+        $check = $conn->prepare("
+            SELECT i.id 
+            FROM interviews i
             JOIN applications a ON i.application_id = a.id
-            JOIN jobs j ON a.job_id = j.id 
+            JOIN jobs j ON a.job_id = j.id
             WHERE i.id = ? AND j.recruiter_id = ?
         ");
-        $check_stmt->bind_param("ii", $interview_id, $user_id);
-        $check_stmt->execute();
-        $result = $check_stmt->get_result();
+        $check->bind_param("ii", $interview_id, $user_id);
+        $check->execute();
+        $result = $check->get_result();
 
         if ($result->num_rows === 0) {
             echo json_encode([
                 "status" => false,
-                "message" => "Interview not found or access denied"
+                "message" => "Unauthorized or invalid interview ID"
             ]);
             exit();
         }
     }
 
-    // Check if panelist already exists for this interview
-    $exists_stmt = $conn->prepare("
-        SELECT id FROM interview_panel WHERE interview_id = ? AND panelist_name = ?
-    ");
-    $exists_stmt->bind_param("is", $interview_id, $panelist_name);
-    $exists_stmt->execute();
-    $exists_result = $exists_stmt->get_result();
+    // 🔹 Check if feedback already exists for this panelist
+    $exists = $conn->prepare("SELECT id FROM interview_panel WHERE interview_id = ? AND panelist_name = ?");
+    $exists->bind_param("is", $interview_id, $panelist_name);
+    $exists->execute();
+    $exists_res = $exists->get_result();
 
-    if ($exists_result->num_rows > 0) {
-        // Update existing panelist record
-        $update_stmt = $conn->prepare("
+    if ($exists_res->num_rows > 0) {
+        // 🔸 Update feedback
+        $update = $conn->prepare("
             UPDATE interview_panel 
-            SET feedback = ?, rating = ?, created_at = NOW() 
+            SET feedback = ?, rating = ?, admin_action = ?, created_at = NOW()
             WHERE interview_id = ? AND panelist_name = ?
         ");
-        // Use "sdis" to match 4 parameters
-        $update_stmt->bind_param("sdis", $feedback, $rating, $interview_id, $panelist_name);
-
-        if ($update_stmt->execute()) {
-            $message = "Interview panelist feedback updated successfully";
-        } else {
-            echo json_encode([
-                "status" => false,
-                "message" => "Failed to update panelist feedback",
-                "error" => $update_stmt->error
-            ]);
-            exit();
-        }
+        $update->bind_param("sdsss", $feedback, $rating, $admin_action, $interview_id, $panelist_name);
+        $update->execute();
+        $message = "Interview panelist feedback updated successfully";
     } else {
-        // Insert new panelist record
-        $stmt = $conn->prepare("
-            INSERT INTO interview_panel (interview_id, panelist_name, feedback, rating, created_at)
-            VALUES (?, ?, ?, ?, NOW())
+        // 🔸 Insert new record
+        $insert = $conn->prepare("
+            INSERT INTO interview_panel (interview_id, panelist_name, feedback, rating, created_at, admin_action)
+            VALUES (?, ?, ?, ?, ?, ?)
         ");
-        $stmt->bind_param("issd", $interview_id, $panelist_name, $feedback, $rating);
-
-        if ($stmt->execute()) {
-            $message = "Interview panelist added successfully";
-        } else {
-            echo json_encode([
-                "status" => false,
-                "message" => "Failed to add panelist",
-                "error" => $stmt->error
-            ]);
-            exit();
-        }
+        $insert->bind_param("issdss", $interview_id, $panelist_name, $feedback, $rating, $created_at, $admin_action);
+        $insert->execute();
+        $message = "Interview panelist added successfully";
     }
 
-    // ✅ Fetch interview panel with admin_action visibility
-    $panel_stmt = $conn->prepare("
-        SELECT ip.*, i.admin_action
-        FROM interview_panel ip
-        JOIN interviews i ON ip.interview_id = i.id
-        WHERE ip.interview_id = ? AND (
-            i.admin_action = 'approved' OR (? = 'admin' AND i.admin_action = 'pending')
-        )
+    // 🔹 Fetch updated feedback list
+    $fetch = $conn->prepare("
+        SELECT id, interview_id, panelist_name, feedback, rating, created_at, admin_action
+        FROM interview_panel
+        WHERE interview_id = ?
+        ORDER BY created_at DESC
     ");
-    $panel_stmt->bind_param("is", $interview_id, $user_role);
-    $panel_stmt->execute();
-    $panel_result = $panel_stmt->get_result();
+    $fetch->bind_param("i", $interview_id);
+    $fetch->execute();
+    $result = $fetch->get_result();
 
-    $panels = [];
-    while ($row = $panel_result->fetch_assoc()) {
-        $panels[] = $row;
+    $panelists = [];
+    while ($row = $result->fetch_assoc()) {
+        $panelists[] = $row;
     }
 
     echo json_encode([
         "status" => true,
         "message" => $message,
-        "panelists" => $panels
+        "panelists" => $panelists
     ]);
 
-} catch (Exception $e) {
+} catch (Throwable $e) {
     echo json_encode([
         "status" => false,
-        "message" => "Error: " . $e->getMessage()
+        "message" => "Server error: " . $e->getMessage()
     ]);
 }
 
