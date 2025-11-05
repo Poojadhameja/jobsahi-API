@@ -13,21 +13,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-require_once __DIR__ . '/../jwt_token/jwt_helper.php';
-require_once __DIR__ . '/../auth/auth_middleware.php';
-
 // Authenticate and allow both admin , recruiter and student roles
 authenticateJWT(['admin', 'student', 'recruiter']);
-
-require_once __DIR__ . '/../db.php'; // make sure this defines $conn = new mysqli(...)
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 try {
-    if (!isset($conn) || !($conn instanceof mysqli)) {
-        throw new Exception("DB connection not found. Check db.php");
-    }
-
     // Read JSON body
     $input = json_decode(file_get_contents("php://input"), true);
     if (!is_array($input)) {
@@ -52,7 +43,7 @@ try {
         exit;
     }
 
-    // ✅ Check if referrer exists in users table (fixes your foreign key error)
+    // ✅ Check if referrer exists in users table
     $userCheck = $conn->prepare("SELECT id FROM users WHERE id = ?");
     $userCheck->bind_param("i", $referrer_id);
     $userCheck->execute();
@@ -76,10 +67,11 @@ try {
     }
     $check->close();
 
-    // Insert into referrals
+    // ✅ Insert into referrals with default admin_action = 'approved'
     $status = "pending";
-    $stmt = $conn->prepare("INSERT INTO referrals (referrer_id, referee_email, job_id, status, created_at) VALUES (?, ?, ?, ?, NOW())");
-    $stmt->bind_param("isis", $referrer_id, $referee_email, $job_id, $status);
+    $admin_action = "approved";
+    $stmt = $conn->prepare("INSERT INTO referrals (referrer_id, referee_email, job_id, status, admin_action, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
+    $stmt->bind_param("isiss", $referrer_id, $referee_email, $job_id, $status, $admin_action);
     $stmt->execute();
 
     $newId = $conn->insert_id;
@@ -95,6 +87,7 @@ try {
             'referee_email' => $referee_email,
             'job_id' => $job_id,
             'status' => $status,
+            'admin_action' => $admin_action,
             'created_at' => date("Y-m-d H:i:s")
         ]
     ]);
@@ -108,5 +101,4 @@ try {
     echo json_encode(['status' => false, 'message' => $e->getMessage()]);
     exit;
 }
-
 ?>

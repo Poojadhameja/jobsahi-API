@@ -6,9 +6,6 @@ require_once '../cors.php';
 $current_user = authenticateJWT(['admin', 'student']);
 $role = $current_user['role'];  // role from JWT payload
 
-// Authenticate user (admin, student allowed)
-$current_user = authenticateJWT(['admin', 'student']);
-$role = $current_user['role'];  // role from JWT payload
 
 // Optional filters
 $student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : null;

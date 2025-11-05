@@ -1,9 +1,5 @@
 <?php
 include '../CORS.php';
-require_once '../db.php';
-require_once '../jwt_token/jwt_helper.php';
-require_once '../auth/auth_middleware.php';
-
 // ✅ Authenticate JWT (any valid user can access transactions)
 $decoded = authenticateJWT(); // returns array
 
