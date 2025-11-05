@@ -76,10 +76,17 @@ if ($job_id > 0) {
                 j.is_featured,
                 j.created_at,
                 rp.company_name,
+                ci.person_name,
+                ci.phone,
+                ci.additional_contact,
                 (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS views
             FROM jobs j
-            LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
+            LEFT JOIN recruiter_profiles rp 
+                ON j.recruiter_id = rp.id
+            LEFT JOIN recruiter_company_info ci 
+                ON ci.job_id = j.id
             WHERE j.id = ?";
+
 
     // ✅ Role-based visibility filter
     if (!in_array($userRole, ['admin', 'recruiter'])) {
