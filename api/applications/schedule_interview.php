@@ -79,10 +79,11 @@ try {
         }
     }
 
-    // ✅ Step 3: Insert interview record
+    // ✅ Step 3: Insert interview record with default admin_action = 'approved'
     $stmt = $conn->prepare("
-        INSERT INTO interviews (application_id, scheduled_at, mode, location, status, feedback, created_at, modified_at)
-        VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+        INSERT INTO interviews (
+            application_id, scheduled_at, mode, location, status, feedback, admin_action, created_at, modified_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'approved', NOW(), NOW())
     ");
     $stmt->bind_param("isssss", $application_id, $scheduled_at, $mode, $location, $status, $feedback);
 
