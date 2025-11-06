@@ -3,24 +3,24 @@ require_once '../cors.php';
 require_once '../db.php';
 
 try {
-    // ✅ Authenticate (allow admin, institute, and student)
+    // ✅ Authenticate (Admin, Institute, or Student)
     $decoded = authenticateJWT(['admin', 'institute', 'student']);
     $role = strtolower($decoded['role'] ?? '');
 
-    // ✅ Validate GET method
+    // ✅ Allow only GET requests
     if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
         echo json_encode(["status" => false, "message" => "Only GET method allowed"]);
         exit;
     }
 
-    // ✅ Validate certificate_id
+    // ✅ Validate certificate ID
     $certificate_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
     if ($certificate_id <= 0) {
         echo json_encode(["status" => false, "message" => "Certificate ID is required"]);
         exit;
     }
 
-    // ✅ Main query — join all required tables
+    // ✅ Fetch certificate and related data
     $sql = "
         SELECT 
             c.id AS certificate_id,
@@ -52,8 +52,14 @@ try {
     $result = $stmt->get_result();
 
     if ($row = $result->fetch_assoc()) {
-        // ✅ Build response structure for UI
-        $response = [
+        // ✅ Return the file_url only if it exists in the folder, else null
+        $absolute_path = __DIR__ . '/..' . $row['file_url'];
+        if (!empty($row['file_url']) && !file_exists($absolute_path)) {
+            $row['file_url'] = null;
+        }
+
+        // ✅ Build and send response
+        echo json_encode([
             "status" => true,
             "message" => "Certificate details fetched successfully",
             "data" => [
@@ -61,14 +67,16 @@ try {
                     "certificate_id" => "CERT-" . date('Y') . "-" . str_pad($row['certificate_id'], 3, '0', STR_PAD_LEFT),
                     "status" => ucfirst($row['certificate_status'] ?? "Pending"),
                     "issue_date" => $row['issue_date'] ?: null,
-                    "file_url" => $row['file_url'] ? $row['file_url'] : null
+                    "file_url" => $row['file_url']
                 ],
                 "student_info" => [
+                    "student_id" => $row['student_id'],
                     "name" => $row['student_name'],
                     "email" => $row['student_email'],
                     "phone" => $row['student_phone']
                 ],
                 "course_info" => [
+                    "course_id" => $row['course_id'],
                     "course_name" => $row['course_title'] ?: "Not Assigned",
                     "batch_name" => $row['batch_name'] ?: "Not Assigned"
                 ]
@@ -78,14 +86,9 @@ try {
                 "timestamp" => date('Y-m-d H:i:s'),
                 "api_version" => "1.0"
             ]
-        ];
-
-        echo json_encode($response, JSON_PRETTY_PRINT);
+        ], JSON_PRETTY_PRINT);
     } else {
-        echo json_encode([
-            "status" => false,
-            "message" => "Certificate not found"
-        ]);
+        echo json_encode(["status" => false, "message" => "Certificate not found"]);
     }
 
     $stmt->close();
