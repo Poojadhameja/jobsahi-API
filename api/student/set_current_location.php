@@ -47,7 +47,7 @@ function reverseGeocodeAddress($latitude, $longitude) {
     $lon = floatval($longitude);
 
     // Build Nominatim reverse geocoding request (OpenStreetMap)
-    $url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' . urlencode($lat) . '&lon=' . urlencode($lon) . '&zoom=14&addressdetails=0';
+    $url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' . urlencode($lat) . '&lon=' . urlencode($lon) . '&zoom=14&addressdetails=1';
     $opts = [
         'http' => [
             'method' => 'GET',
@@ -64,6 +64,31 @@ function reverseGeocodeAddress($latitude, $longitude) {
         $json = @file_get_contents($url, false, $context);
         if ($json) {
             $data = json_decode($json, true);
+            if (!empty($data['address']) && is_array($data['address'])) {
+                $address = $data['address'];
+                $city = $address['city']
+                    ?? $address['town']
+                    ?? $address['village']
+                    ?? $address['municipality']
+                    ?? $address['district']
+                    ?? $address['county']
+                    ?? $address['suburb']
+                    ?? null;
+                $state = $address['state']
+                    ?? $address['state_district']
+                    ?? $address['region']
+                    ?? null;
+
+                $parts = array_filter([$city, $state], static function ($value) {
+                    return $value !== null && $value !== '';
+                });
+
+                if (!empty($parts)) {
+                    // Fit within varchar(255) and prefer "City, State"
+                    return substr(implode(', ', $parts), 0, 255);
+                }
+            }
+
             if (!empty($data['display_name'])) {
                 // Fit within varchar(255)
                 return substr($data['display_name'], 0, 255);
