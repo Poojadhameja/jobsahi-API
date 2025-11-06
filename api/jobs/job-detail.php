@@ -9,23 +9,13 @@ $user_role = $decodedToken['role']; // role from JWT
 // Get student_id if user is student
 $student_profile_id = null;
 if ($user_role === 'student') {
-    $user_id = null;
-    if (isset($decodedToken['id'])) {
-        $user_id = $decodedToken['id'];
-    } elseif (isset($decodedToken['user_id'])) {
-        $user_id = $decodedToken['user_id'];
-    } elseif (isset($decodedToken['student_id'])) {
-        $user_id = $decodedToken['student_id'];
-    }
-    
+    $user_id = $decodedToken['id'] ?? $decodedToken['user_id'] ?? $decodedToken['student_id'] ?? null;
     if ($user_id) {
-        // Get student profile ID from user_id
         $check_student_sql = "SELECT id FROM student_profiles WHERE user_id = ?";
         $check_student_stmt = mysqli_prepare($conn, $check_student_sql);
         mysqli_stmt_bind_param($check_student_stmt, "i", $user_id);
         mysqli_stmt_execute($check_student_stmt);
         $student_result = mysqli_stmt_get_result($check_student_stmt);
-        
         if (mysqli_num_rows($student_result) > 0) {
             $student_profile = mysqli_fetch_assoc($student_result);
             $student_profile_id = $student_profile['id'];
@@ -42,12 +32,12 @@ if ($job_id <= 0) {
     exit;
 }
 
-// ✅ Set visibility condition based on user role
+// ✅ Set visibility condition
 $visibilityCondition = ($user_role === 'admin') 
     ? "j.admin_action IN ('pending', 'approved')" 
     : "j.admin_action = 'approved'";
 
-// ✅ Main job query with recruiter info & stats
+// ✅ Main Query (added recruiter_company_info join)
 $sql = "SELECT 
             j.id,
             j.recruiter_id,
@@ -65,12 +55,19 @@ $sql = "SELECT
             j.status,
             j.admin_action,
             j.created_at,
+
             -- Recruiter information
             rp.company_name,
             rp.company_logo,
             rp.industry,
             rp.website,
             rp.location AS company_location,
+
+            -- ✅ Contact info from recruiter_company_info
+            rci.person_name,
+            rci.phone,
+            rci.additional_contact,
+
             -- Job statistics
             (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS total_views,
             (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id) AS total_applications,
@@ -79,7 +76,6 @@ $sql = "SELECT
             (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id AND a.status = 'selected') AS selected_applications,
             (SELECT COUNT(*) FROM saved_jobs sj WHERE sj.job_id = j.id) AS times_saved";
 
-// Add is_saved field for students using saved_jobs junction table
 if ($user_role === 'student' && $student_profile_id) {
     $sql .= ",
             CASE 
@@ -93,6 +89,7 @@ if ($user_role === 'student' && $student_profile_id) {
 
 $sql .= " FROM jobs j
         LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
+        LEFT JOIN recruiter_company_info rci ON rci.job_id = j.id
         WHERE j.id = ? AND $visibilityCondition";
 
 $stmt = mysqli_prepare($conn, $sql);
@@ -102,7 +99,6 @@ if (!$stmt) {
     exit;
 }
 
-// Bind parameters - add student_id if needed
 if ($user_role === 'student' && $student_profile_id) {
     mysqli_stmt_bind_param($stmt, "ii", $student_profile_id, $job_id);
 } else {
@@ -111,7 +107,6 @@ if ($user_role === 'student' && $student_profile_id) {
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 
-// ✅ If no job found
 if (mysqli_num_rows($result) === 0) {
     mysqli_stmt_close($stmt);
     mysqli_close($conn);
@@ -122,7 +117,7 @@ if (mysqli_num_rows($result) === 0) {
 $job = mysqli_fetch_assoc($result);
 mysqli_stmt_close($stmt);
 
-// ✅ Format response data
+// ✅ Format Response
 $formatted_job = [
     'job_info' => [
         'id' => intval($job['id']),
@@ -139,7 +134,12 @@ $formatted_job = [
         'no_of_vacancies' => intval($job['no_of_vacancies']),
         'status' => $job['status'],
         'admin_action' => $job['admin_action'],
-        'created_at' => $job['created_at']
+        'created_at' => $job['created_at'],
+
+        // ✅ Newly added contact info
+        'person_name' => $job['person_name'] ?? '',
+        'phone' => $job['phone'] ?? '',
+        'additional_contact' => $job['additional_contact'] ?? '',
     ],
     'company_info' => [
         'recruiter_id' => intval($job['recruiter_id']),
@@ -159,7 +159,7 @@ $formatted_job = [
     ]
 ];
 
-// ✅ Optional: Get similar jobs (only approved ones visible to non-admins)
+// ✅ Similar jobs (unchanged)
 if (isset($_GET['include_similar']) && $_GET['include_similar'] === 'true') {
     $similarVisibilityCondition = $visibilityCondition;
     $similar_sql = "SELECT 
@@ -178,13 +178,11 @@ if (isset($_GET['include_similar']) && $_GET['include_similar'] === 'true') {
                     AND (j.location = ? OR j.job_type = ?)
                     ORDER BY j.created_at DESC
                     LIMIT 5";
-
     $similar_stmt = mysqli_prepare($conn, $similar_sql);
     if ($similar_stmt) {
         mysqli_stmt_bind_param($similar_stmt, "iss", $job_id, $job['location'], $job['job_type']);
         mysqli_stmt_execute($similar_stmt);
         $similar_result = mysqli_stmt_get_result($similar_stmt);
-
         $similar_jobs = [];
         while ($row = mysqli_fetch_assoc($similar_result)) {
             $similar_jobs[] = [
@@ -197,7 +195,6 @@ if (isset($_GET['include_similar']) && $_GET['include_similar'] === 'true') {
                 'company_name' => $row['company_name']
             ];
         }
-
         $formatted_job['similar_jobs'] = $similar_jobs;
         mysqli_stmt_close($similar_stmt);
     }
