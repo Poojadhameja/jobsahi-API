@@ -13,74 +13,92 @@ try {
         exit;
     }
 
-    // ✅ Validate certificate ID
+    // ✅ Optional: certificate ID filter
     $certificate_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-    if ($certificate_id <= 0) {
-        echo json_encode(["status" => false, "message" => "Certificate ID is required"]);
-        exit;
-    }
 
-    // ✅ Fetch certificate and related data
+    // ✅ Base SQL (common for both)
     $sql = "
         SELECT 
             c.id AS certificate_id,
             c.file_url,
             c.issue_date,
             c.admin_action AS certificate_status,
+            c.created_at,
+            c.modified_at,
             s.id AS student_id,
             s.user_id,
             u.user_name AS student_name,
             u.email AS student_email,
             u.phone_number AS student_phone,
             co.id AS course_id,
-            co.title AS course_title,
-            sb.batch_id,
-            b.name AS batch_name
+            co.title AS course_title
         FROM certificates c
         INNER JOIN student_profiles s ON c.student_id = s.id
         INNER JOIN users u ON s.user_id = u.id
         LEFT JOIN courses co ON c.course_id = co.id
-        LEFT JOIN student_batches sb ON s.id = sb.student_id
-        LEFT JOIN batches b ON sb.batch_id = b.id
-        WHERE c.id = ?
-        LIMIT 1
+        WHERE c.admin_action = 'approved'
     ";
 
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $certificate_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
+    // ✅ Add WHERE condition if ID provided
+    if ($certificate_id > 0) {
+        $sql .= " AND c.id = ? LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $certificate_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+    } else {
+        $sql .= " ORDER BY c.id DESC";
+        $result = $conn->query($sql);
+    }
 
-    if ($row = $result->fetch_assoc()) {
-        // ✅ Return the file_url only if it exists in the folder, else null
+    // ✅ Process results
+    $certificates = [];
+    while ($row = $result->fetch_assoc()) {
         $absolute_path = __DIR__ . '/..' . $row['file_url'];
         if (!empty($row['file_url']) && !file_exists($absolute_path)) {
             $row['file_url'] = null;
         }
 
-        // ✅ Build and send response
+        $certificates[] = [
+            "certificate_info" => [
+                "certificate_id" => "CERT-" . date('Y') . "-" . str_pad($row['certificate_id'], 3, '0', STR_PAD_LEFT),
+                "status" => ucfirst($row['certificate_status'] ?? "Pending"),
+                "issue_date" => $row['issue_date'] ?: null,
+                "file_url" => $row['file_url'],
+                "created_at" => $row['created_at'],
+                "modified_at" => $row['modified_at']
+            ],
+            "student_info" => [
+                "student_id" => $row['student_id'],
+                "name" => $row['student_name'],
+                "email" => $row['student_email'],
+                "phone" => $row['student_phone']
+            ],
+            "course_info" => [
+                "course_id" => $row['course_id'],
+                "course_name" => $row['course_title'] ?: "Not Assigned"
+            ]
+        ];
+    }
+
+    // ✅ Handle empty result
+    if (empty($certificates)) {
+        echo json_encode([
+            "status" => false,
+            "message" => ($certificate_id > 0)
+                ? "Certificate not found"
+                : "No certificates found"
+        ]);
+        exit;
+    }
+
+    // ✅ Response for single vs multiple
+    if ($certificate_id > 0) {
+        $data = $certificates[0]; // single certificate
         echo json_encode([
             "status" => true,
             "message" => "Certificate details fetched successfully",
-            "data" => [
-                "certificate_info" => [
-                    "certificate_id" => "CERT-" . date('Y') . "-" . str_pad($row['certificate_id'], 3, '0', STR_PAD_LEFT),
-                    "status" => ucfirst($row['certificate_status'] ?? "Pending"),
-                    "issue_date" => $row['issue_date'] ?: null,
-                    "file_url" => $row['file_url']
-                ],
-                "student_info" => [
-                    "student_id" => $row['student_id'],
-                    "name" => $row['student_name'],
-                    "email" => $row['student_email'],
-                    "phone" => $row['student_phone']
-                ],
-                "course_info" => [
-                    "course_id" => $row['course_id'],
-                    "course_name" => $row['course_title'] ?: "Not Assigned",
-                    "batch_name" => $row['batch_name'] ?: "Not Assigned"
-                ]
-            ],
+            "data" => $data,
             "meta" => [
                 "role" => $role,
                 "timestamp" => date('Y-m-d H:i:s'),
@@ -88,10 +106,20 @@ try {
             ]
         ], JSON_PRETTY_PRINT);
     } else {
-        echo json_encode(["status" => false, "message" => "Certificate not found"]);
+        echo json_encode([
+            "status" => true,
+            "message" => "Certificates fetched successfully",
+            "data" => $certificates,
+            "meta" => [
+                "role" => $role,
+                "total" => count($certificates),
+                "timestamp" => date('Y-m-d H:i:s'),
+                "api_version" => "1.0"
+            ]
+        ], JSON_PRETTY_PRINT);
     }
 
-    $stmt->close();
+    if (isset($stmt)) $stmt->close();
     $conn->close();
 
 } catch (Exception $e) {
