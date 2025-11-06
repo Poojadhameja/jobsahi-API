@@ -35,7 +35,7 @@ try {
             sp.graduation_year,
             sp.cgpa,
             sp.created_at as profile_created_at,
-            sp.modified_at as profile_modified_at,
+            sp.updated_at as profile_modified_at,
             sp.deleted_at as profile_deleted_at
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
