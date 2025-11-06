@@ -38,6 +38,43 @@ if (!isset($input['user_id'])) {
 
 $user_id = intval($input['user_id']);
 
+// Try to resolve a human-readable address for given coordinates
+function reverseGeocodeAddress($latitude, $longitude) {
+    if ($latitude === null || $longitude === null) {
+        return null;
+    }
+    $lat = floatval($latitude);
+    $lon = floatval($longitude);
+
+    // Build Nominatim reverse geocoding request (OpenStreetMap)
+    $url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' . urlencode($lat) . '&lon=' . urlencode($lon) . '&zoom=14&addressdetails=0';
+    $opts = [
+        'http' => [
+            'method' => 'GET',
+            'header' => "User-Agent: jobsahi-api/1.0\r\nAccept: application/json\r\n",
+            'timeout' => 5,
+        ],
+        'ssl' => [
+            'verify_peer' => true,
+            'verify_peer_name' => true,
+        ],
+    ];
+    $context = stream_context_create($opts);
+    try {
+        $json = @file_get_contents($url, false, $context);
+        if ($json) {
+            $data = json_decode($json, true);
+            if (!empty($data['display_name'])) {
+                // Fit within varchar(255)
+                return substr($data['display_name'], 0, 255);
+            }
+        }
+    } catch (Exception $e) {
+        error_log('Reverse geocoding failed: ' . $e->getMessage());
+    }
+    return null;
+}
+
 // Determine client IP considering proxies/CDN
 function getClientIp() {
     $headersToCheck = [
@@ -122,6 +159,16 @@ if (isset($_SERVER['HTTP_X_LATITUDE']) && isset($_SERVER['HTTP_X_LONGITUDE'])) {
 
 // At this point, latitude/longitude must be resolved from one of the sources
 
+// Resolve human-readable location string (priority: header -> body -> reverse geocode)
+$resolved_location = null;
+if (!empty($_SERVER['HTTP_X_LOCATION'])) {
+    $resolved_location = substr(trim($_SERVER['HTTP_X_LOCATION']), 0, 255);
+} elseif (!empty($input['location'])) {
+    $resolved_location = substr(trim($input['location']), 0, 255);
+} else {
+    $resolved_location = reverseGeocodeAddress($latitude, $longitude);
+}
+
 // Validate user_id
 if ($user_id <= 0) {
     echo json_encode([
@@ -171,12 +218,19 @@ try {
     
     if (mysqli_num_rows($result) > 0) {
         // Record exists - UPDATE
-        $update_sql = "UPDATE student_profiles 
-                      SET latitude = ?, longitude = ?, modified_at = NOW() 
-                      WHERE user_id = ? AND deleted_at IS NULL";
-        
-        $update_stmt = mysqli_prepare($conn, $update_sql);
-        mysqli_stmt_bind_param($update_stmt, "ddi", $latitude, $longitude, $user_id);
+        if ($resolved_location !== null && $resolved_location !== '') {
+            $update_sql = "UPDATE student_profiles 
+                          SET latitude = ?, longitude = ?, location = ?,  updated_at = NOW() 
+                          WHERE user_id = ? AND deleted_at IS NULL";
+            $update_stmt = mysqli_prepare($conn, $update_sql);
+            mysqli_stmt_bind_param($update_stmt, "ddsi", $latitude, $longitude, $resolved_location, $user_id);
+        } else {
+            $update_sql = "UPDATE student_profiles 
+                          SET latitude = ?, longitude = ?,  updated_at = NOW() 
+                          WHERE user_id = ? AND deleted_at IS NULL";
+            $update_stmt = mysqli_prepare($conn, $update_sql);
+            mysqli_stmt_bind_param($update_stmt, "ddi", $latitude, $longitude, $user_id);
+        }
         
         if (mysqli_stmt_execute($update_stmt)) {
             if (mysqli_stmt_affected_rows($update_stmt) > 0) {
@@ -187,7 +241,8 @@ try {
                     "data" => [
                         "user_id" => $user_id,
                         "latitude" => $latitude,
-                        "longitude" => $longitude
+                        "longitude" => $longitude,
+                        "location" => $resolved_location
                     ]
                 ]);
             } else {
@@ -206,11 +261,17 @@ try {
         mysqli_stmt_close($update_stmt);
     } else {
         // Record doesn't exist - INSERT
-        $insert_sql = "INSERT INTO student_profiles (user_id, latitude, longitude, created_at, modified_at) 
-                      VALUES (?, ?, ?, NOW(), NOW())";
-        
-        $insert_stmt = mysqli_prepare($conn, $insert_sql);
-        mysqli_stmt_bind_param($insert_stmt, "idd", $user_id, $latitude, $longitude);
+        if ($resolved_location !== null && $resolved_location !== '') {
+            $insert_sql = "INSERT INTO student_profiles (user_id, latitude, longitude, location, created_at,  updated_at) 
+                          VALUES (?, ?, ?, ?, NOW(), NOW())";
+            $insert_stmt = mysqli_prepare($conn, $insert_sql);
+            mysqli_stmt_bind_param($insert_stmt, "idds", $user_id, $latitude, $longitude, $resolved_location);
+        } else {
+            $insert_sql = "INSERT INTO student_profiles (user_id, latitude, longitude, created_at,  updated_at) 
+                          VALUES (?, ?, ?, NOW(), NOW())";
+            $insert_stmt = mysqli_prepare($conn, $insert_sql);
+            mysqli_stmt_bind_param($insert_stmt, "idd", $user_id, $latitude, $longitude);
+        }
         
         if (mysqli_stmt_execute($insert_stmt)) {
             echo json_encode([
@@ -220,7 +281,8 @@ try {
                 "data" => [
                     "user_id" => $user_id,
                     "latitude" => $latitude,
-                    "longitude" => $longitude
+                    "longitude" => $longitude,
+                    "location" => $resolved_location
                 ]
             ]);
         } else {
