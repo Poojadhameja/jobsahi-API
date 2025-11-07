@@ -42,14 +42,12 @@ if ($user_role === 'admin') {
                 sp.aadhar_number,
                 sp.graduation_year,
                 sp.cgpa,
-                sp.admin_action,
                 sp.created_at, 
                 sp.updated_at, 
                 sp.deleted_at
             FROM student_profiles sp
             INNER JOIN users u ON sp.user_id = u.id
             WHERE sp.deleted_at IS NULL 
-              AND (sp.admin_action = 'pending' OR sp.admin_action = 'approved')
             ORDER BY sp.created_at DESC";
 } else {
     // Student can only view their own approved profile
@@ -79,7 +77,6 @@ if ($user_role === 'admin') {
                 sp.aadhar_number,
                 sp.graduation_year,
                 sp.cgpa,
-                sp.admin_action,
                 sp.created_at, 
                 sp.updated_at, 
                 sp.deleted_at
@@ -87,7 +84,6 @@ if ($user_role === 'admin') {
             INNER JOIN users u ON sp.user_id = u.id
             WHERE sp.deleted_at IS NULL 
               AND sp.user_id = $logged_in_user_id
-              AND sp.admin_action = 'approved'
             LIMIT 1";
 }
 
@@ -180,9 +176,9 @@ if ($result && mysqli_num_rows($result) > 0) {
                 "bio" => $student['bio']
             ],
             "status" => [
-                "admin_action" => $student['admin_action'],
                 "created_at" => $student['created_at'],
-                "modified_at" => $student['updated_at']
+                "modified_at" => $student['updated_at'],
+                "deleted_at" => $student['deleted_at']
             ]
         ];
 
@@ -197,8 +193,8 @@ if ($result && mysqli_num_rows($result) > 0) {
             "total_count" => count($students),
             "user_role" => $user_role,
             "filters_applied" => [
-                "admin_action" => $user_role === 'admin' ? ['pending', 'approved'] : ['approved'],
-                "deleted_at" => "NULL"
+                "deleted_at" => "NULL",
+                "scope" => $user_role === 'admin' ? 'all_profiles' : 'self'
             ]
         ],
         "meta" => [
@@ -218,8 +214,8 @@ if ($result && mysqli_num_rows($result) > 0) {
             "total_count" => 0,
             "user_role" => $user_role,
             "filters_applied" => [
-                "admin_action" => $user_role === 'admin' ? ['pending', 'approved'] : ['approved'],
-                "deleted_at" => "NULL"
+                "deleted_at" => "NULL",
+                "scope" => $user_role === 'admin' ? 'all_profiles' : 'self'
             ]
         ],
         "meta" => [
