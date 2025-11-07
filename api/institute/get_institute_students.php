@@ -48,17 +48,16 @@ try {
             e.enrollment_date,
             c.id AS course_id,
             c.title AS course_title,
-            sb.batch_id,
+            b.id AS batch_id,
             b.name AS batch_name,
             b.start_date,
             b.end_date
         FROM student_profiles sp
         INNER JOIN users u ON sp.user_id = u.id
-        INNER JOIN student_course_enrollments e 
+        LEFT JOIN student_course_enrollments e 
             ON sp.id = e.student_id 
             AND e.admin_action = 'approved'
-            AND e.status IN ('enrolled', 'completed')
-        INNER JOIN courses c 
+        LEFT JOIN courses c 
             ON e.course_id = c.id
             AND c.admin_action = 'approved'
             " . ($role === 'institute' ? "AND c.institute_id = ?" : "") . "
@@ -82,31 +81,41 @@ try {
     $activeCount = 0;
     $completedCount = 0;
 
+    // -------------------------------
+    // ✅ Merge duplicate students safely
+    // -------------------------------
     while ($row = $result->fetch_assoc()) {
-        $students[] = [
-            "student_id" => $row['student_id'],
-            "name" => $row['student_name'],
-            "email" => $row['email'],
-            "phone" => $row['phone'],
-            "trade" => $row['trade'],
-            "education" => $row['education'],
-            "course" => $row['course_title'] ?? "Not Assigned",
-            "batch" => $row['batch_name'] ?? "Not Assigned",
-            "status" => ucfirst($row['enrollment_status'] ?? "Unknown"),
-            "enrollment_date" => $row['enrollment_date'] ?? null,
-            "start_date" => $row['start_date'] ?? null,
-            "end_date" => $row['end_date'] ?? null
-        ];
+        $sid = $row['student_id'];
 
-        if (strtolower($row['enrollment_status']) === 'enrolled') {
-            $activeCount++;
-        } elseif (strtolower($row['enrollment_status']) === 'completed') {
-            $completedCount++;
+        if (!isset($students[$sid])) {
+            $students[$sid] = [
+                "student_id" => $sid,
+                "name" => $row['student_name'],
+                "email" => $row['email'],
+                "phone" => $row['phone'],
+                "trade" => $row['trade'],
+                "education" => $row['education'],
+                "course" => $row['course_title'] ?? "Not Assigned",
+                "batch" => $row['batch_name'] ?? "Not Assigned",
+                "status" => ucfirst($row['enrollment_status'] ?? "Unknown"),
+                "enrollment_date" => $row['enrollment_date'] ?? null,
+                "start_date" => $row['start_date'] ?? null,
+                "end_date" => $row['end_date'] ?? null
+            ];
+
+            // ✅ Safe lowercase conversion
+            $statusVal = strtolower(trim($row['enrollment_status'] ?? ''));
+
+            if ($statusVal === 'enrolled') {
+                $activeCount++;
+            } elseif ($statusVal === 'completed') {
+                $completedCount++;
+            }
         }
     }
 
     // -------------------------------
-    // ✅ Count total courses (from courses table)
+    // ✅ Count total courses
     // -------------------------------
     if ($role === 'institute') {
         $sql_courses = "SELECT COUNT(*) AS total_courses FROM courses WHERE institute_id = ? AND admin_action = 'approved'";
@@ -122,7 +131,7 @@ try {
     $totalCourses = ($resC->fetch_assoc())['total_courses'] ?? 0;
 
     // -------------------------------
-    // ✅ Build response
+    // ✅ Final response
     // -------------------------------
     echo json_encode([
         "status" => true,
@@ -134,7 +143,7 @@ try {
             "completed_students" => $completedCount,
             "total_courses" => $totalCourses
         ],
-        "data" => $students
+        "data" => array_values($students)
     ], JSON_PRETTY_PRINT);
 
     $stmt->close();
