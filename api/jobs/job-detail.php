@@ -37,10 +37,11 @@ $visibilityCondition = ($user_role === 'admin')
     ? "j.admin_action IN ('pending', 'approved')" 
     : "j.admin_action = 'approved'";
 
-// ✅ Main Query (added recruiter_company_info join)
+// ✅ Main Query (added recruiter_company_info join + job_category join)
 $sql = "SELECT 
             j.id,
             j.recruiter_id,
+            j.category_id,
             j.title,
             j.description,
             j.location,
@@ -55,6 +56,9 @@ $sql = "SELECT
             j.status,
             j.admin_action,
             j.created_at,
+
+            -- Category info
+            jc.category_name,
 
             -- Recruiter information
             rp.company_name,
@@ -90,6 +94,7 @@ if ($user_role === 'student' && $student_profile_id) {
 $sql .= " FROM jobs j
         LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
         LEFT JOIN recruiter_company_info rci ON rci.job_id = j.id
+        LEFT JOIN job_category jc ON j.category_id = jc.id
         WHERE j.id = ? AND $visibilityCondition";
 
 $stmt = mysqli_prepare($conn, $sql);
@@ -122,6 +127,8 @@ $formatted_job = [
     'job_info' => [
         'id' => intval($job['id']),
         'title' => $job['title'],
+        'category_id' => intval($job['category_id']),
+        'category_name' => $job['category_name'] ?? '', // ✅ Added category name
         'description' => $job['description'],
         'location' => $job['location'],
         'skills_required' => !empty($job['skills_required']) ? array_map('trim', explode(',', $job['skills_required'])) : [],
