@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 /* ============================================================
-   PUT: Finalize Skill Test (calculate based on skill_attempts.is_correct)
+   PUT: Finalize Skill Test (calculate score based on attempts)
    ============================================================ */
 if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
     $data = json_decode(file_get_contents("php://input"), true);
@@ -94,88 +94,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
 
     // ✅ Check if test exists
     $check = $conn->prepare("SELECT id, student_id, test_name FROM skill_tests WHERE id=? LIMIT 1");
-    $check->bind_param("i",$id);
+    $check->bind_param("i", $id);
     $check->execute();
     $exists = $check->get_result()->fetch_assoc();
     $check->close();
-    if(!$exists) respond(["status"=>false,"message"=>"This id is not given or does not exist"]);
+
+    if (!$exists) respond(["status"=>false,"message"=>"This id is not given or does not exist"]);
 
     $student_id = (int)$exists['student_id'];
-    $test_name = $exists['test_name'];
+    $test_name  = trim($exists['test_name']);
 
-    // ✅ Find job_id using test_name (job title)
+    // ✅ Get job_id using test_name
     $jobStmt = $conn->prepare("SELECT id FROM jobs WHERE title=? LIMIT 1");
-    $jobStmt->bind_param("s",$test_name);
+    $jobStmt->bind_param("s", $test_name);
     $jobStmt->execute();
     $job = $jobStmt->get_result()->fetch_assoc();
     $jobStmt->close();
-    $job_id = $job ? (int)$job['id'] : 0;
 
-    // ✅ Total questions for this job
-    $qTotal = $conn->prepare("SELECT COUNT(*) AS total FROM skill_questions WHERE job_id=?");
-    $qTotal->bind_param("i",$job_id);
-    $qTotal->execute();
-    $qRes = $qTotal->get_result()->fetch_assoc();
-    $total_questions = (int)($qRes['total'] ?? 0);
-    $qTotal->close();
+    if (!$job) respond(["status"=>false,"message"=>"No matching job found for this test"]);
+    $job_id = (int)$job['id'];
 
-    if($total_questions === 0)
+    // ✅ Count total questions for that job
+    $totalQ = $conn->prepare("SELECT COUNT(*) AS total FROM skill_questions WHERE job_id=?");
+    $totalQ->bind_param("i", $job_id);
+    $totalQ->execute();
+    $totalRow = $totalQ->get_result()->fetch_assoc();
+    $totalQ->close();
+    $total_questions = (int)($totalRow['total'] ?? 0);
+
+    if ($total_questions <= 0)
         respond(["status"=>false,"message"=>"No questions found for this job"]);
 
-    // ✅ Ensure each question only has one attempt
-    $dupCheck = $conn->prepare("
-        SELECT question_id, COUNT(*) AS cnt 
+    // ✅ Count correct answers for this test
+    $correctQ = $conn->prepare("
+        SELECT COUNT(*) AS correct 
         FROM skill_attempts 
-        WHERE test_id=? AND student_id=?
-        GROUP BY question_id
-        HAVING cnt > 1
-    ");
-    $dupCheck->bind_param("ii",$id,$student_id);
-    $dupCheck->execute();
-    $dups = $dupCheck->get_result();
-    $dupCheck->close();
-    if ($dups->num_rows > 0) {
-        respond(["status"=>false,"message"=>"Duplicate attempts found. Each question can only be attempted once."]);
-    }
-
-    // ✅ Total correct answers from skill_attempts
-    $correctQuery = $conn->prepare("
-        SELECT COUNT(*) AS correct
-        FROM skill_attempts
         WHERE test_id=? AND student_id=? AND is_correct=1
     ");
-    $correctQuery->bind_param("ii",$id,$student_id);
-    $correctQuery->execute();
-    $correctData = $correctQuery->get_result()->fetch_assoc();
-    $correctQuery->close();
-    $correct_answers = (int)($correctData['correct'] ?? 0);
+    $correctQ->bind_param("ii", $id, $student_id);
+    $correctQ->execute();
+    $correctRow = $correctQ->get_result()->fetch_assoc();
+    $correctQ->close();
+    $correct_answers = (int)($correctRow['correct'] ?? 0);
 
-    // ✅ Calculate score based on correct answers
-    $score = round(($correct_answers / $total_questions) * 100, 2);
+    // ✅ Calculate score and pass/fail
+    $score  = round(($correct_answers / $total_questions) * 100, 2);
     $passed = ($score >= 50) ? 1 : 0;
 
-    // ✅ Update skill_tests table
+    // ✅ Update skill_tests with new score
     $update = $conn->prepare("
-        UPDATE skill_tests
-        SET score=?, passed=?, completed_at=NOW(), modified_at=NOW()
+        UPDATE skill_tests 
+        SET score=?, max_score=100, passed=?, completed_at=NOW(), modified_at=NOW()
         WHERE id=?
     ");
-    $update->bind_param("iii",$score,$passed,$id);
+    $update->bind_param("iii", $score, $passed, $id);
 
-    if($update->execute()){
+    if ($update->execute()) {
         respond([
-            "status"=>true,
-            "message"=>"Skill test finalized successfully",
-            "total_questions"=>$total_questions,
-            "correct_answers"=>$correct_answers,
-            "score"=>$score,
-            "max_score"=>100,
-            "passed"=>$passed
+            "status" => true,
+            "message" => "Skill test finalized successfully",
+            "total_questions" => $total_questions,
+            "correct_answers" => $correct_answers,
+            "score" => $score,
+            "max_score" => 100,
+            "passed" => $passed
         ]);
     } else {
-        respond(["status"=>false,"message"=>$update->error]);
+        respond(["status" => false, "message" => "Failed to update test"]);
     }
 }
+
+
 
 /* ============================================================
    GET: Fetch Test + All Questions + Attempts (added max_score)
