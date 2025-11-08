@@ -1,5 +1,5 @@
 <?php
-// schedule_interview.php - Schedule interview for candidate (Admin, Recruiter access with role-based visibility)
+// schedule_interview.php - Schedule interview for candidate (Admin, Recruiter access)
 require_once '../cors.php';
 
 // ✅ Authenticate JWT (admin + recruiter)
@@ -28,24 +28,20 @@ if (empty($scheduled_at)) {
 }
 
 try {
-    // ✅ Step 1: Admin can see all; Recruiter only approved apps
-    if ($user_role === 'admin') {
-        $check_sql = "SELECT id, admin_action FROM applications WHERE id = ?";
-        $check_stmt = $conn->prepare($check_sql);
-        $check_stmt->bind_param("i", $application_id);
-    } else {
-        $check_sql = "SELECT id, admin_action FROM applications WHERE id = ? AND admin_action = 'approved'";
-        $check_stmt = $conn->prepare($check_sql);
-        $check_stmt->bind_param("i", $application_id);
-    }
-
+    // ✅ Step 1: Validate application exists
+    $check_sql = "SELECT id, student_id FROM applications WHERE id = ?";
+    $check_stmt = $conn->prepare($check_sql);
+    $check_stmt->bind_param("i", $application_id);
     $check_stmt->execute();
-    $result = $check_stmt->get_result();
+    $app_result = $check_stmt->get_result();
 
-    if ($result->num_rows === 0) {
-        echo json_encode(["status" => false, "message" => "Application not found or not approved yet"]);
+    if ($app_result->num_rows === 0) {
+        echo json_encode(["status" => false, "message" => "Application not found"]);
         exit();
     }
+
+    $app_row = $app_result->fetch_assoc();
+    $student_id = intval($app_row['student_id']); // ✅ Extract student_id from applications
 
     // ✅ Step 2: Recruiter ownership check (only if recruiter)
     if ($user_role === 'recruiter') {
@@ -62,7 +58,6 @@ try {
         $rec_profile_row = $rec_profile_result->fetch_assoc();
         $recruiter_profile_id = $rec_profile_row['id'];
 
-        // ✅ Verify recruiter owns this application
         $check_recruiter = $conn->prepare("
             SELECT a.id 
             FROM applications a 
@@ -79,11 +74,11 @@ try {
         }
     }
 
-    // ✅ Step 3: Insert interview record with default admin_action = 'approved'
+    // ✅ Step 3: Insert interview record
     $stmt = $conn->prepare("
         INSERT INTO interviews (
-            application_id, scheduled_at, mode, location, status, feedback, admin_action, created_at, modified_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'approved', NOW(), NOW())
+            application_id, scheduled_at, mode, location, status, feedback, created_at, modified_at
+        ) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
     ");
     $stmt->bind_param("isssss", $application_id, $scheduled_at, $mode, $location, $status, $feedback);
 
@@ -101,10 +96,12 @@ try {
         $update_stmt->bind_param("ii", $interview_id, $application_id);
         $update_stmt->execute();
 
+        // ✅ Step 5: Response includes student_id also (without adding to DB)
         echo json_encode([
             "status" => true,
             "message" => "Interview scheduled successfully",
-            "interview_id" => $interview_id
+            "interview_id" => $interview_id,
+            "student_id" => $student_id   // 🟢 Added student_id from applications table
         ]);
     } else {
         echo json_encode([

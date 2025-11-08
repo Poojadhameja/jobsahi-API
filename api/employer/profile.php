@@ -52,13 +52,25 @@ try {
     $profiles = [];
     while ($row = $result->fetch_assoc()) {
         // ✅ Construct absolute file URL if file exists
-        $base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") .
-                    "://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
-        $company_logo_url = null;
+        // $base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") .
+        //             "://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
+        // $company_logo_url = null;
 
+        // if (!empty($row['company_logo'])) {
+        //     $company_logo_url = $base_url . $row['company_logo'];
+        // }
+
+        // ✅ Construct correct base URL (without /employer/)
+        $base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") .
+            "://" . $_SERVER['HTTP_HOST'] . "/api/uploads/recruiter_logo/";
+
+        $company_logo_url = null;
         if (!empty($row['company_logo'])) {
-            $company_logo_url = $base_url . $row['company_logo'];
+            // Remove leading slashes and possible /employer/uploads/ prefix
+            $clean_path = str_replace(["/employer/uploads/recruiter_logo/", "/uploads/recruiter_logo/"], "", $row['company_logo']);
+            $company_logo_url = $base_url . $clean_path;
         }
+
 
         $profiles[] = [
             "profile_id" => intval($row['id']),
@@ -88,8 +100,8 @@ try {
     // ✅ Final response
     echo json_encode([
         "success" => true,
-        "message" => count($profiles) > 0 
-            ? "Recruiter profile(s) retrieved successfully" 
+        "message" => count($profiles) > 0
+            ? "Recruiter profile(s) retrieved successfully"
             : "No profiles found",
         "data" => [
             "profiles" => $profiles,
@@ -109,8 +121,6 @@ try {
 
     $stmt->close();
     $conn->close();
-
 } catch (Exception $e) {
     echo json_encode(["success" => false, "message" => "Error: " . $e->getMessage()]);
 }
-?>

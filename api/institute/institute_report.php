@@ -37,7 +37,7 @@ try {
         FROM student_profiles sp
         JOIN student_course_enrollments sce ON sp.id = sce.student_id
         JOIN courses c ON c.id = sce.course_id
-        WHERE c.institute_id = ? AND sp.admin_action = 'approved'
+        WHERE c.institute_id = ?'
     ";
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("i", $institute_id);
@@ -66,7 +66,7 @@ try {
     // ---------------------------------------------------
     // 3️⃣ Total Courses
     // ---------------------------------------------------
-    $sql = "SELECT COUNT(*) AS total_courses FROM courses WHERE institute_id = ? AND admin_action = 'approved'";
+    $sql = "SELECT COUNT(*) AS total_courses FROM courses WHERE institute_id = ? ";
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("i", $institute_id);
     $stmt->execute();
