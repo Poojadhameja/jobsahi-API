@@ -24,7 +24,7 @@ return new class extends Migration {
             $table->dateTime('created_at')->useCurrent();
             $table->dateTime('modified_at')->useCurrent()->useCurrentOnUpdate();
             $table->dateTime('deleted_at')->nullable();
-            $table->enum('admin_action', ['pending', 'approved', 'rejected'])->default('pending');
+            $table->enum('admin_action', ['pending', 'approved', 'rejected'])->default('approved');
 
             // ✅ Safe Foreign Key Constraints
             $table->foreign('job_id')
