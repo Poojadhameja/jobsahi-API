@@ -35,17 +35,11 @@ $sql = "SELECT
         JOIN jobs j ON a.job_id = j.id
         WHERE 1=1";
 
+// ✅ Always filter only approved admin_action
+$sql .= " AND LOWER(a.admin_action) = 'approved'";
+
 $params = [];
 $types = "";
-
-// ---- Role-based filter ----
-if (strtolower($current_user['role']) === 'admin') {
-    // Admin can see all application statuses
-    $sql .= " AND LOWER(a.admin_action) IN ('pending', 'approved', 'rejected')";
-} else {
-    // Students see only approved applications
-    $sql .= " AND LOWER(a.admin_action) = 'approved'";
-}
 
 // ---- Optional filters ----
 if (!empty($student_id) && $student_id > 0) {
