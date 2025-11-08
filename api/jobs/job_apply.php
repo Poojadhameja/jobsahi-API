@@ -118,22 +118,17 @@ $insert_sql = "INSERT INTO applications (
     job_id,
     student_id,
     cover_letter,
-    resume_link,
-    status,
     applied_at
-) VALUES (?, ?, ?, ?, 'applied', NOW())";
+) VALUES (?, ?, ?, NOW())";
 
 $insert_stmt = mysqli_prepare($conn, $insert_sql);
 
-$resume_link = isset($input['resume_link']) && !empty($input['resume_link']) ? $input['resume_link'] : "";
-
 mysqli_stmt_bind_param(
     $insert_stmt,
-    "iiss",
+    "iis",
     $job_id,
     $student_profile_id,
-    $input['cover_letter'],
-    $resume_link
+    $input['cover_letter']
 );
 
 if (mysqli_stmt_execute($insert_stmt)) {
@@ -145,7 +140,6 @@ if (mysqli_stmt_execute($insert_stmt)) {
         a.job_id,
         a.student_id,
         a.cover_letter,
-        a.resume_link,
         a.status,
         a.applied_at,
         j.title as job_title,
@@ -159,6 +153,9 @@ if (mysqli_stmt_execute($insert_stmt)) {
     mysqli_stmt_execute($get_stmt);
     $result = mysqli_stmt_get_result($get_stmt);
     $application_data = mysqli_fetch_assoc($result);
+    if (is_array($application_data)) {
+        $application_data['resume_link'] = "";
+    }
     mysqli_stmt_close($get_stmt);
 
     http_response_code(201);

@@ -18,7 +18,6 @@ return new class extends Migration {
             $table->boolean('job_selected')->default(0);
             $table->enum('status', ['applied', 'shortlisted', 'rejected', 'selected'])->default('applied');
             $table->dateTime('applied_at');
-            $table->string('resume_link', 255);
             $table->text('cover_letter');
 
             // ✅ System timestamps
