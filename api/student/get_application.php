@@ -49,7 +49,6 @@ $sql = "
         a.job_id,
         a.status,
         a.applied_at,
-        a.resume_link,
         a.cover_letter,
         a.created_at,
         a.modified_at,
