@@ -1,37 +1,53 @@
 <?php
 // get-course.php - Fetch course details by ID with role-based visibility
 require_once '../cors.php';
+require_once '../db.php';
 
-// Authenticate user and get role
-$user = authenticateJWT(['admin','student','institute']); // ✅ Fix: include 'institute' role
-$role = $user['role'];  // ✅ Fix: define $role
+// ✅ Authenticate user and get role
+$user = authenticateJWT(['admin', 'student', 'institute']);
+$role = $user['role'];
+$user_id = $user['user_id'];
 
-// Get course ID from query string
-$course_id = isset($_GET['id']) ? intval($_GET['id']) : 0;  // ✅ Fix: define $course_id
+// ✅ Get course ID from query string
+$course_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 if ($role === 'admin') {
-    // Admin can see all courses
-    $sql = "SELECT id, institute_id, title, description, duration, fee, admin_action
+    // ✅ Admin can see all courses
+    $sql = "SELECT id, institute_id, category_id, title, description, duration, 
+                   tagged_skills, batch_limit, instructor_name, mode, 
+                   certification_allowed, media, fee, admin_action, status, 
+                   created_at, updated_at
             FROM courses
             WHERE id = ?";
     $params = [$course_id];
     $param_types = "i";
-} else {
-    // Students can see only approved courses
-    $sql = "SELECT id, institute_id, title, description, duration, fee, admin_action
+
+} elseif ($role === 'institute') {
+    // ✅ Institutes can see only their own courses
+    $sql = "SELECT id, institute_id, category_id, title, description, duration, 
+                   tagged_skills, batch_limit, instructor_name, mode, 
+                   certification_allowed, media, fee, admin_action, status, 
+                   created_at, updated_at
             FROM courses
-            WHERE id = ? AND admin_action = ?";
-    $params = [$course_id, 'approved'];
-    $param_types = "is";
+            WHERE id = ? AND institute_id = ?";
+    $params = [$course_id, $user_id];
+    $param_types = "ii";
+
+} else {
+    // ✅ Students can see only approved courses
+    $sql = "SELECT id, institute_id, category_id, title, description, duration, 
+                   tagged_skills, batch_limit, instructor_name, mode, 
+                   certification_allowed, media, fee, admin_action, status, 
+                   created_at, updated_at
+            FROM courses
+            WHERE id = ? AND admin_action = 'approved'";
+    $params = [$course_id];
+    $param_types = "i";
 }
 
+// ✅ Prepare and execute query safely
 if ($stmt = mysqli_prepare($conn, $sql)) {
-    // Bind parameters dynamically
-    if ($role === 'admin') {
-        mysqli_stmt_bind_param($stmt, $param_types, $params[0]);
-    } else {
-        mysqli_stmt_bind_param($stmt, $param_types, $params[0], $params[1]);
-    }
+    mysqli_stmt_bind_param($stmt, $param_types, ...$params);
 
     if (mysqli_stmt_execute($stmt)) {
         $result = mysqli_stmt_get_result($stmt);
@@ -43,10 +59,11 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
                 "course" => $row
             ]);
         } else {
-            $message = $role === 'admin'
-                ? "Course not found"
-                : "Course not found or not approved yet";
-
+            $message = match ($role) {
+                'admin' => "Course not found.",
+                'institute' => "Course not found or not owned by this institute.",
+                default => "Course not found or not approved yet."
+            };
             http_response_code(404);
             echo json_encode([
                 "status" => false,
@@ -60,6 +77,7 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
             "message" => "Query execution failed: " . mysqli_error($conn)
         ]);
     }
+
     mysqli_stmt_close($stmt);
 } else {
     http_response_code(500);

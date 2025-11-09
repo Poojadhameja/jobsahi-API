@@ -1,6 +1,7 @@
 <?php
-// skill-tests.php
+// skill-tests.php - Manage Skill Tests (Create & Update)
 require_once '../cors.php';
+require_once '../db.php';
 
 $current_user = authenticateJWT(['admin', 'recruiter', 'student']);
 $user_role = $current_user['role'] ?? '';
@@ -19,13 +20,15 @@ function respond($data) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = json_decode(file_get_contents("php://input"), true);
 
-    // Only required basic info at creation
+    // ✅ Validate required fields
     $required = ['test_platform', 'test_name'];
     foreach ($required as $f) {
-        if (!isset($data[$f])) respond(["status" => false, "message" => "Missing field: $f"]);
+        if (!isset($data[$f]) || $data[$f] === '') {
+            respond(["status" => false, "message" => "Missing field: $f"]);
+        }
     }
 
-    // Fetch student_id from student_profiles if role is student
+    // ✅ Determine student_id
     $student_id = null;
     if ($user_role === 'student') {
         $stmt = $conn->prepare("SELECT id FROM student_profiles WHERE user_id = ?");
@@ -38,16 +41,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             respond(["status" => false, "message" => "No student profile found for the user"]);
         }
     } elseif (in_array($user_role, ['admin', 'recruiter'])) {
-        // For admin or recruiter, allow student_id from input if provided
         $student_id = isset($data['student_id']) ? (int)$data['student_id'] : null;
         if ($student_id) {
-            $stmt = $conn->prepare("SELECT student_id FROM student_profiles WHERE student_id = ?");
+            $stmt = $conn->prepare("SELECT id FROM student_profiles WHERE id = ?");
             $stmt->bind_param("i", $student_id);
             $stmt->execute();
             $result = $stmt->get_result()->fetch_assoc();
             if (!$result) {
                 respond(["status" => false, "message" => "Invalid student_id"]);
             }
+        } else {
+            respond(["status" => false, "message" => "student_id is required for admin/recruiter"]);
         }
     } else {
         respond(["status" => false, "message" => "Unauthorized role"]);
@@ -57,15 +61,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         respond(["status" => false, "message" => "Student ID could not be determined"]);
     }
 
-    $test_platform = $data['test_platform'];
-    $test_name = $data['test_name'];
+    // ✅ Prepare input values
+    $test_platform = trim($data['test_platform']);
+    $test_name = trim($data['test_name']);
 
-    $score = null;
-    $max_score = $data['max_score'] ?? null;
-    $completed_at = null;
-    $badge_awarded = 0;
-    $passed = 0;
+    // ✅ FIX: Prevent NULL constraint violation
+    $score = isset($data['score']) ? (int)$data['score'] : 0;
+    $max_score = isset($data['max_score']) ? (int)$data['max_score'] : 0;
+    $completed_at = $data['completed_at'] ?? null;
+    $badge_awarded = isset($data['badge_awarded']) ? (int)$data['badge_awarded'] : 0;
+    $passed = isset($data['passed']) ? (int)$data['passed'] : 0;
     $admin_action = 'pending';
+
+    // ✅ CHECK if this student already has this test
+    $check = $conn->prepare("
+        SELECT id 
+        FROM skill_tests 
+        WHERE student_id = ? AND test_platform = ? AND test_name = ?
+        LIMIT 1
+    ");
+    $check->bind_param("iss", $student_id, $test_platform, $test_name);
+    $check->execute();
+    $existing = $check->get_result()->fetch_assoc();
+    $check->close();
+
+    if ($existing) {
+        // ✅ Test already exists for this student — don't insert duplicate
+        respond([
+            "status" => true,
+            "message" => "Test already exists for this student",
+            "existing_id" => $existing['id']
+        ]);
+    }
 
     try {
         $stmt = $conn->prepare("
@@ -73,12 +100,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             (student_id, test_platform, test_name, score, max_score, completed_at, badge_awarded, passed, admin_action, created_at, modified_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
         ");
+
         if (!$stmt) respond(["status" => false, "message" => "Prepare failed: " . $conn->error]);
 
-        $stmt->bind_param("issiiisis", $student_id, $test_platform, $test_name, $score, $max_score, $completed_at, $badge_awarded, $passed, $admin_action);
+        $stmt->bind_param(
+            "issiiisis",
+            $student_id,
+            $test_platform,
+            $test_name,
+            $score,
+            $max_score,
+            $completed_at,
+            $badge_awarded,
+            $passed,
+            $admin_action
+        );
 
         if ($stmt->execute()) {
-            respond(["status" => true, "message" => "Skill test created successfully", "insert_id" => $stmt->insert_id]);
+            respond([
+                "status" => true,
+                "message" => "Skill test created successfully",
+                "insert_id" => $stmt->insert_id
+            ]);
         } else {
             respond(["status" => false, "message" => "Failed: " . $stmt->error]);
         }
@@ -95,18 +138,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
     if (!isset($data['id'])) respond(["status" => false, "message" => "Missing id"]);
     $id = (int)$data['id'];
 
-    // Student can only update their own record
+    // ✅ Student can only update their own record
     if ($user_role === 'student') {
-        $check = $conn->prepare("SELECT student_id FROM skill_tests WHERE id = ?");
+        $check = $conn->prepare("SELECT st.student_id, sp.user_id 
+                                 FROM skill_tests st 
+                                 JOIN student_profiles sp ON st.student_id = sp.id
+                                 WHERE st.id = ?");
         $check->bind_param("i", $id);
         $check->execute();
         $res = $check->get_result()->fetch_assoc();
-        if (!$res || $res['student_id'] != $user_id) {
+        if (!$res || $res['user_id'] != $user_id) {
             respond(["status" => false, "message" => "Unauthorized"]);
         }
     }
 
-    // Allow score, max_score, completed_at, badge_awarded, passed to be updated after test
+    // ✅ Collect updatable fields
     $fields = [];
     $types = '';
     $values = [];
@@ -121,7 +167,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
         }
     }
 
-    // ONLY admin can update admin_action
+    // ✅ Only admin can update admin_action
     if (isset($data['admin_action']) && $user_role === 'admin') {
         $fields[] = "admin_action = ?";
         $types .= 's';
@@ -136,7 +182,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
 
     $stmt = $conn->prepare($sql);
     $stmt->bind_param($types, ...$values);
-    if ($stmt->execute()) respond(["status" => true, "message" => "Record updated"]);
-    else respond(["status" => false, "message" => $stmt->error]);
+
+    if ($stmt->execute()) {
+        respond(["status" => true, "message" => "Record updated"]);
+    } else {
+        respond(["status" => false, "message" => $stmt->error]);
+    }
 }
 ?>

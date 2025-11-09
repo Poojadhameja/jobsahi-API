@@ -2,8 +2,8 @@
 require_once '../cors.php';
 require_once '../db.php'; // ✅ DB connection
 
-// ✅ Authenticate JWT (allowed roles: admin, student)
-$current_user = authenticateJWT(['admin', 'student']);
+// ✅ Authenticate JWT (allowed roles: admin, student, institute, recruiter)
+$current_user = authenticateJWT(['admin', 'student', 'institute', 'recruiter']);
 $user_role = strtolower($current_user['role']);
 $user_id = $current_user['user_id'];
 
@@ -20,7 +20,31 @@ if ($user_role === 'admin') {
         echo json_encode(["message" => "Missing or invalid student_id for admin", "status" => false]);
         exit;
     }
-} else {
+} 
+// ✅ NEW: For recruiter or institute, allow only approved student profiles
+elseif (in_array($user_role, ['recruiter', 'institute'])) {
+    $student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : 0;
+
+    if ($student_id <= 0) {
+        echo json_encode(["message" => "Missing or invalid student_id for recruiter/institute", "status" => false]);
+        exit;
+    }
+
+    // ✅ Check if student profile exists and approved
+    $stmt = $conn->prepare("SELECT id FROM student_profiles WHERE id = ? AND admin_action = 'approved' AND deleted_at IS NULL LIMIT 1");
+    $stmt->bind_param("i", $student_id);
+    $stmt->execute();
+    $stmt->bind_result($approved_student_id);
+    $stmt->fetch();
+    $stmt->close();
+
+    if (!$approved_student_id) {
+        echo json_encode(["message" => "Student profile not found or not approved", "status" => false]);
+        exit;
+    }
+}
+// ✅ For student role
+else {
     $stmt = $conn->prepare("SELECT id FROM student_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
@@ -40,8 +64,6 @@ if (json_last_error() !== JSON_ERROR_NONE) {
     echo json_encode(["message" => "Invalid JSON input", "status" => false]);
     exit;
 }
-
-// ✅ Debugging support removed for production
 
 // ✅ Extract all expected fields (support both flat and structured JSON)
 $skills           = $input['skills'] ?? $input['professional_info']['skills'] ?? null;
@@ -68,19 +90,11 @@ $email            = $input['email'] ?? $input['personal_info']['email'] ?? null;
 $user_name        = $input['user_name'] ?? $input['personal_info']['user_name'] ?? null;
 $phone_number     = $input['phone_number'] ?? $input['personal_info']['phone_number'] ?? null;
 
-// ✅ Debug statements removed for production
+// ✅ Convert experience and projects to JSON
+if (is_array($experience)) $experience = json_encode($experience, JSON_UNESCAPED_UNICODE);
+if (is_array($projects)) $projects = json_encode($projects, JSON_UNESCAPED_UNICODE);
 
-// ✅ Convert experience to JSON if array
-if (is_array($experience)) {
-    $experience = json_encode($experience, JSON_UNESCAPED_UNICODE);
-}
-
-// ✅ Convert projects (name + link) to JSON if array
-if (is_array($projects)) {
-    $projects = json_encode($projects, JSON_UNESCAPED_UNICODE);
-}
-
-// ✅ Start transaction for updating both tables
+// ✅ Start transaction
 mysqli_autocommit($conn, false);
 
 $update_success = true;
@@ -116,7 +130,6 @@ if (!$stmt) {
     $update_success = false;
     $error_message = "Failed to prepare student profile statement: " . mysqli_error($conn);
 } else {
-    // ✅ Bind all parameters (21 total)
     mysqli_stmt_bind_param(
         $stmt,
         "ssssssssssssssssddssi",
@@ -150,9 +163,8 @@ if (!$stmt) {
     mysqli_stmt_close($stmt);
 }
 
-// ✅ Update users table if email, user_name, or phone_number is provided
+// ✅ Update users table (email/user_name/phone)
 if ($update_success && ($email !== null || $user_name !== null || $phone_number !== null)) {
-    // Get user_id from student_profiles
     $user_id_query = "SELECT user_id FROM student_profiles WHERE id = ? AND deleted_at IS NULL";
     $user_stmt = mysqli_prepare($conn, $user_id_query);
     if (!$user_stmt) {
@@ -166,26 +178,13 @@ if ($update_success && ($email !== null || $user_name !== null || $phone_number 
         mysqli_stmt_close($user_stmt);
 
         if ($user_id_from_profile) {
-            // Build dynamic update query for users table
             $user_update_fields = [];
             $user_params = [];
             $user_types = "";
 
-            if ($email !== null) {
-                $user_update_fields[] = "email = ?";
-                $user_params[] = $email;
-                $user_types .= "s";
-            }
-            if ($user_name !== null) {
-                $user_update_fields[] = "user_name = ?";
-                $user_params[] = $user_name;
-                $user_types .= "s";
-            }
-            if ($phone_number !== null) {
-                $user_update_fields[] = "phone_number = ?";
-                $user_params[] = $phone_number;
-                $user_types .= "s";
-            }
+            if ($email !== null) { $user_update_fields[] = "email = ?"; $user_params[] = $email; $user_types .= "s"; }
+            if ($user_name !== null) { $user_update_fields[] = "user_name = ?"; $user_params[] = $user_name; $user_types .= "s"; }
+            if ($phone_number !== null) { $user_update_fields[] = "phone_number = ?"; $user_params[] = $phone_number; $user_types .= "s"; }
 
             if (!empty($user_update_fields)) {
                 $user_sql = "UPDATE users SET " . implode(", ", $user_update_fields) . " WHERE id = ?";
@@ -217,6 +216,8 @@ if ($update_success) {
         "message" => "Student profile updated successfully",
         "data" => [
             "profile_updated_id" => $student_id,
+            "profile_updated_by_id" => $user_id, // ✅ NEW
+            "profile_updated" => true,           // ✅ NEW
             "updated_by" => $user_role,
             "updated_fields" => [
                 "student_profile" => true,
@@ -234,6 +235,8 @@ if ($update_success) {
         "success" => false,
         "message" => "Update failed: " . $error_message,
         "data" => [
+            "profile_updated" => false,
+            "profile_updated_by_id" => $user_id, // ✅ NEW
             "error_details" => $error_message,
             "profile_id" => $student_id
         ],

@@ -40,7 +40,8 @@ try {
             j.title AS job_title,
             i.mode AS interview_mode,
             i.location AS interview_location,
-            DATE_FORMAT(i.scheduled_at, '%h:%i %p') AS interview_time
+            DATE_FORMAT(i.scheduled_at, '%h:%i %p') AS interview_time,
+DATE(i.scheduled_at) AS interview_date
         FROM interviews i
         INNER JOIN applications a ON a.id = i.application_id
         INNER JOIN jobs j ON j.id = a.job_id
@@ -62,7 +63,8 @@ try {
             "job_title" => $row['job_title'],
             "mode" => ucfirst($row['interview_mode']),
             "location" => $row['interview_location'],
-            "time" => $row['interview_time']
+            "time" => $row['interview_time'],
+             "scheduled_at" => $row['interview_date'] // ✅ added full date
         ];
         http_response_code(200);
         echo json_encode(["candidate_interview_details" => $data, "status" => true]);

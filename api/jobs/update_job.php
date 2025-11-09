@@ -25,7 +25,11 @@ if (!$data) {
 // Extract fields
 $title = trim($data['title'] ?? '');
 $description = trim($data['description'] ?? '');
+$category_id = intval($data['category_id'] ?? 0);
 $category_name = trim($data['category_name'] ?? '');
+if (is_numeric($category_name)) {
+    $category_name = '';
+}
 $location = trim($data['location'] ?? '');
 $skills_required = trim($data['skills_required'] ?? '');
 $salary_min = floatval($data['salary_min'] ?? 0);
@@ -41,6 +45,10 @@ $status = $data['status'] ?? 'open';
 $person_name = trim($data['person_name'] ?? '');
 $phone = trim($data['phone'] ?? '');
 $additional_contact = trim($data['additional_contact'] ?? '');
+if (is_numeric($category_name)) {
+    $category_name = '';
+}
+$category_name = preg_replace('/\s+/', ' ', $category_name);
 
 // ✅ Begin transaction
 $conn->begin_transaction();
@@ -48,9 +56,12 @@ $conn->begin_transaction();
 try {
     // --- 1️⃣ Verify recruiter access ---
     if ($user_role === 'recruiter') {
-        $check = $conn->prepare("SELECT j.id, j.recruiter_id FROM jobs j 
-                                 INNER JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
-                                 WHERE j.id = ? AND rp.user_id = ? LIMIT 1");
+        $check = $conn->prepare("
+            SELECT j.id, j.recruiter_id 
+            FROM jobs j 
+            INNER JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
+            WHERE j.id = ? AND rp.user_id = ? LIMIT 1
+        ");
         $check->bind_param("ii", $job_id, $user_id);
         $check->execute();
         $check->store_result();
@@ -60,26 +71,57 @@ try {
         $check->close();
     }
 
-    // --- 2️⃣ Handle Category Update or Create ---
-    $category_id = null;
-    if (!empty($category_name)) {
+    // --- 2️⃣ Handle Category Update / Resolve ---
+    if ($category_id > 0) {
+        // Check if category_id exists
+        $verify = $conn->prepare("SELECT id FROM job_category WHERE id = ? LIMIT 1");
+        $verify->bind_param("i", $category_id);
+        $verify->execute();
+        $verify->store_result();
+
+        if ($verify->num_rows === 0 && !empty($category_name)) {
+            // If invalid id, fallback to name
+            $cat_check = $conn->prepare("SELECT id FROM job_category WHERE LOWER(category_name) = LOWER(?) LIMIT 1");
+            $cat_check->bind_param("s", $category_name);
+            $cat_check->execute();
+            $cat_check->bind_result($existing_cat_id);
+            $cat_check->fetch();
+            $cat_check->close();
+
+            if ($existing_cat_id) {
+                $category_id = $existing_cat_id;
+            } else {
+                $cat_insert = $conn->prepare("INSERT INTO job_category (category_name, created_at) VALUES (?, NOW())");
+                $cat_insert->bind_param("s", $category_name);
+                $cat_insert->execute();
+                $category_id = $cat_insert->insert_id;
+                $cat_insert->close();
+            }
+        }
+        $verify->close();
+    } elseif (!empty($category_name)) {
+        // Case: no category_id but category_name provided
         $cat_check = $conn->prepare("SELECT id FROM job_category WHERE LOWER(category_name) = LOWER(?) LIMIT 1");
         $cat_check->bind_param("s", $category_name);
         $cat_check->execute();
-        $cat_check->bind_result($category_id);
+        $cat_check->bind_result($existing_id);
         $cat_check->fetch();
         $cat_check->close();
 
-        if (!$category_id) {
+        if ($existing_id) {
+            $category_id = $existing_id;
+        } else {
             $cat_insert = $conn->prepare("INSERT INTO job_category (category_name, created_at) VALUES (?, NOW())");
             $cat_insert->bind_param("s", $category_name);
             $cat_insert->execute();
             $category_id = $cat_insert->insert_id;
             $cat_insert->close();
         }
+    } else {
+        $category_id = null; // optional
     }
 
-    // --- 3️⃣ Update Job Main Table ---
+    // --- 3️⃣ Update Job Table ---
     $update_job = $conn->prepare("
         UPDATE jobs 
         SET title = ?, 
@@ -130,20 +172,22 @@ try {
     $get_info->close();
 
     if ($company_info_id) {
-        // Update existing contact record
-        $update_info = $conn->prepare("UPDATE recruiter_company_info 
+        $update_info = $conn->prepare("
+            UPDATE recruiter_company_info 
             SET person_name = ?, phone = ?, additional_contact = ?, updated_at = NOW() 
-            WHERE id = ?");
+            WHERE id = ?
+        ");
         $update_info->bind_param("sssi", $person_name, $phone, $additional_contact, $company_info_id);
         if (!$update_info->execute()) {
             throw new Exception("Failed to update recruiter contact info: " . $update_info->error);
         }
         $update_info->close();
     } else {
-        // If not found, create a new contact and link it
-        $insert_info = $conn->prepare("INSERT INTO recruiter_company_info (job_id, recruiter_id, person_name, phone, additional_contact, created_at)
-                                       VALUES ((SELECT recruiter_id FROM jobs WHERE id = ?), 
-                                               (SELECT recruiter_id FROM jobs WHERE id = ?), ?, ?, ?, NOW())");
+        $insert_info = $conn->prepare("
+            INSERT INTO recruiter_company_info (job_id, recruiter_id, person_name, phone, additional_contact, created_at)
+            VALUES ((SELECT recruiter_id FROM jobs WHERE id = ?), 
+                    (SELECT recruiter_id FROM jobs WHERE id = ?), ?, ?, ?, NOW())
+        ");
         $insert_info->bind_param("iisss", $job_id, $job_id, $person_name, $phone, $additional_contact);
         $insert_info->execute();
         $new_info_id = $insert_info->insert_id;
@@ -160,7 +204,7 @@ try {
 
     echo json_encode([
         "status" => true,
-        "message" => "Job, category, and recruiter contact info updated successfully",
+        "message" => "Job updated successfully with existing category support",
         "job_id" => $job_id,
         "category_id" => $category_id,
         "company_info_id" => $company_info_id ?? $new_info_id ?? null
