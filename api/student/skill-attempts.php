@@ -1,185 +1,226 @@
 <?php
-// skill-attempts.php - Manage test question attempts
+// skill-attempts.php - Manage question attempts for skill tests
 require_once '../cors.php';
 require_once '../db.php';
+
 header('Content-Type: application/json');
 
-function respond($d) { echo json_encode($d); exit; }
-
-// ✅ JWT roles
-$current_user = authenticateJWT(['student', 'recruiter', 'admin']);
+// Roles:
+// - student: create attempts, view own attempts
+// - admin/recruiter: view attempts (for reporting), edit if needed
+$current_user = authenticateJWT(['student', 'admin', 'recruiter']);
 $user_role = $current_user['role'] ?? '';
 $user_id   = $current_user['user_id'] ?? null;
 
-// ✅ Helper functions
-function getStudentIdFromProfile($conn, $user_id) {
-    $stmt = $conn->prepare("SELECT id FROM student_profiles WHERE user_id = ? LIMIT 1");
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $row = $res->fetch_assoc();
-    $stmt->close();
-    return $row ? (int)$row['id'] : null;
-}
+function respond($d){ echo json_encode($d); exit; }
 
-function getOrCreateStudentProfile($conn, $user_id) {
-    $sid = getStudentIdFromProfile($conn, $user_id);
-    if ($sid) return $sid;
-
-    $stmt = $conn->prepare("INSERT INTO student_profiles (user_id) VALUES (?)");
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $new_id = $stmt->insert_id;
-    $stmt->close();
-    return $new_id;
-}
-
-function verifyStudentProfile($conn, $sid) {
-    $stmt = $conn->prepare("SELECT id FROM student_profiles WHERE id = ?");
-    $stmt->bind_param("i", $sid);
-    $stmt->execute();
-    $ok = $stmt->get_result()->num_rows > 0;
-    $stmt->close();
-    return $ok;
+function getStudentId($conn, $user_id){
+    $q = $conn->prepare("SELECT id FROM student_profiles WHERE user_id = ? LIMIT 1");
+    $q->bind_param("i", $user_id);
+    $q->execute();
+    $r = $q->get_result()->fetch_assoc();
+    $q->close();
+    return $r ? (int)$r['id'] : null;
 }
 
 /* =========================================================
-   POST: Record attempt (Only one attempt per question)
+   POST: Record attempt (Student only, single attempt rule)
    ========================================================= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    if (!in_array($user_role, ['student', 'recruiter'])) {
-        respond(["status"=>false, "message"=>"Only students and recruiters can submit attempts"]);
+    if ($user_role !== 'student') {
+        respond(["status" => false, "message" => "Only students can submit attempts"]);
     }
 
     $data = json_decode(file_get_contents("php://input"), true);
-    if (!$data) respond(["status"=>false, "message"=>"Invalid JSON input"]);
+    if (!$data) respond(["status" => false, "message" => "Invalid JSON input"]);
 
-    $required = ['test_id','question_id','selected_option','is_correct','attempt_number','time_taken_seconds'];
-    foreach ($required as $f) if (!isset($data[$f])) respond(["status"=>false,"message"=>"Missing $f"]);
-
-    // ✅ Determine student_id
-    if ($user_role === 'student') {
-        $student_id = getOrCreateStudentProfile($conn, $user_id);
-    } else { // recruiter
-        $student_id = isset($data['student_id']) ? (int)$data['student_id'] : getOrCreateStudentProfile($conn, $user_id);
-        if (!verifyStudentProfile($conn, $student_id))
-            respond(["status"=>false,"message"=>"Invalid student_id"]);
+    $required = ['test_id', 'question_id', 'selected_option', 'attempt_number', 'time_taken_seconds'];
+    foreach ($required as $f) {
+        if (!isset($data[$f]) || $data[$f] === '') {
+            respond(["status" => false, "message" => "Missing field: $f"]);
+        }
     }
 
-    $test_id  = (int)$data['test_id'];
-    $question_id = (int)$data['question_id'];
-    $selected = strtoupper(trim($data['selected_option']));
-    $is_correct = (int)$data['is_correct'];
-    $attempt_no = (int)$data['attempt_number'];
-    $time_taken = (int)$data['time_taken_seconds'];
+    $test_id      = (int)$data['test_id'];
+    $question_id  = (int)$data['question_id'];
+    $selected     = strtoupper(trim($data['selected_option']));
+    $attempt_no   = (int)$data['attempt_number'];
+    $time_taken   = (int)$data['time_taken_seconds'];
 
-    if (!in_array($selected, ['A','B','C','D'])) respond(["status"=>false,"message"=>"Invalid selected_option"]);
+    if (!in_array($selected, ['A','B','C','D'])) {
+        respond(["status" => false, "message" => "Invalid selected_option. Allowed: A, B, C, D"]);
+    }
 
-    // ✅ Check if this student already attempted this question in this test
-    $check = $conn->prepare("SELECT id FROM skill_attempts WHERE student_id=? AND test_id=? AND question_id=? LIMIT 1");
+    // ✅ Get student_id from token
+    $student_id = getStudentId($conn, $user_id);
+    if (!$student_id) respond(["status" => false, "message" => "Student profile not found"]);
+
+    // ✅ Validate test belongs to this student
+    $checkTest = $conn->prepare("SELECT id FROM skill_tests WHERE id = ? AND student_id = ? LIMIT 1");
+    $checkTest->bind_param("ii", $test_id, $student_id);
+    $checkTest->execute();
+    $tRow = $checkTest->get_result()->fetch_assoc();
+    $checkTest->close();
+    if (!$tRow) respond(["status" => false, "message" => "Invalid test_id for this student"]);
+
+    // ✅ Validate question & fetch correct_option
+    $checkQ = $conn->prepare("SELECT correct_option FROM skill_questions WHERE id = ? LIMIT 1");
+    $checkQ->bind_param("i", $question_id);
+    $checkQ->execute();
+    $qRow = $checkQ->get_result()->fetch_assoc();
+    $checkQ->close();
+    if (!$qRow) respond(["status" => false, "message" => "Invalid question_id"]);
+
+    $correct_option = strtoupper(trim($qRow['correct_option']));
+    if (!in_array($correct_option, ['A','B','C','D'])) {
+        respond(["status" => false, "message" => "Invalid correct_option in DB for this question"]);
+    }
+
+    // ✅ Calculate correctness
+    $is_correct = ($selected === $correct_option) ? 1 : 0;
+
+    // ✅ Check if attempt already exists (SINGLE ATTEMPT RULE)
+    $check = $conn->prepare("
+        SELECT id 
+        FROM skill_attempts 
+        WHERE student_id = ? AND test_id = ? AND question_id = ?
+        LIMIT 1
+    ");
     $check->bind_param("iii", $student_id, $test_id, $question_id);
     $check->execute();
-    $exists = $check->get_result()->fetch_assoc();
+    $exist = $check->get_result()->fetch_assoc();
     $check->close();
 
-    if ($exists) {
-        // 🔄 Update existing attempt instead of inserting new one
-        $update = $conn->prepare("
-            UPDATE skill_attempts 
-            SET selected_option=?, is_correct=?, attempt_number=?, time_taken_seconds=?, answered_at=NOW()
-            WHERE id=?");
-        $update->bind_param("siiii", $selected, $is_correct, $attempt_no, $time_taken, $exists['id']);
-        if ($update->execute()) {
-            $update->close();
-            respond(["status"=>true,"message"=>"Attempt updated (single attempt rule enforced)","attempt_id"=>$exists['id']]);
-        } else {
-            $update->close();
-            respond(["status"=>false,"message"=>"Failed to update attempt"]);
-        }
+    if ($exist) {
+        // ❌ Do NOT update. Reject multiple attempts.
+        respond([
+            "status" => false,
+            "message" => "You have already attempted this question. Only one attempt is allowed per question."
+        ]);
+    }
+
+    // ✅ Insert new attempt
+    $stmt = $conn->prepare("
+        INSERT INTO skill_attempts
+        (student_id, test_id, question_id, selected_option, is_correct, attempt_number, time_taken_seconds, answered_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+    ");
+    if (!$stmt) respond(["status" => false, "message" => "Prepare failed: " . $conn->error]);
+
+    $stmt->bind_param("iiisiii",
+        $student_id,
+        $test_id,
+        $question_id,
+        $selected,
+        $is_correct,
+        $attempt_no,
+        $time_taken
+    );
+
+    if ($stmt->execute()) {
+        respond([
+            "status" => true,
+            "message" => "Attempt recorded successfully",
+            "attempt_id" => $stmt->insert_id,
+            "is_correct" => $is_correct
+        ]);
     } else {
-        // 🆕 Create new attempt
-        $stmt = $conn->prepare("
-            INSERT INTO skill_attempts 
-            (student_id, test_id, question_id, selected_option, is_correct, attempt_number, time_taken_seconds, answered_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
-        ");
-        $stmt->bind_param("iiisiii", $student_id, $test_id, $question_id, $selected, $is_correct, $attempt_no, $time_taken);
-        if ($stmt->execute()) {
-            $new_id = $stmt->insert_id;
-            $stmt->close();
-            respond(["status"=>true,"message"=>"Attempt recorded","insert_id"=>$new_id]);
-        } else {
-            $err = $stmt->error;
-            $stmt->close();
-            respond(["status"=>false,"message"=>$err]);
-        }
+        respond(["status" => false, "message" => "Insert failed: " . $stmt->error]);
     }
 }
 
 /* =========================================================
-   GET: Retrieve Attempts (Student/Recruiter/Admin)
+   GET: Retrieve attempts (same as before)
    ========================================================= */
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    $id = isset($_GET['id']) ? (int)$_GET['id'] : null;
-    $student_q = isset($_GET['student_id']) ? (int)$_GET['student_id'] : null;
-    $test_q = isset($_GET['test_id']) ? (int)$_GET['test_id'] : null;
 
-    if ($user_role === 'student') {
-        $student_q = getOrCreateStudentProfile($conn, $user_id);
-    } elseif ($user_role === 'recruiter' && !$student_q) {
-        $student_q = getOrCreateStudentProfile($conn, $user_id);
-    }
+    $id          = isset($_GET['id']) ? (int)$_GET['id'] : null;
+    $student_q   = isset($_GET['student_id']) ? (int)$_GET['student_id'] : null;
+    $test_q      = isset($_GET['test_id']) ? (int)$_GET['test_id'] : null;
+
+    if ($user_role === 'student') $student_q = getStudentId($conn, $user_id);
 
     if ($id) {
-        $stmt = $conn->prepare("SELECT * FROM skill_attempts WHERE id=?");
-        $stmt->bind_param("i",$id);
+        $sql = "
+            SELECT a.*, q.question_text, q.option_a, q.option_b, q.option_c, q.option_d
+            FROM skill_attempts a
+            JOIN skill_questions q ON a.question_id = q.id
+            WHERE a.id = ?
+        ";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $id);
     } else {
-        $where=[]; $types=''; $vals=[];
-        if ($student_q) { $where[]="student_id=?"; $types.='i'; $vals[]=$student_q; }
-        if ($test_q)    { $where[]="test_id=?";   $types.='i'; $vals[]=$test_q; }
-        $sql="SELECT * FROM skill_attempts".(count($where)?" WHERE ".implode(" AND ",$where):"")." ORDER BY id ASC";
-        $stmt=$conn->prepare($sql);
-        if(count($vals)) $stmt->bind_param($types,...$vals);
+        $where = [];
+        $types = '';
+        $vals  = [];
+        if ($student_q) { $where[] = "a.student_id = ?"; $types .= 'i'; $vals[] = $student_q; }
+        if ($test_q)    { $where[] = "a.test_id = ?";    $types .= 'i'; $vals[] = $test_q; }
+
+        $sql = "
+            SELECT a.*, q.question_text, q.option_a, q.option_b, q.option_c, q.option_d
+            FROM skill_attempts a
+            JOIN skill_questions q ON a.question_id = q.id
+        ";
+        if (count($where)) $sql .= " WHERE " . implode(" AND ", $where);
+        $sql .= " ORDER BY a.id ASC";
+
+        $stmt = $conn->prepare($sql);
+        if (count($vals)) $stmt->bind_param($types, ...$vals);
     }
 
     $stmt->execute();
-    $res=$stmt->get_result();
-    $rows=[];
-    while($r=$res->fetch_assoc()) $rows[]=$r;
-    $stmt->close();
-    respond(["status"=>true,"data"=>$rows]);
+    $res = $stmt->get_result();
+    $rows = [];
+    while ($r = $res->fetch_assoc()) $rows[] = $r;
+
+    respond(["status" => true, "count" => count($rows), "data" => $rows]);
 }
 
 /* =========================================================
-   PUT / DELETE unchanged (Admin & Recruiter)
+   PUT: Manual corrections (Admin/Recruiter)
    ========================================================= */
 if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
-    if (!in_array($user_role, ['admin','recruiter'])) respond(["status"=>false,"message"=>"Only admin or recruiter can edit"]);
-    $data=json_decode(file_get_contents("php://input"),true);
-    if(!isset($data['id'])) respond(["status"=>false,"message"=>"Missing id"]);
-    $id=(int)$data['id'];
-    $fields=[];$types='';$vals=[];
-    $allowed=['selected_option','is_correct','attempt_number','time_taken_seconds'];
-    foreach($allowed as $f){ if(isset($data[$f])){ $fields[]="$f=?"; $types.=in_array($f,['is_correct','attempt_number','time_taken_seconds'])?'i':'s'; $vals[]=$data[$f]; }}
-    if(!count($fields)) respond(["status"=>false,"message"=>"No fields to update"]);
-    $sql="UPDATE skill_attempts SET ".implode(", ",$fields).", answered_at=NOW() WHERE id=?";
-    $types.='i';$vals[]=$id;
-    $stmt=$conn->prepare($sql); $stmt->bind_param($types,...$vals);
-    if($stmt->execute()){ $stmt->close(); respond(["status"=>true,"message"=>"Updated"]); }
-    else { $e=$stmt->error; $stmt->close(); respond(["status"=>false,"message"=>$e]); }
+    if (!in_array($user_role, ['admin','recruiter'])) {
+        respond(["status" => false, "message" => "Only admin or recruiter can edit attempts"]);
+    }
+
+    $data = json_decode(file_get_contents("php://input"), true);
+    if (!isset($data['id'])) respond(["status" => false, "message" => "Missing id"]);
+    $id = (int)$data['id'];
+
+    $chk = $conn->prepare("SELECT id FROM skill_attempts WHERE id = ? LIMIT 1");
+    $chk->bind_param("i", $id);
+    $chk->execute();
+    $exists = $chk->get_result()->fetch_assoc();
+    $chk->close();
+    if (!$exists) respond(["status" => false, "message" => "This id is not given or does not exist"]);
+
+    $fields = [];
+    $types = '';
+    $vals  = [];
+    $allowed = ['selected_option','is_correct','attempt_number','time_taken_seconds'];
+    foreach ($allowed as $f) {
+        if (isset($data[$f])) {
+            $fields[] = "$f = ?";
+            $types   .= in_array($f, ['is_correct','attempt_number','time_taken_seconds']) ? 'i' : 's';
+            $vals[]   = $data[$f];
+        }
+    }
+
+    if (!count($fields)) respond(["status" => false, "message" => "No fields to update"]);
+
+    $sql = "UPDATE skill_attempts SET " . implode(", ", $fields) . ", answered_at = NOW() WHERE id = ?";
+    $types .= 'i'; $vals[] = $id;
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param($types, ...$vals);
+
+    if ($stmt->execute()) respond(["status" => true, "message" => "Attempt updated"]);
+    else respond(["status" => false, "message" => $stmt->error]);
 }
 
-// if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
-//     if (!in_array($user_role,['admin','recruiter'])) respond(["status"=>false,"message"=>"Only admin or recruiter can delete"]);
-//     $data=json_decode(file_get_contents("php://input"),true);
-//     if(!isset($data['id'])) respond(["status"=>false,"message"=>"Missing id"]);
-//     $id=(int)$data['id'];
-//     $stmt=$conn->prepare("DELETE FROM skill_attempts WHERE id=?");
-//     $stmt->bind_param("i",$id);
-//     if($stmt->execute()){ $stmt->close(); respond(["status"=>true,"message"=>"Deleted"]); }
-//     else { $e=$stmt->error; $stmt->close(); respond(["status"=>false,"message"=>$e]); }
-// }
-
-respond(["status"=>false,"message"=>"Only GET, POST, PUT, DELETE allowed"]);
+/* =========================================================
+   Default
+   ========================================================= */
+respond(["status" => false, "message" => "Only GET, POST, PUT allowed"]);
 ?>
