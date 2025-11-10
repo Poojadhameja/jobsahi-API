@@ -17,7 +17,7 @@ try {
     // ✅ Get Institute ID
     $institute_id = 0;
     if ($role === 'institute') {
-        $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? AND admin_action = 'approved' LIMIT 1");
+        $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ?  LIMIT 1");
         $stmt->bind_param("i", $user_id);
         $stmt->execute();
         $result = $stmt->get_result()->fetch_assoc();
@@ -37,7 +37,7 @@ try {
         FROM student_profiles sp
         JOIN student_course_enrollments sce ON sp.id = sce.student_id
         JOIN courses c ON c.id = sce.course_id
-        WHERE c.institute_id = ?'
+        WHERE c.institute_id = ? 
     ";
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("i", $institute_id);
