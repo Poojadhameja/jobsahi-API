@@ -41,7 +41,7 @@ if ($role === 'recruiter') {
     $q->close();
 }
 
-// ✅ Base query
+// ✅ Base query — include admin_action = 'approved' by default for all roles
 $sql = "
     SELECT 
         a.id AS application_id,
@@ -49,7 +49,6 @@ $sql = "
         a.job_id,
         a.status,
         a.applied_at,
-        a.resume_link,
         a.cover_letter,
         a.created_at,
         a.modified_at,
@@ -62,6 +61,7 @@ $sql = "
     FROM applications a
     JOIN jobs j ON a.job_id = j.id
     WHERE a.id = ?
+      AND LOWER(a.admin_action) = 'approved'
 ";
 
 // ✅ Role-based restrictions
@@ -76,7 +76,7 @@ if ($role === 'student' && $student_profile_id) {
     $sql .= " AND j.recruiter_id = ?";
     $bindTypes .= "i";
     $bindValues[] = $recruiter_profile_id;
-} elseif ($role !== 'admin') {
+} elseif (!in_array($role, ['admin', 'recruiter', 'student'])) {
     echo json_encode(["message" => "Unauthorized access", "status" => false]);
     exit;
 }
