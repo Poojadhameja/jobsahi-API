@@ -1,182 +1,149 @@
 <?php
 // job_apply.php - Apply for a Job (Student only)
 require_once '../cors.php';
+require_once '../db.php';
+
+header('Content-Type: application/json');
 
 // ✅ Authenticate and allow only "student" role
-$decoded = authenticateJWT('student');  // decoded JWT payload
+$decoded = authenticateJWT('student');
 
-// Only allow POST requests
-
-
-// Read POST JSON
-$input = json_decode(file_get_contents('php://input'), true);
-
-// Get job_id from URL (?id=) or from request body
-$job_id = 0;
-if (isset($_GET['id']) && !empty($_GET['id'])) {
-    $job_id = intval($_GET['id']);
-} elseif (isset($input['job_id']) && !empty($input['job_id'])) {
-    $job_id = intval($input['job_id']);
+// ✅ Only allow POST
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(["status" => false, "message" => "Only POST method allowed"]);
+    exit;
 }
 
+// ✅ Read JSON body
+$input = json_decode(file_get_contents('php://input'), true);
+if (!$input) {
+    http_response_code(400);
+    echo json_encode(["status" => false, "message" => "Invalid JSON body"]);
+    exit;
+}
+
+// ✅ Validate job_id
+$job_id = isset($input['job_id']) ? intval($input['job_id']) : 0;
 if ($job_id <= 0) {
     http_response_code(400);
-    echo json_encode([
-        "message" => "Valid job ID is required. Pass it as URL parameter (?id=123) or in request body",
-        "status" => false
-    ]);
+    echo json_encode(["status" => false, "message" => "Valid job_id is required in body"]);
     exit;
 }
 
-// ✅ Get student_profile_id from users.id
-$user_id = $decoded['id'] ?? $decoded['user_id'] ?? null;
-
-if (!$user_id) {
-    http_response_code(401);
-    echo json_encode([
-        "message" => "Invalid token: user ID missing",
-        "status" => false
-    ]);
-    exit;
-}
-
-$student_profile_id = null;
-$profile_query = "SELECT id FROM student_profiles WHERE user_id = ?";
-$stmt = $conn->prepare($profile_query);
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$res = $stmt->get_result();
-if ($res->num_rows > 0) {
-    $row = $res->fetch_assoc();
-    $student_profile_id = $row['id'];
-}
-$stmt->close();
-
-if (!$student_profile_id) {
-    http_response_code(404);
-    echo json_encode([
-        "message" => "Student profile not found for this user",
-        "status" => false
-    ]);
-    exit;
-}
-
-// Validate required fields
+// ✅ Validate cover_letter
 if (empty($input['cover_letter'])) {
     http_response_code(400);
-    echo json_encode([
-        "message" => "Missing required field: cover_letter",
-        "status" => false
-    ]);
+    echo json_encode(["status" => false, "message" => "Missing required field: cover_letter"]);
     exit;
 }
 
-// ✅ Check if job exists
-$check_job_sql = "SELECT id, status, application_deadline FROM jobs WHERE id = ?";
-$check_stmt = mysqli_prepare($conn, $check_job_sql);
-mysqli_stmt_bind_param($check_stmt, "i", $job_id);
-mysqli_stmt_execute($check_stmt);
-$job_result = mysqli_stmt_get_result($check_stmt);
+// ✅ Get student_profile_id using user_id
+$user_id = $decoded['id'] ?? $decoded['user_id'] ?? null;
+if (!$user_id) {
+    http_response_code(401);
+    echo json_encode(["status" => false, "message" => "Invalid token: user ID missing"]);
+    exit;
+}
 
-if (mysqli_num_rows($job_result) === 0) {
+$stmt = $conn->prepare("SELECT id FROM student_profiles WHERE user_id = ? LIMIT 1");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+$student_profile = $result->fetch_assoc();
+$stmt->close();
+
+if (!$student_profile) {
     http_response_code(404);
-    echo json_encode(["message" => "Job not found", "status" => false]);
+    echo json_encode(["status" => false, "message" => "Student profile not found"]);
+    exit;
+}
+$student_id = intval($student_profile['id']);
+
+// ✅ Check if job exists and is open
+$stmt = $conn->prepare("SELECT id, status, application_deadline FROM jobs WHERE id = ?");
+$stmt->bind_param("i", $job_id);
+$stmt->execute();
+$job = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+if (!$job) {
+    http_response_code(404);
+    echo json_encode(["status" => false, "message" => "Job not found"]);
     exit;
 }
 
-$job = mysqli_fetch_assoc($job_result);
-mysqli_stmt_close($check_stmt);
-
-// Check if job is open
-$allowed_statuses = ['active', 'open'];
-if (!in_array(strtolower($job['status']), $allowed_statuses)) {
-    echo json_encode(["message" => "This job is no longer accepting applications", "status" => false]);
+if (!in_array(strtolower($job['status']), ['open', 'active'])) {
+    echo json_encode(["status" => false, "message" => "This job is not open for applications"]);
     exit;
 }
 
-// Check deadline
 if (!empty($job['application_deadline']) && strtotime($job['application_deadline']) < time()) {
-    echo json_encode(["message" => "Application deadline has passed", "status" => false]);
+    echo json_encode(["status" => false, "message" => "Application deadline has passed"]);
     exit;
 }
 
-// ✅ Check if already applied
-$check_application_sql = "SELECT id FROM applications WHERE job_id = ? AND student_id = ?";
-$check_app_stmt = mysqli_prepare($conn, $check_application_sql);
-mysqli_stmt_bind_param($check_app_stmt, "ii", $job_id, $student_profile_id);
-mysqli_stmt_execute($check_app_stmt);
-$app_result = mysqli_stmt_get_result($check_app_stmt);
+// ✅ Prevent duplicate application
+$stmt = $conn->prepare("SELECT id FROM applications WHERE job_id = ? AND student_id = ?");
+$stmt->bind_param("ii", $job_id, $student_id);
+$stmt->execute();
+$exists = $stmt->get_result()->num_rows > 0;
+$stmt->close();
 
-if (mysqli_num_rows($app_result) > 0) {
-    echo json_encode(["message" => "You have already applied for this job", "status" => false]);
+if ($exists) {
+    echo json_encode(["status" => false, "message" => "You have already applied for this job"]);
     exit;
 }
-mysqli_stmt_close($check_app_stmt);
 
-// ✅ Insert application
-$insert_sql = "INSERT INTO applications (
-    job_id,
-    student_id,
-    cover_letter,
-    resume_link,
-    status,
-    applied_at
-) VALUES (?, ?, ?, ?, 'applied', NOW())";
+// ✅ Insert new application (job_selected default = 0)
+$stmt = $conn->prepare("
+    INSERT INTO applications 
+        (job_id, student_id, cover_letter, job_selected, status, admin_action, applied_at)
+    VALUES (?, ?, ?, 0, 'applied', 'approved', NOW())
+");
+$stmt->bind_param("iis", $job_id, $student_id, $input['cover_letter']);
 
-$insert_stmt = mysqli_prepare($conn, $insert_sql);
+if ($stmt->execute()) {
+    $application_id = $stmt->insert_id;
+    $stmt->close();
 
-$resume_link = isset($input['resume_link']) && !empty($input['resume_link']) ? $input['resume_link'] : "";
-
-mysqli_stmt_bind_param(
-    $insert_stmt,
-    "iiss",
-    $job_id,
-    $student_profile_id,
-    $input['cover_letter'],
-    $resume_link
-);
-
-if (mysqli_stmt_execute($insert_stmt)) {
-    $application_id = mysqli_insert_id($conn);
-
-    // Fetch newly inserted application
-    $get_application_sql = "SELECT 
-        a.id,
-        a.job_id,
-        a.student_id,
-        a.cover_letter,
-        a.resume_link,
-        a.status,
-        a.applied_at,
-        j.title as job_title,
-        j.recruiter_id
-    FROM applications a
-    JOIN jobs j ON a.job_id = j.id
-    WHERE a.id = ?";
-    
-    $get_stmt = mysqli_prepare($conn, $get_application_sql);
-    mysqli_stmt_bind_param($get_stmt, "i", $application_id);
-    mysqli_stmt_execute($get_stmt);
-    $result = mysqli_stmt_get_result($get_stmt);
-    $application_data = mysqli_fetch_assoc($result);
-    mysqli_stmt_close($get_stmt);
+    // ✅ Fetch newly created application with job details
+    $q = $conn->prepare("
+        SELECT 
+            a.id AS application_id,
+            a.job_id,
+            j.title AS job_title,
+            j.location,
+            a.student_id,
+            a.cover_letter,
+            a.status,
+            a.job_selected,
+            a.applied_at,
+            a.admin_action
+        FROM applications a
+        JOIN jobs j ON j.id = a.job_id
+        WHERE a.id = ?
+    ");
+    $q->bind_param("i", $application_id);
+    $q->execute();
+    $data = $q->get_result()->fetch_assoc();
+    $q->close();
 
     http_response_code(201);
     echo json_encode([
-        "message" => "Application submitted successfully",
         "status" => true,
+        "message" => "Application submitted successfully",
         "application_id" => $application_id,
-        "data" => $application_data,
-        "timestamp" => date('Y-m-d H:i:s')
+        "data" => $data
     ]);
 } else {
     http_response_code(500);
     echo json_encode([
-        "message" => "Failed to submit application: " . mysqli_error($conn),
-        "status" => false
+        "status" => false,
+        "message" => "Database error: " . $stmt->error
     ]);
+    $stmt->close();
 }
 
-mysqli_stmt_close($insert_stmt);
-mysqli_close($conn);
+$conn->close();
 ?>
