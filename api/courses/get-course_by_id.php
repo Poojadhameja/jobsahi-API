@@ -13,6 +13,20 @@ try {
     $user_id   = intval($user['user_id'] ?? ($user['id'] ?? 0));
     $institute_id = intval($user['institute_id'] ?? 0);
 
+    // ✅ If institute role → resolve real institute_id from profile
+    if ($user_role === 'institute') {
+        if ($institute_id <= 0) {
+            $stmtCheck = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
+            $stmtCheck->bind_param("i", $user_id);
+            $stmtCheck->execute();
+            $res = $stmtCheck->get_result();
+            if ($row = $res->fetch_assoc()) {
+                $institute_id = intval($row['id']);
+            }
+            $stmtCheck->close();
+        }
+    }
+
     // ✅ Course ID (required)
     $course_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
     if ($course_id <= 0) {
@@ -52,18 +66,18 @@ try {
 
     // ✅ Role-based visibility
     if ($user_role === 'admin') {
-        // Admin: no filter, can view any course
+        // Admin: can view any course
     } elseif ($user_role === 'institute') {
-        // Institute: can only view own courses
+        // Institute: only own courses
         $sql .= " AND c.institute_id = ?";
-        $params[] = $institute_id ?: $user_id;
+        $params[] = $institute_id;
         $types .= "i";
     } else {
         // Student: only approved courses
         $sql .= " AND c.admin_action = 'approved'";
     }
 
-    // ✅ Prepare statement
+    // ✅ Prepare & execute safely
     $stmt = $conn->prepare($sql);
     if (!$stmt) {
         throw new Exception("Prepare failed: " . $conn->error);
@@ -79,7 +93,6 @@ try {
         $row['fee'] = (float) $row['fee'];
         $row['category_name'] = $row['category_name'] ?? 'Technical';
 
-        // ✅ Remove sensitive fields for students
         if ($user_role === 'student') {
             unset($row['admin_action']);
         }
@@ -90,8 +103,8 @@ try {
             "user_role" => $user_role,
             "course" => $row
         ], JSON_PRETTY_PRINT);
+
     } else {
-        // ✅ Custom role-based message
         $msg = match ($user_role) {
             'admin' => "Course not found.",
             'institute' => "Course not found or not owned by this institute.",
