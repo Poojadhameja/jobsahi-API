@@ -89,10 +89,10 @@ try {
     ];
 
     // --------------------------------------------------------------------
-    // 🔹 Step 4: Key Metrics Summary (Cards)
+    // 🔹 Step 4: Key Metrics Summary (Cards) + Added Total Jobs & Applications
     // --------------------------------------------------------------------
     $getValue = function($sql) use ($conn, $recruiter_id) {
-        $val = 0; // ✅ fix same warning here too
+        $val = 0; 
         $st = $conn->prepare($sql);
         $st->bind_param("i", $recruiter_id);
         $st->execute();
@@ -102,6 +102,22 @@ try {
         return intval($val);
     };
 
+    // ✅ Total Jobs Posted by Recruiter
+    $total_jobs = $getValue("
+        SELECT COUNT(id)
+        FROM jobs
+        WHERE recruiter_id = ? AND admin_action = 'approved'
+    ");
+
+    // ✅ Total Applications Received
+    $total_applications = $getValue("
+        SELECT COUNT(a.id)
+        FROM applications a
+        INNER JOIN jobs j ON a.job_id = j.id
+        WHERE j.recruiter_id = ?
+    ");
+
+    // ✅ Total Interviews
     $total_interviews = $getValue("
         SELECT COUNT(i.id)
         FROM interviews i
@@ -110,6 +126,7 @@ try {
         WHERE j.recruiter_id = ?
     ");
 
+    // ✅ Total Hires
     $total_hires = $getValue("
         SELECT COUNT(a.id)
         FROM applications a
@@ -149,6 +166,8 @@ try {
             "applications_by_department" => $applications_by_department,
             "source_of_hire" => $source_of_hire,
             "key_metrics" => [
+                "total_jobs"              => $total_jobs,
+                "total_applications"      => $total_applications,
                 "total_interviews"        => $total_interviews,
                 "total_hires"             => $total_hires,
                 "interview_to_hire_ratio" => $interview_to_hire_ratio,
