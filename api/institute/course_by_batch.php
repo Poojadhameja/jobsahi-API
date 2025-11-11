@@ -150,10 +150,16 @@ try {
         $batches = $batchStmt->get_result();
 
         $batchData = [];
+        $active_batches = 0; // ✅ Initialize counter for details section
 
         while ($batch = $batches->fetch_assoc()) {
             $batch_id = intval($batch['batch_id']);
             $progress = 0;
+
+            // ✅ Count active batches
+            if (strtolower($batch['admin_action']) === 'approved') {
+                $active_batches++;
+            }
 
             // ✅ Calculate progress
             if (!empty($batch['start_date']) && !empty($batch['end_date'])) {
@@ -210,27 +216,29 @@ try {
         }
 
         // ✅ Fetch faculty list for this institute
-        $facultyQuery = "
-            SELECT id AS faculty_id, name, email, phone, role, admin_action
-            FROM faculty_users
-            WHERE institute_id = ? AND admin_action = 'approved'
-            ORDER BY name ASC
-        ";
-        $facultyStmt = $conn->prepare($facultyQuery);
-        $facultyStmt->bind_param("i", $institute_id);
-        $facultyStmt->execute();
-        $facultyResult = $facultyStmt->get_result();
-
         $faculty = [];
-        while ($f = $facultyResult->fetch_assoc()) {
-            $faculty[] = [
-                "faculty_id" => intval($f['faculty_id']),
-                "name"       => $f['name'],
-                "email"      => $f['email'],
-                "phone"      => $f['phone'],
-                "role"       => ucfirst($f['role']),
-                "status"     => ucfirst($f['admin_action'])
-            ];
+        if ($institute_id > 0) {
+            $facultyQuery = "
+                SELECT id AS faculty_id, name, email, phone, role, admin_action
+                FROM faculty_users
+                WHERE institute_id = ? AND admin_action = 'approved'
+                ORDER BY name ASC
+            ";
+            $facultyStmt = $conn->prepare($facultyQuery);
+            $facultyStmt->bind_param("i", $institute_id);
+            $facultyStmt->execute();
+            $facultyResult = $facultyStmt->get_result();
+
+            while ($f = $facultyResult->fetch_assoc()) {
+                $faculty[] = [
+                    "faculty_id" => intval($f['faculty_id']),
+                    "name"       => $f['name'],
+                    "email"      => $f['email'],
+                    "phone"      => $f['phone'],
+                    "role"       => ucfirst($f['role']),
+                    "status"     => ucfirst($f['admin_action'])
+                ];
+            }
         }
 
         echo json_encode([
@@ -239,6 +247,7 @@ try {
             "role"    => $role,
             "course"  => $course,
             "batches" => $batchData,
+            "active_batches" => $active_batches, // ✅ fixed and defined
             "faculty" => $faculty
         ], JSON_PRETTY_PRINT);
         exit;
