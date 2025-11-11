@@ -37,7 +37,7 @@ try {
     // ----------------------------------------------------------
     if ($course_id === 0) {
         $courseQuery = "
-            SELECT id AS course_id, title AS course_title, instructor_name, duration
+            SELECT id AS course_id, title AS course_title, instructor_name, duration, fee
             FROM courses
             WHERE admin_action = 'approved'
             " . ($role === 'institute' ? "AND institute_id = ?" : "") . "
@@ -90,6 +90,7 @@ try {
                 "course_id"        => $course['course_id'],
                 "course_title"     => $course['course_title'],
                 "instructor_name"  => $course['instructor_name'],
+                "fee"              => floatval($course['fee']), // ✅ added fee
                 "total_batches"    => $total_batches,
                 "active_batches"   => $active_batches,
                 "overall_progress" => $overall_progress
@@ -110,9 +111,9 @@ try {
     // 2️⃣ DETAILS PAGE: Course Info + Batches + Enrolled Students + Faculty
     // ----------------------------------------------------------
     else {
-        // ✅ Course info
+        // ✅ Course info (added fee)
         $courseQuery = "
-            SELECT id AS course_id, title AS course_title, instructor_name, duration, description
+            SELECT id AS course_id, title AS course_title, instructor_name, duration, description, fee
             FROM courses
             WHERE id = ? AND admin_action = 'approved'
             " . ($role === 'institute' ? "AND institute_id = ?" : "") . "
@@ -133,7 +134,7 @@ try {
         }
         $course = $courseResult->fetch_assoc();
 
-        // ✅ Fetch batches for the course
+        // ✅ Fetch batches
         $batchQuery = "
             SELECT b.id AS batch_id, b.name AS batch_name, b.batch_time_slot,
                    b.start_date, b.end_date, b.admin_action,
@@ -150,18 +151,16 @@ try {
         $batches = $batchStmt->get_result();
 
         $batchData = [];
-        $active_batches = 0; // ✅ Initialize counter for details section
+        $active_batches = 0;
 
         while ($batch = $batches->fetch_assoc()) {
             $batch_id = intval($batch['batch_id']);
             $progress = 0;
 
-            // ✅ Count active batches
             if (strtolower($batch['admin_action']) === 'approved') {
                 $active_batches++;
             }
 
-            // ✅ Calculate progress
             if (!empty($batch['start_date']) && !empty($batch['end_date'])) {
                 $start = new DateTime($batch['start_date']);
                 $end = new DateTime($batch['end_date']);
@@ -174,7 +173,7 @@ try {
                 }
             }
 
-            // ✅ Fetch enrolled students for this batch
+            // ✅ Fetch enrolled students
             $studentQuery = "
                 SELECT sp.id AS student_id, u.user_name AS name, u.email, u.phone_number,
                        e.enrollment_date, e.status AS enrollment_status
@@ -215,7 +214,7 @@ try {
             ];
         }
 
-        // ✅ Fetch faculty list for this institute
+        // ✅ Fetch faculty list
         $faculty = [];
         if ($institute_id > 0) {
             $facultyQuery = "
@@ -247,7 +246,7 @@ try {
             "role"    => $role,
             "course"  => $course,
             "batches" => $batchData,
-            "active_batches" => $active_batches, // ✅ fixed and defined
+            "active_batches" => $active_batches,
             "faculty" => $faculty
         ], JSON_PRETTY_PRINT);
         exit;
