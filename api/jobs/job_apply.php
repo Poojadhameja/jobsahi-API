@@ -95,39 +95,51 @@ if ($exists) {
     exit;
 }
 
-// ✅ Insert new application (job_selected default = 0)
-$stmt = $conn->prepare("
-    INSERT INTO applications 
-        (job_id, student_id, cover_letter, job_selected, status, admin_action, applied_at)
-    VALUES (?, ?, ?, 0, 'applied', 'approved', NOW())
-");
-$stmt->bind_param("iis", $job_id, $student_id, $input['cover_letter']);
+// ✅ Insert application
+$insert_sql = "INSERT INTO applications (
+    job_id,
+    student_id,
+    cover_letter,
+    applied_at
+) VALUES (?, ?, ?, NOW())";
+
+$insert_stmt = mysqli_prepare($conn, $insert_sql);
+
+mysqli_stmt_bind_param(
+    $insert_stmt,
+    "iis",
+    $job_id,
+    $student_profile_id,
+    $input['cover_letter']
+);
 
 if ($stmt->execute()) {
     $application_id = $stmt->insert_id;
     $stmt->close();
 
-    // ✅ Fetch newly created application with job details
-    $q = $conn->prepare("
-        SELECT 
-            a.id AS application_id,
-            a.job_id,
-            j.title AS job_title,
-            j.location,
-            a.student_id,
-            a.cover_letter,
-            a.status,
-            a.job_selected,
-            a.applied_at,
-            a.admin_action
-        FROM applications a
-        JOIN jobs j ON j.id = a.job_id
-        WHERE a.id = ?
-    ");
-    $q->bind_param("i", $application_id);
-    $q->execute();
-    $data = $q->get_result()->fetch_assoc();
-    $q->close();
+    // Fetch newly inserted application
+    $get_application_sql = "SELECT 
+        a.id,
+        a.job_id,
+        a.student_id,
+        a.cover_letter,
+        a.status,
+        a.applied_at,
+        j.title as job_title,
+        j.recruiter_id
+    FROM applications a
+    JOIN jobs j ON a.job_id = j.id
+    WHERE a.id = ?";
+    
+    $get_stmt = mysqli_prepare($conn, $get_application_sql);
+    mysqli_stmt_bind_param($get_stmt, "i", $application_id);
+    mysqli_stmt_execute($get_stmt);
+    $result = mysqli_stmt_get_result($get_stmt);
+    $application_data = mysqli_fetch_assoc($result);
+    if (is_array($application_data)) {
+        $application_data['resume_link'] = "";
+    }
+    mysqli_stmt_close($get_stmt);
 
     http_response_code(201);
     echo json_encode([

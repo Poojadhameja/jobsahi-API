@@ -43,7 +43,6 @@ class StudentProfilesTableSeeder extends Seeder
                 'cgpa' => '8.70',
                 'latitude' => '22.71960000',
                 'longitude' => '75.85770000',
-                'admin_action' => 'approved',
                 'created_at' => '2025-10-29 11:32:30',
                 'updated_at' => '2025-10-29 23:59:41',
                 'deleted_at' => NULL,
