@@ -20,6 +20,7 @@ try {
             ip.id as institute_id,
             ip.institute_name,
             ip.institute_type,
+            ip.institute_logo,
             ip.website,
             ip.description,
             ip.address,
@@ -46,8 +47,22 @@ try {
     if ($stmt->execute()) {
         $result = $stmt->get_result();
         $institutes = [];
-        
+
+        // ✅ Setup URL generation base
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+        $host = $_SERVER['HTTP_HOST'];
+        $logo_base = '/jobsahi-API/api/uploads/institute_logo/';
+
         while ($row = $result->fetch_assoc()) {
+            // ✅ Convert institute_logo → full URL (if exists)
+            if (!empty($row['institute_logo'])) {
+                $clean_logo = str_replace(["\\", "/uploads/institute_logo/", "./", "../"], "", $row['institute_logo']);
+                $logo_local = __DIR__ . '/../uploads/institute_logo/' . $clean_logo;
+                if (file_exists($logo_local)) {
+                    $row['institute_logo'] = $protocol . $host . $logo_base . $clean_logo;
+                }
+            }
+
             $institutes[] = [
                 'user_info' => [
                     'user_id' => $row['user_id'],
@@ -59,6 +74,7 @@ try {
                     'institute_id' => $row['institute_id'],
                     'institute_name' => $row['institute_name'],
                     'institute_type' => $row['institute_type'],
+                    'institute_logo' => $row['institute_logo'],
                     'website' => $row['website'],
                     'description' => $row['description'],
                     'address' => $row['address'],
