@@ -1,5 +1,5 @@
 <?php
-// update_student.php – Update student batch and status
+// update_student.php – Update student batch and course status
 require_once '../cors.php';
 require_once '../db.php';
 
@@ -24,7 +24,7 @@ if (!$input) {
 
 $student_id = intval($input['student_id'] ?? 0);
 $new_batch_id = intval($input['batch_id'] ?? 0);
-$new_status = trim($input['status'] ?? '');
+$new_status = trim($input['status'] ?? ''); // enrolled / completed / dropped
 
 if ($student_id <= 0) {
     echo json_encode(["status" => false, "message" => "Student ID is required"]);
@@ -34,11 +34,13 @@ if ($student_id <= 0) {
 try {
     $conn->begin_transaction();
 
-    // ✅ 1. Update user status (active/inactive)
+    // ✅ 1. Update course status in student_course_enrollments
     if ($new_status !== '') {
-        $stmt = $conn->prepare("UPDATE users SET status = ? WHERE id = (
-            SELECT user_id FROM student_profiles WHERE id = ?
-        )");
+        $stmt = $conn->prepare("
+            UPDATE student_course_enrollments 
+            SET status = ?, modified_at = NOW() 
+            WHERE student_id = ?
+        ");
         $stmt->bind_param("si", $new_status, $student_id);
         $stmt->execute();
         $stmt->close();
