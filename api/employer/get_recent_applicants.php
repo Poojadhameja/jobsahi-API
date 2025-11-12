@@ -21,9 +21,13 @@ try {
         exit;
     }
 
-    // 🔹 Get recruiter_profile id
-    $sql_rec = "SELECT id FROM recruiter_profiles WHERE user_id = ? AND admin_action = 'approved'";
-    $stmt_rec = $conn->prepare($sql_rec);
+    // 🔹 Get recruiter_profile id (indexed column id,user_id)
+    $stmt_rec = $conn->prepare("
+        SELECT id 
+        FROM recruiter_profiles 
+        WHERE user_id = ? AND admin_action = 'approved'
+        LIMIT 1
+    ");
     $stmt_rec->bind_param("i", $user_id);
     $stmt_rec->execute();
     $rec = $stmt_rec->get_result()->fetch_assoc();
@@ -36,50 +40,65 @@ try {
     }
 
     // ==========================================================
-    // 🔹 PART 1 — Recent 5 Applicants (unchanged)
+    // PART 1 — Recent 5 Applicants (Quick fetch)
     // ==========================================================
-    $sql_recent = "
+    $stmt_recent = $conn->prepare("
         SELECT 
             u.user_name AS candidate_name,
             j.title AS job_title,
             DATE_FORMAT(a.applied_at, '%d-%m-%y') AS applied_date,
             a.status
         FROM applications a
-        INNER JOIN jobs j ON j.id = a.job_id
-        INNER JOIN student_profiles sp ON sp.id = a.student_id
-        INNER JOIN users u ON u.id = sp.user_id
+        JOIN jobs j ON j.id = a.job_id
+        JOIN student_profiles sp ON sp.id = a.student_id
+        JOIN users u ON u.id = sp.user_id
         WHERE j.recruiter_id = ?
         ORDER BY a.applied_at DESC
         LIMIT 5
-    ";
-    $stmt_recent = $conn->prepare($sql_recent);
+    ");
     $stmt_recent->bind_param("i", $recruiter_profile_id);
     $stmt_recent->execute();
-    $result_recent = $stmt_recent->get_result();
-
-    $recent_applicants = [];
-    while ($r = $result_recent->fetch_assoc()) {
-        $recent_applicants[] = $r;
-    }
+    $recent_applicants = $stmt_recent->get_result()->fetch_all(MYSQLI_ASSOC);
 
     // ==========================================================
-    // 🔹 PART 2 — All Applicants (Full View with all new fields)
+    // PART 2 — All Applicants (Optimized + pagination)
     // ==========================================================
     $search = isset($_GET['search']) ? trim($_GET['search']) : '';
+    $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 50;
+    $offset = isset($_GET['offset']) ? intval($_GET['offset']) : 0;
 
-    $where = "WHERE j.recruiter_id = $recruiter_profile_id";
+    $base_sql = "
+        FROM applications a
+        JOIN jobs j ON j.id = a.job_id
+        JOIN student_profiles s ON s.id = a.student_id
+        JOIN users u ON u.id = s.user_id
+        WHERE j.recruiter_id = ?
+    ";
+
+    $params = [$recruiter_profile_id];
+    $types = "i";
+
     if ($search !== '') {
-        $safe_search = "%" . $conn->real_escape_string($search) . "%";
-        $where .= " AND (u.user_name LIKE '$safe_search' OR j.title LIKE '$safe_search')";
+        $base_sql .= " AND (u.user_name LIKE ? OR j.title LIKE ?)";
+        $safe_search = "%" . $search . "%";
+        $params[] = $safe_search;
+        $params[] = $safe_search;
+        $types .= "ss";
     }
 
+    // ✅ Count total (for pagination)
+    $stmt_count = $conn->prepare("SELECT COUNT(*) AS total $base_sql");
+    $stmt_count->bind_param($types, ...$params);
+    $stmt_count->execute();
+    $total = $stmt_count->get_result()->fetch_assoc()['total'] ?? 0;
+
+    // ✅ Main data query (indexed join + pagination)
     $sql_all = "
         SELECT 
             a.id AS application_id,
             a.status,
             a.cover_letter,
             DATE_FORMAT(a.applied_at, '%d-%m-%Y %h:%i %p') AS applied_date,
-            
             s.id AS student_id,
             s.education,
             s.skills,
@@ -88,29 +107,29 @@ try {
             s.portfolio_link,
             s.location AS candidate_location,
             s.experience AS experience_years,
-            
             u.user_name AS candidate_name,
             u.email AS candidate_email,
             u.phone_number,
             u.is_verified,
-            
+            j.id AS job_id,
             j.title AS job_title,
             j.location AS job_location,
             j.job_type
-            
-        FROM applications a
-        JOIN jobs j ON j.id = a.job_id
-        JOIN student_profiles s ON s.id = a.student_id
-        JOIN users u ON u.id = s.user_id
-        $where
-        ORDER BY a.created_at DESC
+        $base_sql
+        ORDER BY a.applied_at DESC
+        LIMIT ? OFFSET ?
     ";
+    $params[] = $limit;
+    $params[] = $offset;
+    $types .= "ii";
 
-    $result_all = $conn->query($sql_all);
+    $stmt_all = $conn->prepare($sql_all);
+    $stmt_all->bind_param($types, ...$params);
+    $stmt_all->execute();
+    $result_all = $stmt_all->get_result();
+
     $all_applicants = [];
-
     while ($row = $result_all->fetch_assoc()) {
-        // 🔹 Decode skills safely
         $skills = [];
         if (!empty($row['skills'])) {
             $decoded = json_decode($row['skills'], true);
@@ -118,7 +137,9 @@ try {
         }
 
         $all_applicants[] = [
-            "application_id" => intval($row['application_id']),
+            "application_id" => (int)$row['application_id'],
+            "student_id"     => (int)$row['student_id'],
+            "job_id"         => (int)$row['job_id'],
             "name"           => $row['candidate_name'],
             "email"          => $row['candidate_email'],
             "phone_number"   => $row['phone_number'] ?: "N/A",
@@ -138,19 +159,17 @@ try {
         ];
     }
 
-    // ==========================================================
-    // ✅ Final Combined Response
-    // ==========================================================
-    http_response_code(200);
+    // ✅ Final Response
     echo json_encode([
         "status" => true,
         "message" => "Applicants fetched successfully",
         "recent_applicants" => $recent_applicants,
         "all_applicants" => [
-            "total_records" => count($all_applicants),
+            "total_records" => $total,
+            "fetched" => count($all_applicants),
             "data" => $all_applicants
         ]
-    ]);
+    ], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {
     http_response_code(500);
