@@ -21,8 +21,6 @@ $data = json_decode(file_get_contents("php://input"), true);
 
 $interview_id = isset($data['interview_id']) ? intval($data['interview_id']) : 0;
 $scheduled_at = isset($data['scheduled_at']) ? trim($data['scheduled_at']) : '';
-$mode         = isset($data['mode']) ? trim($data['mode']) : '';
-$location     = isset($data['location']) ? trim($data['location']) : '';
 $status       = isset($data['status']) ? trim($data['status']) : '';
 $feedback     = isset($data['feedback']) ? trim($data['feedback']) : '';
 
@@ -32,15 +30,14 @@ if ($interview_id <= 0) {
 }
 
 try {
-    // ✅ Step 1: Fetch interview details with recruiter validation
+    // ✅ Step 1: Fetch interview and recruiter validation
     $fetch_sql = "
         SELECT 
             i.id AS interview_id,
-            i.application_id,
-            a.student_id,
             j.recruiter_id,
             u.user_name AS candidate_name,
-            rp.company_name
+            rp.company_name,
+            a.student_id
         FROM interviews i
         JOIN applications a ON i.application_id = a.id
         JOIN student_profiles sp ON a.student_id = sp.id
@@ -48,24 +45,24 @@ try {
         JOIN jobs j ON a.job_id = j.id
         JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
         WHERE i.id = ?
+        LIMIT 1
     ";
     $fetch_stmt = $conn->prepare($fetch_sql);
     $fetch_stmt->bind_param("i", $interview_id);
     $fetch_stmt->execute();
-    $result = $fetch_stmt->get_result();
+    $res = $fetch_stmt->get_result();
 
-    if ($result->num_rows === 0) {
+    if ($res->num_rows === 0) {
         echo json_encode(["status" => false, "message" => "Interview not found"]);
         exit();
     }
 
-    $interview = $result->fetch_assoc();
+    $interview = $res->fetch_assoc();
     $recruiter_id = intval($interview['recruiter_id']);
     $candidate_name = $interview['candidate_name'];
     $company_name = $interview['company_name'];
-    $student_id = intval($interview['student_id']);
 
-    // ✅ Step 2: Recruiter ownership validation
+    // ✅ Step 2: Validate recruiter ownership
     if ($user_role === 'recruiter') {
         $rec_stmt = $conn->prepare("SELECT id FROM recruiter_profiles WHERE user_id = ?");
         $rec_stmt->bind_param("i", $user_id);
@@ -84,7 +81,7 @@ try {
         }
     }
 
-    // ✅ Step 3: Build dynamic SQL (update only provided fields)
+    // ✅ Step 3: Prepare SQL for update (only allowed fields)
     $fields = [];
     $params = [];
     $types  = '';
@@ -92,42 +89,29 @@ try {
     if (!empty($scheduled_at)) {
         $fields[] = "scheduled_at = ?";
         $params[] = $scheduled_at;
-        $types   .= 's';
-    }
-    if (!empty($mode)) {
-        $fields[] = "mode = ?";
-        $params[] = $mode;
-        $types   .= 's';
-    }
-    if (!empty($location)) {
-        $fields[] = "location = ?";
-        $params[] = $location;
-        $types   .= 's';
+        $types .= 's';
     }
     if (!empty($status)) {
         $fields[] = "status = ?";
         $params[] = $status;
-        $types   .= 's';
+        $types .= 's';
     }
     if (!empty($feedback)) {
         $fields[] = "feedback = ?";
         $params[] = $feedback;
-        $types   .= 's';
+        $types .= 's';
     }
 
-    // ✅ Always update modified_at and admin_action
-    $fields[] = "admin_action = 'approved'";
+    // Always update modified_at
     $fields[] = "modified_at = NOW()";
 
     if (empty($fields)) {
-        echo json_encode(["status" => false, "message" => "No fields provided for update"]);
+        echo json_encode(["status" => false, "message" => "No valid fields provided to update"]);
         exit();
     }
 
     $sql = "UPDATE interviews SET " . implode(", ", $fields) . " WHERE id = ?";
     $stmt = $conn->prepare($sql);
-
-    // ✅ Bind dynamic parameters
     $types .= 'i';
     $params[] = $interview_id;
     $stmt->bind_param($types, ...$params);
@@ -137,19 +121,16 @@ try {
         exit();
     }
 
-    // ✅ Step 4: Fetch updated interview details
+    // ✅ Step 4: Fetch updated record
     $get_sql = "
         SELECT 
             i.id AS interview_id,
             i.scheduled_at,
-            i.mode,
-            i.location,
             i.status,
             i.feedback,
-            i.created_at,
             u.user_name AS candidateName,
-            u.id AS candidateId,
-            rp.company_name AS scheduledBy
+            rp.company_name AS scheduledBy,
+            i.created_at
         FROM interviews i
         JOIN applications a ON i.application_id = a.id
         JOIN student_profiles sp ON a.student_id = sp.id
@@ -164,14 +145,12 @@ try {
     $get_stmt->execute();
     $updated = $get_stmt->get_result()->fetch_assoc();
 
-    // ✅ Step 5: Build final response
+    // ✅ Step 5: Response
     $response = [
+        "interviewId"   => intval($updated['interview_id']),
         "candidateName" => $updated['candidateName'],
-        "candidateId"   => intval($updated['candidateId']),
         "date"          => date('Y-m-d', strtotime($updated['scheduled_at'])),
         "timeSlot"      => date('H:i', strtotime($updated['scheduled_at'])),
-        "interviewMode" => ucfirst($updated['mode']),
-        "meetingLink"   => $updated['location'],
         "status"        => ucfirst($updated['status']),
         "feedback"      => $updated['feedback'],
         "scheduledBy"   => $updated['scheduledBy'],
@@ -179,9 +158,9 @@ try {
     ];
 
     echo json_encode([
-        "status" => true,
+        "status"  => true,
         "message" => "Interview updated successfully",
-        "data" => $response
+        "data"    => $response
     ]);
 
 } catch (Exception $e) {

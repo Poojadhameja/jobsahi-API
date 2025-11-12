@@ -26,7 +26,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 i.scheduled_at AS date,
                 TIME(i.scheduled_at) AS timeSlot,
                 i.mode AS interviewMode,
-                i.location AS meetingLink,
+                i.location AS location,
+                i.feedback AS feedback,
                 rp.company_name AS scheduledBy,
                 i.created_at AS createdAt,
                 i.status
@@ -52,25 +53,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
         while ($row = $result->fetch_assoc()) {
             $data[] = [
+                "interviewId"   => intval($row['interview_id']), // ✅ added field
                 "candidateName" => $row['candidateName'],
-                "candidateId" => intval($row['candidateId']),
-                "date" => date('Y-m-d', strtotime($row['date'])),
-                "timeSlot" => date('H:i', strtotime($row['timeSlot'])),
+                "candidateId"   => intval($row['candidateId']),
+                "date"          => date('Y-m-d', strtotime($row['date'])),
+                "timeSlot"      => date('H:i', strtotime($row['timeSlot'])),
                 "interviewMode" => ucfirst($row['interviewMode']),
-                "meetingLink" => $row['meetingLink'],
-                "scheduledBy" => $row['scheduledBy'],
-                "createdAt" => $row['createdAt']
+                "location"      => $row['location'],
+                "feedback"      => $row['feedback'],
+                "scheduledBy"   => $row['scheduledBy'],
+                "status"        => $row['status'],
+                "createdAt"     => $row['createdAt']
             ];
         }
 
         echo json_encode([
-            "status" => "success",
+            "status"  => "success",
             "message" => "Interviews fetched successfully.",
-            "data" => $data
+            "data"    => $data
         ]);
     } catch (Exception $e) {
         echo json_encode([
-            "status" => "error",
+            "status"  => "error",
             "message" => "Error fetching interviews: " . $e->getMessage()
         ]);
     }
@@ -186,25 +190,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // ✅ Step 6: Build response
         $responseData = [
+            "interviewId"   => $interview_id, // ✅ added here too for frontend consistency
             "candidateName" => $candidate_name,
             "candidateId"   => $student_id,
             "date"          => date('Y-m-d', strtotime($scheduled_at)),
             "timeSlot"      => date('H:i', strtotime($scheduled_at)),
             "interviewMode" => ucfirst($mode),
-            "meetingLink"   => $location,
+            "location"      => $location,
+            "feedback"      => $feedback,
             "scheduledBy"   => $company_name,
             "createdAt"     => date('Y-m-d\TH:i:s')
         ];
 
         echo json_encode([
-            "status" => "success",
+            "status"  => "success",
             "message" => "Interview scheduled successfully.",
-            "data" => $responseData
+            "data"    => $responseData
         ]);
 
     } catch (Exception $e) {
         echo json_encode([
-            "status" => "error",
+            "status"  => "error",
             "message" => "Error: " . $e->getMessage()
         ]);
     }
