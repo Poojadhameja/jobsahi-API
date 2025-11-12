@@ -1,91 +1,130 @@
 <?php
-// get-course.php - Fetch course details by ID with role-based visibility
+// get-course.php — Fetch single course details with category name and role-based filters
 require_once '../cors.php';
 require_once '../db.php';
 
-// ✅ Authenticate user and get role
-$user = authenticateJWT(['admin', 'student', 'institute']);
-$role = $user['role'];
-$user_id = $user['user_id'];
+header('Content-Type: application/json');
 
-// ✅ Get course ID from query string
-$course_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+try {
+    // ✅ Authenticate user
+    $user = authenticateJWT(['admin', 'institute', 'student']);
 
-if ($role === 'admin') {
-    // ✅ Admin can see all courses
-    $sql = "SELECT id, institute_id, category_id, title, description, duration, 
-                   tagged_skills, batch_limit, instructor_name, mode, 
-                   certification_allowed, media, fee, admin_action, status, 
-                   created_at, updated_at
-            FROM courses
-            WHERE id = ?";
-    $params = [$course_id];
-    $param_types = "i";
+    $user_role = strtolower($user['role'] ?? 'student');
+    $user_id   = intval($user['user_id'] ?? ($user['id'] ?? 0));
+    $institute_id = intval($user['institute_id'] ?? 0);
 
-} elseif ($role === 'institute') {
-    // ✅ Institutes can see only their own courses
-    $sql = "SELECT id, institute_id, category_id, title, description, duration, 
-                   tagged_skills, batch_limit, instructor_name, mode, 
-                   certification_allowed, media, fee, admin_action, status, 
-                   created_at, updated_at
-            FROM courses
-            WHERE id = ? AND institute_id = ?";
-    $params = [$course_id, $user_id];
-    $param_types = "ii";
-
-} else {
-    // ✅ Students can see only approved courses
-    $sql = "SELECT id, institute_id, category_id, title, description, duration, 
-                   tagged_skills, batch_limit, instructor_name, mode, 
-                   certification_allowed, media, fee, admin_action, status, 
-                   created_at, updated_at
-            FROM courses
-            WHERE id = ? AND admin_action = 'approved'";
-    $params = [$course_id];
-    $param_types = "i";
-}
-
-// ✅ Prepare and execute query safely
-if ($stmt = mysqli_prepare($conn, $sql)) {
-    mysqli_stmt_bind_param($stmt, $param_types, ...$params);
-
-    if (mysqli_stmt_execute($stmt)) {
-        $result = mysqli_stmt_get_result($stmt);
-
-        if ($row = mysqli_fetch_assoc($result)) {
-            http_response_code(200);
-            echo json_encode([
-                "status" => true,
-                "course" => $row
-            ]);
-        } else {
-            $message = match ($role) {
-                'admin' => "Course not found.",
-                'institute' => "Course not found or not owned by this institute.",
-                default => "Course not found or not approved yet."
-            };
-            http_response_code(404);
-            echo json_encode([
-                "status" => false,
-                "message" => $message
-            ]);
+    // ✅ If institute role → resolve real institute_id from profile
+    if ($user_role === 'institute') {
+        if ($institute_id <= 0) {
+            $stmtCheck = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
+            $stmtCheck->bind_param("i", $user_id);
+            $stmtCheck->execute();
+            $res = $stmtCheck->get_result();
+            if ($row = $res->fetch_assoc()) {
+                $institute_id = intval($row['id']);
+            }
+            $stmtCheck->close();
         }
-    } else {
-        http_response_code(500);
-        echo json_encode([
-            "status" => false,
-            "message" => "Query execution failed: " . mysqli_error($conn)
-        ]);
     }
 
-    mysqli_stmt_close($stmt);
-} else {
+    // ✅ Course ID (required)
+    $course_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+    if ($course_id <= 0) {
+        throw new Exception("Invalid or missing course ID");
+    }
+
+    // ✅ Base query (with category join)
+    $sql = "
+        SELECT 
+            c.id,
+            c.institute_id,
+            c.title,
+            c.description,
+            c.duration,
+            c.category_id,
+            cc.category_name,
+            c.tagged_skills,
+            c.batch_limit,
+            c.status,
+            c.instructor_name,
+            c.mode,
+            c.certification_allowed,
+            c.module_title,
+            c.module_description,
+            c.media,
+            c.fee,
+            c.admin_action,
+            c.created_at,
+            c.updated_at
+        FROM courses AS c
+        LEFT JOIN course_category AS cc ON c.category_id = cc.id
+        WHERE c.id = ?
+    ";
+
+    $params = [$course_id];
+    $types  = "i";
+
+    // ✅ Role-based visibility
+    if ($user_role === 'admin') {
+        // Admin: can view any course
+    } elseif ($user_role === 'institute') {
+        // Institute: only own courses
+        $sql .= " AND c.institute_id = ?";
+        $params[] = $institute_id;
+        $types .= "i";
+    } else {
+        // Student: only approved courses
+        $sql .= " AND c.admin_action = 'approved'";
+    }
+
+    // ✅ Prepare & execute safely
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        throw new Exception("Prepare failed: " . $conn->error);
+    }
+
+    $stmt->bind_param($types, ...$params);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($row = $result->fetch_assoc()) {
+        // ✅ Type normalization
+        $row['certification_allowed'] = (bool) $row['certification_allowed'];
+        $row['fee'] = (float) $row['fee'];
+        $row['category_name'] = $row['category_name'] ?? 'Technical';
+
+        if ($user_role === 'student') {
+            unset($row['admin_action']);
+        }
+
+        echo json_encode([
+            "status" => true,
+            "message" => "Course retrieved successfully",
+            "user_role" => $user_role,
+            "course" => $row
+        ], JSON_PRETTY_PRINT);
+
+    } else {
+        $msg = match ($user_role) {
+            'admin' => "Course not found.",
+            'institute' => "Course not found or not owned by this institute.",
+            default => "Course not found or not approved yet."
+        };
+        http_response_code(404);
+        echo json_encode([
+            "status" => false,
+            "message" => $msg
+        ], JSON_PRETTY_PRINT);
+    }
+
+    $stmt->close();
+    $conn->close();
+
+} catch (Exception $e) {
     http_response_code(500);
     echo json_encode([
         "status" => false,
-        "message" => "Failed to prepare statement: " . mysqli_error($conn)
-    ]);
+        "message" => "Error: " . $e->getMessage()
+    ], JSON_PRETTY_PRINT);
 }
-
-mysqli_close($conn);
 ?>

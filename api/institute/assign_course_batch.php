@@ -13,9 +13,7 @@ $batch_id   = intval($input['batch_id'] ?? 0);
 $assignment_reason = trim($input['assignment_reason'] ?? '');
 
 // ✅ Normalize student_id
-if (!is_array($student_id)) {
-    $student_id = [$student_id];
-}
+if (!is_array($student_id)) $student_id = [$student_id];
 
 if (empty($student_id) || !$course_id || !$batch_id) {
     echo json_encode(["status" => false, "message" => "Missing parameters"]);
@@ -23,6 +21,14 @@ if (empty($student_id) || !$course_id || !$batch_id) {
 }
 
 try {
+    // 🔹 Map user_id → student_profile_id
+    $profileMap = [];
+    $userIds = implode(',', array_map('intval', $student_id));
+    $res = $conn->query("SELECT id, user_id FROM student_profiles WHERE user_id IN ($userIds)");
+    while ($row = $res->fetch_assoc()) {
+        $profileMap[$row['user_id']] = $row['id'];
+    }
+
     // ✅ Prepared statements
     $stmt = $conn->prepare("
         INSERT INTO student_course_enrollments 
@@ -50,21 +56,24 @@ try {
     $assignedCount = 0;
 
     foreach ($student_id as $sid) {
+        $student_profile_id = $profileMap[$sid] ?? 0;
+        if ($student_profile_id <= 0) continue;
+
         // ✅ Check if student already assigned
-        $check->bind_param("ii", $sid, $batch_id);
+        $check->bind_param("ii", $student_profile_id, $batch_id);
         $check->execute();
         $exists = $check->get_result()->fetch_assoc();
 
         if ($exists['total'] > 0) {
             $alreadyAssigned[] = $sid;
-            continue; // Skip insertion
+            continue;
         }
 
-        // ✅ Proceed with assignment if not already assigned
-        $stmt->bind_param("ii", $sid, $course_id);
+        // ✅ Proceed with assignment
+        $stmt->bind_param("ii", $student_profile_id, $course_id);
         $stmt->execute();
 
-        $stmt2->bind_param("iis", $sid, $batch_id, $assignment_reason);
+        $stmt2->bind_param("iis", $student_profile_id, $batch_id, $assignment_reason);
         $stmt2->execute();
 
         $assignedCount++;
@@ -74,10 +83,9 @@ try {
     if (!empty($alreadyAssigned)) {
         echo json_encode([
             "status" => true,
-            "message" => "This students were already assigned to this batch.",
+            "message" => "Some students were already assigned to this batch.",
             "assigned_count" => $assignedCount,
-            "already_assigned" => $alreadyAssigned,
-            "note" => "Students already assigned to this batch were skipped."
+            "already_assigned" => $alreadyAssigned
         ]);
     } else {
         echo json_encode([

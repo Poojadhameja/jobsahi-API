@@ -18,16 +18,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
     exit;
 }
 
-// ✅ Extract profile_id
-$request_uri = $_SERVER['REQUEST_URI'];
-$parts = explode('/', trim($request_uri, '/'));
-$profile_id = intval(end($parts));
-
-if ($profile_id <= 0) {
-    echo json_encode(["success" => false, "message" => "Invalid profile ID"]);
-    exit;
-}
-
 // ✅ Decode JSON
 $input = json_decode(file_get_contents("php://input"), true);
 if (json_last_error() !== JSON_ERROR_NONE) {
@@ -38,6 +28,29 @@ if (json_last_error() !== JSON_ERROR_NONE) {
 // ✅ DB check
 if (!$conn) {
     echo json_encode(["success" => false, "message" => "Database connection failed: " . mysqli_connect_error()]);
+    exit;
+}
+
+// ✅ Determine profile_id automatically
+$profile_id = 0;
+
+if ($user_role === 'institute') {
+    // Fetch institute profile linked to the logged-in user
+    $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($row = $result->fetch_assoc()) {
+        $profile_id = intval($row['id']);
+    }
+    $stmt->close();
+} elseif ($user_role === 'admin' && isset($input['profile_id'])) {
+    $profile_id = intval($input['profile_id']);
+}
+
+// ✅ Validate profile ID
+if ($profile_id <= 0) {
+    echo json_encode(["success" => false, "message" => "Invalid or missing institute profile ID"]);
     exit;
 }
 
