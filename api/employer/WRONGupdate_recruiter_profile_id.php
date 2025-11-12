@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // Only allow PUT method
-if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $_SERVER['REQUEST_METHOD'] !== 'PUT') {
     http_response_code(405);
     echo json_encode(array("message" => "Method not allowed", "status" => false));
     exit;

@@ -26,7 +26,7 @@ try {
         $stmt = $conn->prepare($sql);
         $stmt->bind_param('i', $recruiter_id);
     } elseif ($user_role === 'admin') {
-        // Admin sees all recruiters (pending + approved)
+        // Admin sees all recruiters
         $sql = "SELECT rp.*, u.user_name, u.email, u.phone_number 
                 FROM recruiter_profiles rp
                 INNER JOIN users u ON rp.user_id = u.id
@@ -48,16 +48,31 @@ try {
     $stmt->execute();
     $result = $stmt->get_result();
 
+    // ✅ Base URL generator (automatically adjusts)
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+    $host = $_SERVER['HTTP_HOST'];
+
+    // Example: if script is at jobsahi-API/api/employer/profile.php
+    // → base_dir should be /jobsahi-API/api/uploads/recruiter_logo/
+    $script_path = str_replace('\\', '/', dirname($_SERVER['PHP_SELF']));
+    $base_dir = explode('/api/', $script_path)[0]; // /jobsahi-API
+    $base_url = $protocol . $host . $base_dir . '/jobsahi-API/api/uploads/recruiter_logo/';
+
     // ✅ Prepare response data
     $profiles = [];
     while ($row = $result->fetch_assoc()) {
-        // ✅ Construct absolute file URL if file exists
-        $base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") .
-                    "://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
         $company_logo_url = null;
 
         if (!empty($row['company_logo'])) {
-            $company_logo_url = $base_url . $row['company_logo'];
+            // Clean relative path
+            $clean_path = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $row['company_logo']);
+            $company_logo_url = $protocol . $host . "/jobsahi-API/api/uploads/recruiter_logo/" . $clean_path;
+
+            // ✅ Optional: Verify file exists (only append if real)
+            $local_path = __DIR__ . '/../uploads/recruiter_logo/' . $clean_path;
+            if (!file_exists($local_path)) {
+                $company_logo_url = null; // fallback
+            }
         }
 
         $profiles[] = [
@@ -88,8 +103,8 @@ try {
     // ✅ Final response
     echo json_encode([
         "success" => true,
-        "message" => count($profiles) > 0 
-            ? "Recruiter profile(s) retrieved successfully" 
+        "message" => count($profiles) > 0
+            ? "Recruiter profile(s) retrieved successfully"
             : "No profiles found",
         "data" => [
             "profiles" => $profiles,

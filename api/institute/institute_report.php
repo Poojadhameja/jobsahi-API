@@ -66,7 +66,7 @@ try {
     // ---------------------------------------------------
     // 3️⃣ Total Courses
     // ---------------------------------------------------
-    $sql = "SELECT COUNT(*) AS total_courses FROM courses WHERE institute_id = ? AND admin_action = 'approved'";
+    $sql = "SELECT COUNT(*) AS total_courses FROM courses WHERE institute_id = ? ";
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("i", $institute_id);
     $stmt->execute();
