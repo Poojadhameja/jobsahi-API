@@ -10,6 +10,16 @@ $user_id = $current_user['user_id'] ?? null;
 
 function respond($d){ echo json_encode($d); exit; }
 
+function getRecruiterId($conn, $user_id) {
+    $stmt = $conn->prepare("SELECT id FROM recruiter_profiles WHERE user_id = ? AND admin_action = 'approved' LIMIT 1");
+    if (!$stmt) return null;
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $res = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $res ? (int)$res['id'] : null;
+}
+
 // --------------------
 // POST: Create Question (Admin/Recruiter)
 // --------------------
@@ -31,13 +41,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $opt_d = trim($data['option_d']);
     $correct = strtoupper(trim($data['correct_option'])); // 'A','B','C','D'
 
+    if (!in_array($correct, ['A','B','C','D'])) {
+        respond(["status"=>false,"message"=>"correct_option must be one of A, B, C, or D"]);
+    }
+
     // ✅ verify job exists
-    $check = $conn->prepare("SELECT id FROM jobs WHERE id = ?");
+    $check = $conn->prepare("SELECT id, recruiter_id FROM jobs WHERE id = ?");
     $check->bind_param("i",$job_id);
     $check->execute();
     $chk = $check->get_result();
     if ($chk->num_rows === 0) respond(["status"=>false,"message"=>"Invalid job_id"]);
+    $jobRow = $chk->fetch_assoc();
     $check->close();
+
+    if ($user_role === 'recruiter') {
+        $recruiter_id = getRecruiterId($conn, $user_id);
+        if (!$recruiter_id) respond(["status"=>false,"message"=>"Recruiter profile not found or not approved"]);
+        if ((int)$jobRow['recruiter_id'] !== $recruiter_id) {
+            respond(["status"=>false,"message"=>"You are not allowed to add questions for this job"]);
+        }
+    }
+
+    // ✅ enforce max 15 questions per job
+    $countStmt = $conn->prepare("SELECT COUNT(*) AS total FROM skill_questions WHERE job_id = ?");
+    $countStmt->bind_param("i", $job_id);
+    $countStmt->execute();
+    $countRes = $countStmt->get_result()->fetch_assoc();
+    $countStmt->close();
+
+    $currentTotal = (int)($countRes['total'] ?? 0);
+    if ($currentTotal >= 15) {
+        respond(["status"=>false,"message"=>"Maximum 15 questions allowed for this job"]);
+    }
 
     $stmt = $conn->prepare("
         INSERT INTO skill_questions (job_id, question_text, option_a, option_b, option_c, option_d, correct_option, created_at)

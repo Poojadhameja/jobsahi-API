@@ -93,6 +93,77 @@ $stmt->execute();
 $result = $stmt->get_result();
 
 if ($row = $result->fetch_assoc()) {
+    $job_id_for_skill = (int)$row['job_id'];
+    $student_profile_for_skill = (int)$row['student_id'];
+
+    // Count total skill questions configured for this job
+    $questionCount = 0;
+    try {
+        $questionCountStmt = $conn->prepare("SELECT COUNT(*) AS total FROM skill_questions WHERE job_id = ?");
+        if ($questionCountStmt) {
+            $questionCountStmt->bind_param("i", $job_id_for_skill);
+            $questionCountStmt->execute();
+            $questionRes = $questionCountStmt->get_result()->fetch_assoc();
+            $questionCountStmt->close();
+            $questionCount = (int)($questionRes['total'] ?? 0);
+        }
+    } catch (mysqli_sql_exception $e) {
+        $questionCount = 0;
+    }
+
+    // Fetch existing skill test (if any) linked to this application
+    $skillTestStmt = $conn->prepare("
+        SELECT id, score, max_score, passed, completed_at, created_at, modified_at,
+               total_time_spent_seconds, total_questions, attempted_questions
+        FROM skill_tests
+        WHERE application_id = ?
+          AND student_id = ?
+          AND (deleted_at IS NULL OR deleted_at = '0000-00-00 00:00:00')
+        ORDER BY created_at DESC
+        LIMIT 1
+    ");
+
+    $skillTestRow = null;
+    $attemptCount = 0;
+    if ($skillTestStmt) {
+        $skillTestStmt->bind_param("ii", $applicationId, $student_profile_for_skill);
+        $skillTestStmt->execute();
+        $skillTestRow = $skillTestStmt->get_result()->fetch_assoc();
+        $skillTestStmt->close();
+    }
+
+    if ($skillTestRow) {
+        $attemptStmt = $conn->prepare("SELECT COUNT(*) AS total FROM skill_attempts WHERE test_id = ? AND student_id = ?");
+        if ($attemptStmt) {
+            $attemptStmt->bind_param("ii", $skillTestRow['id'], $student_profile_for_skill);
+            $attemptStmt->execute();
+            $attemptRes = $attemptStmt->get_result()->fetch_assoc();
+            $attemptStmt->close();
+            $attemptCount = (int)($attemptRes['total'] ?? 0);
+        }
+    }
+
+    $skillTestOverview = [
+        "available" => $questionCount > 0,
+        "test_created" => (bool)$skillTestRow,
+        "test_id" => $skillTestRow ? (int)$skillTestRow['id'] : null,
+        "status" => $skillTestRow
+            ? (!empty($skillTestRow['completed_at']) ? 'completed' : 'in_progress')
+            : 'not_started',
+        "score" => $skillTestRow ? (int)($skillTestRow['score'] ?? 0) : null,
+        "max_score" => $skillTestRow ? (int)($skillTestRow['max_score'] ?? 100) : null,
+        "passed" => $skillTestRow ? (bool)$skillTestRow['passed'] : null,
+        "completed_at" => $skillTestRow['completed_at'] ?? null,
+        "answered_questions" => $attemptCount,
+        "total_questions" => $questionCount,
+        "time_spent_seconds" => $skillTestRow && !empty($skillTestRow['completed_at']) && isset($skillTestRow['total_time_spent_seconds'])
+            ? (int)$skillTestRow['total_time_spent_seconds']
+            : null,
+        "can_start_now" => $questionCount > 0 && (!$skillTestRow || empty($skillTestRow['completed_at']))
+    ];
+
+    $row['skill_test_overview'] = $skillTestOverview;
+
     echo json_encode([
         "message" => "Application fetched successfully",
         "status" => true,
