@@ -36,7 +36,13 @@ try {
 
     $employers = [];
 
+    // ✅ Base URL for logo files
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+    $host = $_SERVER['HTTP_HOST'];
+    $logo_base = '/jobsahi-API/api/uploads/recruiter_logo/';
+
     while ($row = $result->fetch_assoc()) {
+
         // ✅ Convert verification status to readable text
         if (is_null($row['is_verified'])) {
             $status = "pending";
@@ -44,6 +50,16 @@ try {
             $status = "approved";
         } else {
             $status = "rejected";
+        }
+
+        // ✅ Company logo full URL logic
+        $company_logo = $row['company_logo'] ?? "";
+        if (!empty($company_logo)) {
+            $clean_logo = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $company_logo);
+            $logo_local = __DIR__ . '/../uploads/recruiter_logo/' . $clean_logo;
+            if (file_exists($logo_local)) {
+                $company_logo = $protocol . $host . $logo_base . $clean_logo;
+            }
         }
 
         $employers[] = [
@@ -56,7 +72,7 @@ try {
             "profile" => [
                 "profile_id" => intval($row['profile_id']),
                 "company_name" => $row['company_name'] ?? "",
-                "company_logo" => $row['company_logo'] ?? "",
+                "company_logo" => $company_logo, // ✅ Updated logo URL
                 "industry" => $row['industry'] ?? "",
                 "website" => $row['website'] ?? "",
                 "location" => $row['location'] ?? "",

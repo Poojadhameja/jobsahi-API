@@ -1,6 +1,7 @@
 <?php
 // me.php - Fetch current logged-in user with role-aware profiles
 require_once '../cors.php';
+require_once '../db.php';
 
 // Get JWT token from Authorization header
 $headers = getallheaders();
@@ -33,6 +34,14 @@ if (!$decoded_token) {
 
 $user_id = $decoded_token['user_id'];
 
+// ✅ Base URL setup for media paths
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+$host = $_SERVER['HTTP_HOST'];
+
+$resume_base = $protocol . $host . "/jobsahi-API/api/uploads/resume/";
+$company_logo_base = $protocol . $host . "/jobsahi-API/api/uploads/recruiter_logo/";
+$institute_logo_base = $protocol . $host . "/jobsahi-API/api/uploads/institute_logo/";
+
 // Fetch user basic information
 $user_sql = "SELECT id, user_name, email, phone_number, role, is_verified 
              FROM users WHERE id = ?";
@@ -53,7 +62,7 @@ if ($user_stmt = mysqli_prepare($conn, $user_sql)) {
     $user_data = mysqli_fetch_assoc($user_result);
     mysqli_stmt_close($user_stmt);
     
-    // Prepare response array with user basic info
+    // Base response
     $response = [
         "status" => true,
         "message" => "User data fetched successfully",
@@ -68,76 +77,65 @@ if ($user_stmt = mysqli_prepare($conn, $user_sql)) {
         ]
     ];
     
-    // Fetch role-specific profile data
+    // =====================================================
+    // ✅ Role-based profile retrieval
+    // =====================================================
     switch ($user_data['role']) {
-     case 'student':
-    $profile_sql = "SELECT sp.*, u.user_name as user_name 
-                   FROM student_profiles sp 
-                   JOIN users u ON sp.user_id = u.id 
-                   WHERE sp.user_id = ?";
+        // -------------------------------------------------
+        // 🎓 STUDENT
+        // -------------------------------------------------
+        case 'student':
+            $profile_sql = "SELECT sp.*, u.user_name as user_name 
+                            FROM student_profiles sp 
+                            JOIN users u ON sp.user_id = u.id 
+                            WHERE sp.user_id = ?";
 
-    if ($profile_stmt = mysqli_prepare($conn, $profile_sql)) {
-        mysqli_stmt_bind_param($profile_stmt, "i", $user_id);
-        mysqli_stmt_execute($profile_stmt);
-        $profile_result = mysqli_stmt_get_result($profile_stmt);
-        
-        if (mysqli_num_rows($profile_result) > 0) {
-            $profile_data = mysqli_fetch_assoc($profile_result);
-            $response['data']['profile'] = [
-                "id" => (int)($profile_data['id'] ?? 0),
-                "user_name" => $profile_data['user_name'] ?? null,
-                "skills" => $profile_data['skills'] ?? null,
-                "bio" => $profile_data['bio'] ?? null,
-                "portfolio_link" => $profile_data['portfolio_link'] ?? null,
-                "resume" => $profile_data['resume'] ?? null,
-                "location" => $profile_data['location'] ?? null,
-                "education" => $profile_data['education'] ?? null,
-                "experience" => $profile_data['experience'] ?? null,
-                "graduation_year" => isset($profile_data['graduation_year']) ? (int)$profile_data['graduation_year'] : null,
-                "cgpa" => isset($profile_data['cgpa']) ? (float)$profile_data['cgpa'] : null,
-                "created_at" => $profile_data['created_at'] ?? null,
-                "modified_at" => $profile_data['modified_at'] ?? null
-            ];
-        }
-        mysqli_stmt_close($profile_stmt);
-    }
-break;     
+            if ($profile_stmt = mysqli_prepare($conn, $profile_sql)) {
+                mysqli_stmt_bind_param($profile_stmt, "i", $user_id);
+                mysqli_stmt_execute($profile_stmt);
+                $profile_result = mysqli_stmt_get_result($profile_stmt);
+                
+                if (mysqli_num_rows($profile_result) > 0) {
+                    $profile_data = mysqli_fetch_assoc($profile_result);
+
+                    // ✅ Build resume URL
+                    $resume_url = null;
+                    if (!empty($profile_data['resume'])) {
+                        $clean_resume = str_replace(["\\", "/uploads/resume/", "./", "../"], "", $profile_data['resume']);
+                        $resume_local = __DIR__ . '/../uploads/resume/' . $clean_resume;
+                        if (file_exists($resume_local)) {
+                            $resume_url = $resume_base . $clean_resume;
+                        }
+                    }
+
+                    $response['data']['profile'] = [
+                        "id" => (int)($profile_data['id'] ?? 0),
+                        "user_name" => $profile_data['user_name'] ?? null,
+                        "skills" => $profile_data['skills'] ?? null,
+                        "bio" => $profile_data['bio'] ?? null,
+                        "portfolio_link" => $profile_data['portfolio_link'] ?? null,
+                        "resume" => $resume_url,
+                        "location" => $profile_data['location'] ?? null,
+                        "education" => $profile_data['education'] ?? null,
+                        "experience" => $profile_data['experience'] ?? null,
+                        "graduation_year" => isset($profile_data['graduation_year']) ? (int)$profile_data['graduation_year'] : null,
+                        "cgpa" => isset($profile_data['cgpa']) ? (float)$profile_data['cgpa'] : null,
+                        "created_at" => $profile_data['created_at'] ?? null,
+                        "modified_at" => $profile_data['modified_at'] ?? null
+                    ];
+                }
+                mysqli_stmt_close($profile_stmt);
+            }
+            break;
+
+        // -------------------------------------------------
+        // 🏢 RECRUITER
+        // -------------------------------------------------
         case 'recruiter':
-    $profile_sql = "SELECT rp.*, u.user_name as user_name 
-                   FROM recruiter_profiles rp 
-                   JOIN users u ON rp.user_id = u.id 
-                   WHERE rp.user_id = ?";
-    
-    if ($profile_stmt = mysqli_prepare($conn, $profile_sql)) {
-        mysqli_stmt_bind_param($profile_stmt, "i", $user_id);
-        mysqli_stmt_execute($profile_stmt);
-        $profile_result = mysqli_stmt_get_result($profile_stmt);
-        
-        if (mysqli_num_rows($profile_result) > 0) {
-            $profile_data = mysqli_fetch_assoc($profile_result);
-            $response['data']['profile'] = [
-                "id" => (int)($profile_data['id'] ?? 0),
-                "user_id" => (int)($profile_data['user_id'] ?? 0),
-                "company_name" => $profile_data['company_name'] ?? null,
-                "company_logo" => $profile_data['company_logo'] ?? null,
-                "industry" => $profile_data['industry'] ?? null,
-                "website" => $profile_data['website'] ?? null,
-                "location" => $profile_data['location'] ?? null,
-                "created_at" => $profile_data['created_at'] ?? null,
-                "modified_at" => $profile_data['modified_at'] ?? null,
-                "deleted_at" => $profile_data['deleted_at'] ?? null,
-                "admin_action" => $profile_data['admin_action'] ?? null
-            ];
-        }
-        mysqli_stmt_close($profile_stmt);
-    }
-    break;
-            
-        case 'institute':
-            $profile_sql = "SELECT ip.*, u.user_name as user_name 
-                           FROM institute_profiles ip 
-                           JOIN users u ON ip.user_id = u.id 
-                           WHERE ip.user_id = ?";
+            $profile_sql = "SELECT rp.*, u.user_name as user_name 
+                            FROM recruiter_profiles rp 
+                            JOIN users u ON rp.user_id = u.id 
+                            WHERE rp.user_id = ?";
             
             if ($profile_stmt = mysqli_prepare($conn, $profile_sql)) {
                 mysqli_stmt_bind_param($profile_stmt, "i", $user_id);
@@ -146,10 +144,67 @@ break;
                 
                 if (mysqli_num_rows($profile_result) > 0) {
                     $profile_data = mysqli_fetch_assoc($profile_result);
+
+                    // ✅ Build company_logo URL
+                    $company_logo_url = null;
+                    if (!empty($profile_data['company_logo'])) {
+                        $clean_logo = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $profile_data['company_logo']);
+                        $logo_local = __DIR__ . '/../uploads/recruiter_logo/' . $clean_logo;
+                        if (file_exists($logo_local)) {
+                            $company_logo_url = $company_logo_base . $clean_logo;
+                        }
+                    }
+
+                    $response['data']['profile'] = [
+                        "id" => (int)($profile_data['id'] ?? 0),
+                        "user_id" => (int)($profile_data['user_id'] ?? 0),
+                        "company_name" => $profile_data['company_name'] ?? null,
+                        "company_logo" => $company_logo_url,
+                        "industry" => $profile_data['industry'] ?? null,
+                        "website" => $profile_data['website'] ?? null,
+                        "location" => $profile_data['location'] ?? null,
+                        "created_at" => $profile_data['created_at'] ?? null,
+                        "modified_at" => $profile_data['modified_at'] ?? null,
+                        "deleted_at" => $profile_data['deleted_at'] ?? null,
+                        "admin_action" => $profile_data['admin_action'] ?? null
+                    ];
+                }
+                mysqli_stmt_close($profile_stmt);
+            }
+            break;
+
+        // -------------------------------------------------
+        // 🏫 INSTITUTE
+        // -------------------------------------------------
+        case 'institute':
+            $profile_sql = "SELECT ip.*, u.user_name as user_name 
+                            FROM institute_profiles ip 
+                            JOIN users u ON ip.user_id = u.id 
+                            WHERE ip.user_id = ?";
+            
+            if ($profile_stmt = mysqli_prepare($conn, $profile_sql)) {
+                mysqli_stmt_bind_param($profile_stmt, "i", $user_id);
+                mysqli_stmt_execute($profile_stmt);
+                $profile_result = mysqli_stmt_get_result($profile_stmt);
+                
+                if (mysqli_num_rows($profile_result) > 0) {
+                    $profile_data = mysqli_fetch_assoc($profile_result);
+
+                    // ✅ Build institute_logo URL
+                    $institute_logo_url = null;
+                    if (!empty($profile_data['institute_logo'])) {
+                        $clean_logo = str_replace(["\\", "/uploads/institute_logo/", "./", "../"], "", $profile_data['institute_logo']);
+                        $logo_local = __DIR__ . '/../uploads/institute_logo/' . $clean_logo;
+                        if (file_exists($logo_local)) {
+                            $institute_logo_url = $institute_logo_base . $clean_logo;
+                        }
+                    }
+
                     $response['data']['profile'] = [
                         "id" => (int)($profile_data['id'] ?? 0),
                         "institute_name" => $profile_data['institute_name'] ?? null,
                         "institute_type" => $profile_data['institute_type'] ?? null,
+                        "institute_logo" => $institute_logo_url,
                         "website" => $profile_data['website'] ?? null,
                         "description" => $profile_data['description'] ?? null,
                         "address" => $profile_data['address'] ?? null,
@@ -172,12 +227,12 @@ break;
             break;
             
         default:
-            // For roles without specific profiles, profile remains null
+            // Other roles - profile remains null
             break;
     }
-    
+
     http_response_code(200);
-    echo json_encode($response);
+    echo json_encode($response, JSON_PRETTY_PRINT);
     
 } else {
     http_response_code(500);
