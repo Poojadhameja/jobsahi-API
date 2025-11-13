@@ -83,7 +83,7 @@ try {
     if (!empty($alreadyAssigned)) {
         echo json_encode([
             "status" => true,
-            "message" => "Some students were already assigned to this batch.",
+            "message" => "This students were already assigned to this batch.",
             "assigned_count" => $assignedCount,
             "already_assigned" => $alreadyAssigned
         ]);
