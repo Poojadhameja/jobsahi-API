@@ -105,17 +105,26 @@ $insert_sql = "INSERT INTO applications (
 
 $insert_stmt = mysqli_prepare($conn, $insert_sql);
 
+if (!$insert_stmt) {
+    http_response_code(500);
+    echo json_encode([
+        "status" => false,
+        "message" => "Database prepare error: " . mysqli_error($conn)
+    ]);
+    exit;
+}
+
 mysqli_stmt_bind_param(
     $insert_stmt,
     "iis",
     $job_id,
-    $student_profile_id,
+    $student_id,
     $input['cover_letter']
 );
 
-if ($stmt->execute()) {
-    $application_id = $stmt->insert_id;
-    $stmt->close();
+if (mysqli_stmt_execute($insert_stmt)) {
+    $application_id = mysqli_insert_id($conn);
+    mysqli_stmt_close($insert_stmt);
 
     // Fetch newly inserted application
     $get_application_sql = "SELECT 
@@ -132,6 +141,15 @@ if ($stmt->execute()) {
     WHERE a.id = ?";
     
     $get_stmt = mysqli_prepare($conn, $get_application_sql);
+    if (!$get_stmt) {
+        http_response_code(500);
+        echo json_encode([
+            "status" => false,
+            "message" => "Database prepare error: " . mysqli_error($conn)
+        ]);
+        exit;
+    }
+    
     mysqli_stmt_bind_param($get_stmt, "i", $application_id);
     mysqli_stmt_execute($get_stmt);
     $result = mysqli_stmt_get_result($get_stmt);
@@ -146,15 +164,15 @@ if ($stmt->execute()) {
         "status" => true,
         "message" => "Application submitted successfully",
         "application_id" => $application_id,
-        "data" => $data
+        "data" => $application_data
     ]);
 } else {
     http_response_code(500);
     echo json_encode([
         "status" => false,
-        "message" => "Database error: " . $stmt->error
+        "message" => "Database error: " . mysqli_stmt_error($insert_stmt)
     ]);
-    $stmt->close();
+    mysqli_stmt_close($insert_stmt);
 }
 
 $conn->close();
