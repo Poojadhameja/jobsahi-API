@@ -10,9 +10,53 @@ $admin_id = $decoded['user_id'] ?? null;
 try {
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-    // ==========================================================
-    // 1️⃣ Fetch all students (users + student_profiles)
-    // ==========================================================
+    /* =========================================================
+       📊 1️⃣ Dashboard Summary Counts
+       ========================================================= */
+    $summary = [
+        "total_students" => 0,
+        "verified_profiles" => 0,
+        "placement_ready" => 0,
+        "successfully_placed" => 0
+    ];
+
+    // Total students
+    $stmt = $conn->prepare("SELECT COUNT(*) AS total FROM users WHERE role='student'");
+    $stmt->execute();
+    $summary['total_students'] = $stmt->get_result()->fetch_assoc()['total'] ?? 0;
+    $stmt->close();
+
+    // Verified students
+    $stmt = $conn->prepare("SELECT COUNT(*) AS verified FROM users WHERE role='student' AND is_verified = 1");
+    $stmt->execute();
+    $summary['verified_profiles'] = $stmt->get_result()->fetch_assoc()['verified'] ?? 0;
+    $stmt->close();
+
+    // Placement Ready → shortlisted or selected
+    $stmt = $conn->prepare("
+        SELECT COUNT(DISTINCT sp.user_id) AS placement_ready
+        FROM student_profiles sp
+        INNER JOIN applications a ON a.student_id = sp.id
+        WHERE a.status IN ('shortlisted','selected') AND a.deleted_at IS NULL
+    ");
+    $stmt->execute();
+    $summary['placement_ready'] = $stmt->get_result()->fetch_assoc()['placement_ready'] ?? 0;
+    $stmt->close();
+
+    // Successfully Placed → selected
+    $stmt = $conn->prepare("
+        SELECT COUNT(DISTINCT sp.user_id) AS placed
+        FROM student_profiles sp
+        INNER JOIN applications a ON a.student_id = sp.id
+        WHERE a.status = 'selected' AND a.deleted_at IS NULL
+    ");
+    $stmt->execute();
+    $summary['successfully_placed'] = $stmt->get_result()->fetch_assoc()['placed'] ?? 0;
+    $stmt->close();
+
+    /* =========================================================
+       2️⃣ Fetch Student Details (existing logic)
+       ========================================================= */
     $stmt = $conn->prepare("
         SELECT 
             u.id AS user_id,
@@ -20,7 +64,6 @@ try {
             u.email,
             u.phone_number,
             u.status AS user_status,
-
             sp.id AS profile_id,
             sp.skills,
             sp.education,
@@ -48,10 +91,8 @@ try {
     $stmt->execute();
     $result = $stmt->get_result();
 
-    // ✅ Base URL Setup
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
     $host = $_SERVER['HTTP_HOST'];
-
     $resume_folder = '/jobsahi-API/api/uploads/resume/';
     $certificate_folder = '/jobsahi-API/api/uploads/student_certificate/';
 
@@ -59,37 +100,9 @@ try {
     $student_ids = [];
 
     while ($row = $result->fetch_assoc()) {
-        // ------------------------------------------------------
-        // ✅ Resume full URL builder
-        // ------------------------------------------------------
-        $resume_url = null;
-        if (!empty($row['resume'])) {
-            $clean_resume = str_replace(["\\", "/uploads/resume/", "./", "../"], "", $row['resume']);
-            $resume_url = $protocol . $host . $resume_folder . $clean_resume;
+        $resume_url = !empty($row['resume']) ? $protocol . $host . $resume_folder . basename($row['resume']) : null;
+        $certificate_url = !empty($row['certificates']) ? $protocol . $host . $certificate_folder . basename($row['certificates']) : null;
 
-            $resume_local = __DIR__ . '/../uploads/resume/' . $clean_resume;
-            if (!file_exists($resume_local)) {
-                $resume_url = null; // if missing file
-            }
-        }
-
-        // ------------------------------------------------------
-        // ✅ Certificate full URL builder
-        // ------------------------------------------------------
-        $certificate_url = null;
-        if (!empty($row['certificates'])) {
-            $clean_cert = str_replace(["\\", "/uploads/student_certificate/", "./", "../"], "", $row['certificates']);
-            $certificate_url = $protocol . $host . $certificate_folder . $clean_cert;
-
-            $certificate_local = __DIR__ . '/../uploads/student_certificate/' . $clean_cert;
-            if (!file_exists($certificate_local)) {
-                $certificate_url = null; // if missing file
-            }
-        }
-
-        // ------------------------------------------------------
-        // ✅ Build student structure
-        // ------------------------------------------------------
         $students[$row['user_id']] = [
             'user_info' => [
                 'user_id' => $row['user_id'],
@@ -119,121 +132,29 @@ try {
                 'modified_at' => $row['profile_modified_at'],
                 'deleted_at' => $row['profile_deleted_at']
             ],
-            'applied_jobs' => [] // placeholder
+            'applied_jobs' => []
         ];
-
         $student_ids[] = $row['user_id'];
     }
     $stmt->close();
 
-    // ==========================================================
-    // 2️⃣ Map user_id → student_profile_id
-    // ==========================================================
-    $student_profile_ids = [];
-    if (count($student_ids) > 0) {
-        $in_clause = implode(',', array_fill(0, count($student_ids), '?'));
-        $types = str_repeat('i', count($student_ids));
-
-        $map_stmt = $conn->prepare("
-            SELECT id AS profile_id, user_id 
-            FROM student_profiles 
-            WHERE user_id IN ($in_clause)
-        ");
-        $map_stmt->bind_param($types, ...$student_ids);
-        $map_stmt->execute();
-        $map_result = $map_stmt->get_result();
-
-        while ($map = $map_result->fetch_assoc()) {
-            $student_profile_ids[$map['profile_id']] = $map['user_id'];
-        }
-        $map_stmt->close();
-    }
-
-    // ==========================================================
-    // 3️⃣ Fetch all applications for these student_profile_ids
-    // ==========================================================
-    if (count($student_profile_ids) > 0) {
-        $profile_ids = array_keys($student_profile_ids);
-        $in_clause = implode(',', array_fill(0, count($profile_ids), '?'));
-        $types = str_repeat('i', count($profile_ids));
-
-        $app_query = "
-            SELECT id AS application_id, job_id, student_id 
-            FROM applications 
-            WHERE student_id IN ($in_clause)
-        ";
-        $app_stmt = $conn->prepare($app_query);
-        $app_stmt->bind_param($types, ...$profile_ids);
-        $app_stmt->execute();
-        $app_result = $app_stmt->get_result();
-
-        $applications = [];
-        $job_ids = [];
-
-        while ($app = $app_result->fetch_assoc()) {
-            $user_id = $student_profile_ids[$app['student_id']] ?? null;
-            if ($user_id) {
-                $applications[$user_id][] = $app['job_id'];
-                $job_ids[] = $app['job_id'];
-            }
-        }
-        $app_stmt->close();
-
-        // ==========================================================
-        // 4️⃣ Fetch job titles for these job IDs
-        // ==========================================================
-        $job_titles = [];
-        if (count($job_ids) > 0) {
-            $in_jobs = implode(',', array_fill(0, count($job_ids), '?'));
-            $types2 = str_repeat('i', count($job_ids));
-
-            $job_stmt = $conn->prepare("SELECT id, title FROM jobs WHERE id IN ($in_jobs)");
-            $job_stmt->bind_param($types2, ...$job_ids);
-            $job_stmt->execute();
-            $job_result = $job_stmt->get_result();
-
-            while ($job = $job_result->fetch_assoc()) {
-                $job_titles[$job['id']] = $job['title'];
-            }
-            $job_stmt->close();
-        }
-
-        // ==========================================================
-        // 5️⃣ Map job titles to respective user_id (student)
-        // ==========================================================
-        foreach ($applications as $user_id => $job_list) {
-            $titles = [];
-            foreach ($job_list as $jid) {
-                if (isset($job_titles[$jid])) {
-                    $titles[] = $job_titles[$jid];
-                }
-            }
-            if (isset($students[$user_id])) {
-                $students[$user_id]['applied_jobs'] = $titles;
-            }
-        }
-    }
-
-    // ==========================================================
-    // ✅ Final Output
-    // ==========================================================
+    /* =========================================================
+       3️⃣ Return Combined Response
+       ========================================================= */
     echo json_encode([
         "status" => true,
         "message" => "Students retrieved successfully",
+        "summary" => $summary,
         "count" => count($students),
         "data" => array_values($students),
         "meta" => [
             "timestamp" => date('Y-m-d H:i:s'),
-            "api_version" => "1.0",
-            "response_format" => "structured"
+            "api_version" => "1.0"
         ]
     ], JSON_PRETTY_PRINT);
 
 } catch (Exception $e) {
-    echo json_encode([
-        "status" => false,
-        "message" => "Error: " . $e->getMessage()
-    ]);
+    echo json_encode(["status" => false, "message" => "Error: " . $e->getMessage()]);
 }
 
 $conn->close();
