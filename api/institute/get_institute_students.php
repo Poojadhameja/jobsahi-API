@@ -1,4 +1,4 @@
-<?php
+<?php 
 require_once '../cors.php';
 require_once '../db.php';
 
@@ -33,7 +33,7 @@ try {
     }
 
     // -------------------------------
-    // ✅ Fetch students & enrollments
+    // ✅ Fetch students & enrollments (fixed join logic)
     // -------------------------------
     $sql = "
         SELECT 
@@ -44,26 +44,28 @@ try {
             u.phone_number AS phone,
             sp.trade,
             sp.education,
-            e.status AS enrollment_status,
+            COALESCE(e.status, 'Enrolled') AS enrollment_status,
             e.enrollment_date,
             c.id AS course_id,
-            c.title AS course_title,
+            COALESCE(c.title, 'Not Assigned') AS course_title,
             b.id AS batch_id,
-            b.name AS batch_name,
+            COALESCE(b.name, 'Not Assigned') AS batch_name,
             b.start_date,
             b.end_date
         FROM student_profiles sp
         INNER JOIN users u ON sp.user_id = u.id
         LEFT JOIN student_course_enrollments e 
             ON sp.id = e.student_id 
-            AND e.admin_action = 'approved'
+            AND (e.admin_action = 'approved' OR e.admin_action IS NULL OR e.admin_action = 'pending')
         LEFT JOIN courses c 
             ON e.course_id = c.id
-            AND c.admin_action = 'approved'
             " . ($role === 'institute' ? "AND c.institute_id = ?" : "") . "
-        LEFT JOIN student_batches sb ON sp.id = sb.student_id
-        LEFT JOIN batches b ON sb.batch_id = b.id AND b.admin_action = 'approved'
-        WHERE sp.deleted_at IS NULL AND u.status = 'active'
+        LEFT JOIN student_batches sb 
+            ON sp.id = sb.student_id
+        LEFT JOIN batches b 
+            ON sb.batch_id = b.id
+        WHERE sp.deleted_at IS NULL 
+          AND u.status = 'active'
         ORDER BY u.user_name ASC
     ";
 
@@ -95,17 +97,16 @@ try {
                 "phone" => $row['phone'],
                 "trade" => $row['trade'],
                 "education" => $row['education'],
-                "course" => $row['course_title'] ?? "Not Assigned",
-                "batch" => $row['batch_name'] ?? "Not Assigned",
-                "status" => ucfirst($row['enrollment_status'] ?? "Unknown"),
+                "course" => $row['course_title'],
+                "batch" => $row['batch_name'],
+                "status" => ucfirst($row['enrollment_status']),
                 "enrollment_date" => $row['enrollment_date'] ?? null,
                 "start_date" => $row['start_date'] ?? null,
                 "end_date" => $row['end_date'] ?? null
             ];
 
-            // ✅ Safe lowercase conversion
+            // ✅ Count based on enrollment status
             $statusVal = strtolower(trim($row['enrollment_status'] ?? ''));
-
             if ($statusVal === 'enrolled') {
                 $activeCount++;
             } elseif ($statusVal === 'completed') {
@@ -118,11 +119,11 @@ try {
     // ✅ Count total courses
     // -------------------------------
     if ($role === 'institute') {
-        $sql_courses = "SELECT COUNT(*) AS total_courses FROM courses WHERE institute_id = ? AND admin_action = 'approved'";
+        $sql_courses = "SELECT COUNT(*) AS total_courses FROM courses WHERE institute_id = ? AND (admin_action = 'approved' OR admin_action = 'pending' OR admin_action IS NULL)";
         $stmtC = $conn->prepare($sql_courses);
         $stmtC->bind_param("i", $institute_id);
     } else {
-        $sql_courses = "SELECT COUNT(*) AS total_courses FROM courses WHERE admin_action = 'approved'";
+        $sql_courses = "SELECT COUNT(*) AS total_courses FROM courses WHERE admin_action = 'approved' OR admin_action = 'pending' OR admin_action IS NULL";
         $stmtC = $conn->prepare($sql_courses);
     }
 
