@@ -3,7 +3,7 @@ include '../CORS.php';
 require_once '../jwt_token/jwt_helper.php';  // Include your JWT helper
 require_once '../auth/auth_middleware.php';  // Include your middleware
 
-// Authenticate and allow 'admin' and 'student' role
+// ✅ Authenticate and allow 'admin' and 'student' roles
 $decoded_token = authenticateJWT(['admin', 'student']);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
@@ -13,18 +13,15 @@ if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
 
 include "../db.php";
 
-// Extract student ID from URL - support both path and query parameters
+// ✅ Extract student ID from URL - supports both path and query parameters
 $id = null;
 
-// First try to get from query parameter
 if (isset($_GET['student_id'])) {
     $id = intval($_GET['student_id']);
 } else {
-    // Try to get from URL path: /api/v1/student/profile/{id}
     $request_uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
     $path_parts = explode('/', trim($request_uri, '/'));
-    
-    // Find the ID from the URL pattern
+
     for ($i = 0; $i < count($path_parts); $i++) {
         if ($path_parts[$i] === 'profile' && isset($path_parts[$i + 1]) && is_numeric($path_parts[$i + 1])) {
             $id = intval($path_parts[$i + 1]);
@@ -38,15 +35,16 @@ if (!$id) {
     exit;
 }
 
-// Get student ID from JWT token
+// ✅ Get student ID from JWT token
 $jwt_student_id = $decoded_token['user_id'] ?? $decoded_token['student_id'] ?? null;
 
-// If user is a student, they can only update their own profile
+// ✅ Restrict student to update only their own profile
 if ($decoded_token['role'] === 'student' && $jwt_student_id != $id) {
     echo json_encode(["message" => "You can only update your own profile", "status" => false]);
     exit;
 }
 
+// ✅ Read JSON input
 $input = json_decode(file_get_contents("php://input"), true);
 
 if (!$input) {
@@ -54,6 +52,9 @@ if (!$input) {
     exit;
 }
 
+// =============================================================
+// ✅ Prepare fields
+// =============================================================
 $skills = $input['skills'] ?? "";
 $education = $input['education'] ?? "";
 $resume = $input['resume'] ?? "";
@@ -65,6 +66,28 @@ $job_type = $input['job_type'] ?? "";
 $trade = $input['trade'] ?? "";
 $location = $input['location'] ?? "";
 
+// =============================================================
+// ✅ Build Resume Full URL (like other APIs)
+// =============================================================
+$resume_url = null;
+if (!empty($resume)) {
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+    $host = $_SERVER['HTTP_HOST'];
+    $resume_folder = '/jobsahi-API/api/uploads/resume/';
+
+    $clean_resume = str_replace(["\\", "/uploads/resume/", "./", "../"], "", $resume);
+    $resume_local = __DIR__ . '/../uploads/resume/' . $clean_resume;
+
+    if (file_exists($resume_local)) {
+        $resume_url = $protocol . $host . $resume_folder . $clean_resume;
+    } else {
+        $resume_url = $resume; // fallback if file missing or external URL
+    }
+}
+
+// =============================================================
+// ✅ Update Query
+// =============================================================
 $sql = "UPDATE student_profiles SET 
             skills = ?, 
             education = ?, 
@@ -85,7 +108,7 @@ mysqli_stmt_bind_param(
     "ssssssssssi",
     $skills,
     $education,
-    $resume,
+    $resume_url, // ✅ Use full URL
     $portfolio_link,
     $linkedin_url,
     $dob,
@@ -96,11 +119,15 @@ mysqli_stmt_bind_param(
     $id
 );
 
+// =============================================================
+// ✅ Execute and respond
+// =============================================================
 if (mysqli_stmt_execute($stmt)) {
     if (mysqli_stmt_affected_rows($stmt) > 0) {
         echo json_encode([
             "message" => "Student profile updated successfully",
-            "status" => true
+            "status" => true,
+            "resume_url" => $resume_url // ✅ Added resume URL in response
         ]);
     } else {
         echo json_encode([

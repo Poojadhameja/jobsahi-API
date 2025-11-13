@@ -21,7 +21,6 @@ if ($user_role === 'admin') {
         exit;
     }
 } 
-// ✅ NEW: For recruiter or institute, allow only approved student profiles
 elseif (in_array($user_role, ['recruiter', 'institute'])) {
     $student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : 0;
 
@@ -30,7 +29,6 @@ elseif (in_array($user_role, ['recruiter', 'institute'])) {
         exit;
     }
 
-    // ✅ Check if student profile exists and approved
     $stmt = $conn->prepare("SELECT id FROM student_profiles WHERE id = ? AND admin_action = 'approved' AND deleted_at IS NULL LIMIT 1");
     $stmt->bind_param("i", $student_id);
     $stmt->execute();
@@ -43,7 +41,6 @@ elseif (in_array($user_role, ['recruiter', 'institute'])) {
         exit;
     }
 }
-// ✅ For student role
 else {
     $stmt = $conn->prepare("SELECT id FROM student_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
     $stmt->bind_param("i", $user_id);
@@ -90,13 +87,36 @@ $email            = $input['email'] ?? $input['personal_info']['email'] ?? null;
 $user_name        = $input['user_name'] ?? $input['personal_info']['user_name'] ?? null;
 $phone_number     = $input['phone_number'] ?? $input['personal_info']['phone_number'] ?? null;
 
-// ✅ Convert experience and projects to JSON
+// =======================================================
+// ✅ Build absolute URLs for resume and certificates
+// =======================================================
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+$host = $_SERVER['HTTP_HOST'];
+
+// Resume file
+if (!empty($resume)) {
+    $clean_resume = str_replace(["\\", "/uploads/resume/", "./", "../"], "", $resume);
+    $resume_local = __DIR__ . '/../uploads/resume/' . $clean_resume;
+    if (file_exists($resume_local)) {
+        $resume = $protocol . $host . '/jobsahi-API/api/uploads/resume/' . $clean_resume;
+    }
+}
+
+// Certificates file
+if (!empty($certificates)) {
+    $clean_cert = str_replace(["\\", "/uploads/student_certificate/", "./", "../"], "", $certificates);
+    $cert_local = __DIR__ . '/../uploads/student_certificate/' . $clean_cert;
+    if (file_exists($cert_local)) {
+        $certificates = $protocol . $host . '/jobsahi-API/api/uploads/student_certificate/' . $clean_cert;
+    }
+}
+
+// ✅ Convert arrays to JSON
 if (is_array($experience)) $experience = json_encode($experience, JSON_UNESCAPED_UNICODE);
 if (is_array($projects)) $projects = json_encode($projects, JSON_UNESCAPED_UNICODE);
 
-// ✅ Start transaction
+// ✅ Begin transaction
 mysqli_autocommit($conn, false);
-
 $update_success = true;
 $error_message = "";
 
@@ -163,7 +183,7 @@ if (!$stmt) {
     mysqli_stmt_close($stmt);
 }
 
-// ✅ Update users table (email/user_name/phone)
+// ✅ Update user details if provided
 if ($update_success && ($email !== null || $user_name !== null || $phone_number !== null)) {
     $user_id_query = "SELECT user_id FROM student_profiles WHERE id = ? AND deleted_at IS NULL";
     $user_stmt = mysqli_prepare($conn, $user_id_query);
@@ -208,7 +228,7 @@ if ($update_success && ($email !== null || $user_name !== null || $phone_number 
     }
 }
 
-// ✅ Commit or rollback transaction
+// ✅ Commit or rollback
 if ($update_success) {
     mysqli_commit($conn);
     echo json_encode([
@@ -216,8 +236,8 @@ if ($update_success) {
         "message" => "Student profile updated successfully",
         "data" => [
             "profile_updated_id" => $student_id,
-            "profile_updated_by_id" => $user_id, // ✅ NEW
-            "profile_updated" => true,           // ✅ NEW
+            "profile_updated_by_id" => $user_id,
+            "profile_updated" => true,
             "updated_by" => $user_role,
             "updated_fields" => [
                 "student_profile" => true,
@@ -236,7 +256,7 @@ if ($update_success) {
         "message" => "Update failed: " . $error_message,
         "data" => [
             "profile_updated" => false,
-            "profile_updated_by_id" => $user_id, // ✅ NEW
+            "profile_updated_by_id" => $user_id,
             "error_details" => $error_message,
             "profile_id" => $student_id
         ],
@@ -247,8 +267,6 @@ if ($update_success) {
     ], JSON_PRETTY_PRINT);
 }
 
-// ✅ Restore autocommit
 mysqli_autocommit($conn, true);
-
 mysqli_close($conn);
 ?>
