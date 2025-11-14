@@ -168,16 +168,11 @@ try {
         'website',
         'description',
         'address',
-        'city',
-        'state',
-        'country',
         'postal_code',
         'contact_person',
         'contact_designation',
         'accreditation',
-        'established_year',
-        'location',
-        'courses_offered'
+        'established_year'
     ];
 
     if ($user_role === 'admin') {
@@ -291,19 +286,14 @@ try {
                     "website"             => $profile['website'],
                     "description"         => $profile['description'],
                     "accreditation"       => $profile['accreditation'],
-                    "established_year"    => $profile['established_year'],
-                    "courses_offered"     => $profile['courses_offered']
+                    "established_year"    => $profile['established_year']
                 ],
 
                 "contact_info" => [
                     "address"            => $profile['address'],
-                    "city"               => $profile['city'],
-                    "state"              => $profile['state'],
-                    "country"            => $profile['country'],
                     "postal_code"        => $profile['postal_code'],
                     "contact_person"     => $profile['contact_person'],
-                    "contact_designation"=> $profile['contact_designation'],
-                    "location"           => $profile['location']
+                    "contact_designation"=> $profile['contact_designation']
                 ],
 
                 "status" => [

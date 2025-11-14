@@ -95,22 +95,14 @@ try {
                 "website"             => $row['website'],
                 "description"         => $row['description'],
                 "accreditation"       => $row['accreditation'],
-                "established_year"    => $row['established_year'],
-                "courses_offered"     => $row['courses_offered']
+                "established_year"    => $row['established_year']
             ],
 
             "contact_info" => [
                 "address"             => $row['address'],
-                "city"                => $row['city'],
-                "state"               => $row['state'],
-                "country"             => $row['country'],
                 "postal_code"         => $row['postal_code'],
                 "contact_person"      => $row['contact_person'],
                 "contact_designation" => $row['contact_designation'],
-            ],
-
-            "location_info" => [
-                "location" => $row['location']
             ],
 
             "status" => [
