@@ -127,7 +127,8 @@ $get_sql = "
         fu.institute_id, 
         fu.name, 
         fu.email, 
-        fu.phone, 
+        fu.phone,
+        fu.role, 
         fu.admin_action
     FROM faculty_users fu
     $where_sql
