@@ -77,25 +77,30 @@ try {
 
         $profiles[] = [
             "profile_id" => intval($row['id']),
-            "user_id" => intval($row['user_id']),
+            "user_id"    => intval($row['user_id']),
+
             "personal_info" => [
-                "email" => $row['email'],
-                "user_name" => $row['user_name'],
-                "phone_number" => $row['phone_number'],
-                "location" => $row['location']
+                "email"        => $row['email'],
+                "user_name"    => $row['user_name'],
+                "phone_number" => $row['phone_number']
             ],
+
             "professional_info" => [
-                "company_name" => $row['company_name'] ?? "N/A",
-                "industry" => $row['industry'] ?? "N/A",
-                "website" => $row['website'] ?? null
+                "company_name" => $row['company_name'] ?? null,
+                "industry"     => $row['industry'] ?? null,
+                "website"      => $row['website'] ?? null,
+                "gst_pan"      => $row['gst_pan'] ?? null,
+                "location"     => $row['location'] ?? null
             ],
+
             "documents" => [
                 "company_logo" => $company_logo_url
             ],
+
             "status" => [
                 "admin_action" => $row['admin_action'] ?? "pending",
-                "created_at" => $row['created_at'] ?? null,
-                "modified_at" => $row['modified_at'] ?? null
+                "created_at"   => $row['created_at'] ?? null,
+                "modified_at"  => $row['modified_at'] ?? null
             ]
         ];
     }
