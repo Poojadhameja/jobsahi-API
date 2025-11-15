@@ -166,8 +166,7 @@ try {
         'contact_person',
         'contact_designation',
         'accreditation',
-        'established_year',
-        'phone_number'
+        'established_year'
     ];
 
     if ($user_role === 'admin') {

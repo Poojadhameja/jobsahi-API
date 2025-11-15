@@ -37,7 +37,6 @@ try {
     // ---------------------------------------------------------
     $upload_dir = __DIR__ . '/../uploads/recruiter_logo/';
     $relative_path = '/uploads/recruiter_logo/';
-
     if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
 
     $input = [];
@@ -190,6 +189,34 @@ try {
     $stmt = $conn->prepare($sql);
     $stmt->bind_param($types, ...$update_values);
     $stmt->execute();
+
+    /* ******************************************************
+       🔥 AUTO-SYNC LOGIC ADDED (NO OTHER CODE CHANGED)
+    *********************************************************/
+
+    // If company_name is updated → update user_name also
+    if (isset($input['company_name']) && $input['company_name'] !== "") {
+
+        $newName = $input['company_name'];
+
+        $sync = $conn->prepare("UPDATE users SET user_name = ? WHERE id = ?");
+        $sync->bind_param("si", $newName, $user_id);
+        $sync->execute();
+        $sync->close();
+    }
+
+    // If POST (insert) and user_name exists → auto insert into company_name (only if not given)
+    if ($method === "POST") {
+
+        $userRow = $conn->query("SELECT user_name FROM users WHERE id = $user_id")->fetch_assoc();
+        $autoName = $userRow['user_name'] ?? '';
+
+        if (!empty($autoName) && empty($input['company_name'])) {
+            $conn->query("UPDATE recruiter_profiles SET company_name = '$autoName' WHERE id = $recruiter_id");
+        }
+    }
+
+    /* ******************************************************/
 
     // ---------------------------------------------------------
     // Fetch updated profile
