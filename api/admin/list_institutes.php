@@ -1,15 +1,12 @@
 <?php
-// list_institutes.php - List/manage all institutes
 require_once '../cors.php';
 
-// ✅ Authenticate JWT and allow only admin access
-$decoded = authenticateJWT(['admin']); // Only admin can access this endpoint
-
-// Extract admin user ID from JWT token
+// Only admin allowed
+$decoded = authenticateJWT(['admin']);
 $admin_id = $decoded['user_id'];
 
 try {
-    // Query to get all institutes with their profile information
+    // Base institute list query
     $stmt = $conn->prepare("
         SELECT 
             u.id as user_id,
@@ -38,78 +35,134 @@ try {
             ip.created_at as profile_created_at,
             ip.modified_at as profile_modified_at,
             ip.deleted_at as profile_deleted_at
+
         FROM users u
         LEFT JOIN institute_profiles ip ON u.id = ip.user_id
         WHERE u.role = 'institute'
         ORDER BY u.id DESC
     ");
 
-    if ($stmt->execute()) {
-        $result = $stmt->get_result();
-        $institutes = [];
+    $stmt->execute();
+    $result = $stmt->get_result();
 
-        // ✅ Setup URL generation base
-        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
-        $host = $_SERVER['HTTP_HOST'];
-        $logo_base = '/jobsahi-API/api/uploads/institute_logo/';
+    $institutes = [];
 
-        while ($row = $result->fetch_assoc()) {
-            // ✅ Convert institute_logo → full URL (if exists)
-            if (!empty($row['institute_logo'])) {
-                $clean_logo = str_replace(["\\", "/uploads/institute_logo/", "./", "../"], "", $row['institute_logo']);
-                $logo_local = __DIR__ . '/../uploads/institute_logo/' . $clean_logo;
-                if (file_exists($logo_local)) {
-                    $row['institute_logo'] = $protocol . $host . $logo_base . $clean_logo;
-                }
-            }
+    // URL base for logos
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+    $host = $_SERVER['HTTP_HOST'];
+    $logo_base = '/jobsahi-API/api/uploads/institute_logo/';
 
-            $institutes[] = [
-                'user_info' => [
-                    'user_id' => $row['user_id'],
-                    'user_name' => $row['user_name'],
-                    'email' => $row['email'],
-                    'phone_number' => $row['phone_number'],
-                ],
-                'profile_info' => [
-                    'institute_id' => $row['institute_id'],
-                    'institute_name' => $row['institute_name'],
-                    'institute_type' => $row['institute_type'],
-                    'institute_logo' => $row['institute_logo'],
-                    'website' => $row['website'],
-                    'description' => $row['description'],
-                    'address' => $row['address'],
-                    'city' => $row['city'],
-                    'state' => $row['state'],
-                    'country' => $row['country'],
-                    'postal_code' => $row['postal_code'],
-                    'contact_person' => $row['contact_person'],
-                    'contact_designation' => $row['contact_designation'],
-                    'accreditation' => $row['accreditation'],
-                    'established_year' => $row['established_year'],
-                    'location' => $row['location'],
-                    'courses_offered' => $row['courses_offered'],
-                    'admin_action' => $row['admin_action'],
-                    'created_at' => $row['profile_created_at'],
-                    'modified_at' => $row['profile_modified_at'],
-                    'deleted_at' => $row['profile_deleted_at']
-                ]
+    while ($row = $result->fetch_assoc()) {
+
+        $institute_id = $row['institute_id'];
+
+        /* ====================================================
+           FETCH COURSE LIST FOR THIS INSTITUTE
+        ==================================================== */
+        $course_stmt = $conn->prepare("
+            SELECT 
+                id, 
+                title, 
+                description,
+                duration,
+                category_id,
+                tagged_skills,
+                batch_limit,
+                status,
+                instructor_name,
+                mode,
+                certification_allowed
+            FROM courses
+            WHERE institute_id = ?
+            ORDER BY id DESC
+        ");
+        $course_stmt->bind_param("i", $institute_id);
+        $course_stmt->execute();
+        $courses_res = $course_stmt->get_result();
+
+        $courses = [];
+        while ($c = $courses_res->fetch_assoc()) {
+            $courses[] = [
+                "course_id" => $c["id"],
+                "title" => $c["title"],
+                "description" => $c["description"],
+                "duration" => $c["duration"],
+                "category_id" => $c["category_id"],
+                "tagged_skills" => $c["tagged_skills"],
+                "batch_limit" => $c["batch_limit"],
+                "status" => $c["status"],
+                "instructor_name" => $c["instructor_name"],
+                "mode" => $c["mode"],
+                "certification_allowed" => $c["certification_allowed"]
             ];
         }
+        $course_stmt->close();
 
-        echo json_encode([
-            "status" => true,
-            "message" => "Institutes retrieved successfully",
-            "count" => count($institutes),
-            "data" => $institutes
-        ]);
-    } else {
-        echo json_encode([
-            "status" => false,
-            "message" => "Failed to retrieve institutes",
-            "error" => $stmt->error
-        ]);
+        /* ====================================================
+           FIX LOGO PATH
+        ==================================================== */
+        if (!empty($row['institute_logo'])) {
+            $clean_logo = str_replace(
+                ["\\", "/uploads/institute_logo/", "./", "../"],
+                "",
+                $row['institute_logo']
+            );
+            $logo_local = __DIR__ . '/../uploads/institute_logo/' . $clean_logo;
+
+            if (file_exists($logo_local)) {
+                $row['institute_logo'] = $protocol . $host . $logo_base . $clean_logo;
+            }
+        }
+
+        /* ====================================================
+           PUSH FINAL STRUCTURE
+        ==================================================== */
+        $institutes[] = [
+            "user_info" => [
+                "user_id" => $row["user_id"],
+                "user_name" => $row["user_name"],
+                "email" => $row["email"],
+                "phone_number" => $row["phone_number"]
+            ],
+
+            "profile_info" => [
+                "institute_id" => $row["institute_id"],
+                "institute_name" => $row["institute_name"],
+                "institute_type" => $row["institute_type"],
+                "institute_logo" => $row["institute_logo"],
+                "website" => $row["website"],
+                "description" => $row["description"],
+                "address" => $row["address"],
+                "city" => $row["city"],
+                "state" => $row["state"],
+                "country" => $row["country"],
+                "postal_code" => $row["postal_code"],
+                "contact_person" => $row["contact_person"],
+                "contact_designation" => $row["contact_designation"],
+                "accreditation" => $row["accreditation"],
+                "established_year" => $row["established_year"],
+                "location" => $row["location"],
+                "courses_offered" => $row["courses_offered"],
+                "admin_action" => $row["admin_action"],
+                "created_at" => $row["profile_created_at"],
+                "modified_at" => $row["profile_modified_at"],
+                "deleted_at" => $row["profile_deleted_at"]
+            ],
+
+            // 👉 NEW: ADD COURSE LIST HERE
+            "courses" => $courses
+        ];
     }
+
+    echo json_encode([
+        "status" => true,
+        "message" => "Institutes retrieved successfully",
+        "count" => count($institutes),
+        "data" => $institutes
+    ]);
+
 } catch (Exception $e) {
+
     echo json_encode([
         "status" => false,
         "message" => "Error: " . $e->getMessage()
@@ -117,4 +170,5 @@ try {
 }
 
 $conn->close();
+
 ?>
