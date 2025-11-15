@@ -28,7 +28,7 @@ try {
         exit;
     }
 
-    // ✅ If no course_id → overview; if course_id passed → detailed view
+    // Determine overview or detail
     $course_id = isset($_GET['id']) ? intval($_GET['id']) : (isset($_GET['course_id']) ? intval($_GET['course_id']) : 0);
     $current_date = new DateTime();
 
@@ -36,13 +36,15 @@ try {
     // 1️⃣ OVERVIEW PAGE: All Courses + Batch Stats
     // ----------------------------------------------------------
     if ($course_id === 0) {
+
         $courseQuery = "
-            SELECT id AS course_id, title AS course_title, instructor_name, duration, fee
+            SELECT id AS course_id, title AS course_title, instructor_name, duration, fee, admin_action
             FROM courses
             WHERE admin_action = 'approved'
             " . ($role === 'institute' ? "AND institute_id = ?" : "") . "
             ORDER BY created_at DESC
         ";
+
         $courseStmt = $conn->prepare($courseQuery);
         if ($role === 'institute') $courseStmt->bind_param("i", $institute_id);
         $courseStmt->execute();
@@ -52,6 +54,7 @@ try {
 
         while ($course = $courses->fetch_assoc()) {
             $course_id = intval($course['course_id']);
+
             $batchQuery = "SELECT id, start_date, end_date, admin_action FROM batches WHERE course_id = ?";
             $batchStmt = $conn->prepare($batchQuery);
             $batchStmt->bind_param("i", $course_id);
@@ -86,14 +89,16 @@ try {
 
             $overall_progress = ($progress_count > 0) ? round($progress_sum / $progress_count, 2) : 0;
 
+            // ✅ admin_action ADDED HERE
             $overviewData[] = [
                 "course_id"        => $course['course_id'],
                 "course_title"     => $course['course_title'],
                 "instructor_name"  => $course['instructor_name'],
-                "fee"              => floatval($course['fee']), // ✅ added fee
+                "fee"              => floatval($course['fee']),
                 "total_batches"    => $total_batches,
                 "active_batches"   => $active_batches,
-                "overall_progress" => $overall_progress
+                "overall_progress" => $overall_progress,
+                "admin_action"     => $course['admin_action']   // ← added
             ];
         }
 
@@ -108,17 +113,18 @@ try {
     }
 
     // ----------------------------------------------------------
-    // 2️⃣ DETAILS PAGE: Course Info + Batches + Enrolled Students + Faculty
+    // 2️⃣ DETAILS PAGE: Course Info + Batches + Students + Faculty
     // ----------------------------------------------------------
     else {
-        // ✅ Course info (added fee)
         $courseQuery = "
-            SELECT id AS course_id, title AS course_title, instructor_name, duration, description, fee
+            SELECT id AS course_id, title AS course_title, instructor_name,
+                   duration, description, fee, admin_action
             FROM courses
             WHERE id = ? AND admin_action = 'approved'
             " . ($role === 'institute' ? "AND institute_id = ?" : "") . "
             LIMIT 1
         ";
+
         if ($role === 'institute') {
             $stmt = $conn->prepare($courseQuery);
             $stmt->bind_param("ii", $course_id, $institute_id);
@@ -126,15 +132,22 @@ try {
             $stmt = $conn->prepare($courseQuery);
             $stmt->bind_param("i", $course_id);
         }
+
         $stmt->execute();
         $courseResult = $stmt->get_result();
+
         if ($courseResult->num_rows === 0) {
             echo json_encode(["status" => false, "message" => "Course not found"]);
             exit;
         }
+
         $course = $courseResult->fetch_assoc();
 
-        // ✅ Fetch batches
+        // ---------------------------------------------------
+        // course object now includes admin_action (NO LOGIC CHANGED)
+        // ---------------------------------------------------
+
+        // Fetch batches
         $batchQuery = "
             SELECT b.id AS batch_id, b.name AS batch_name, b.batch_time_slot,
                    b.start_date, b.end_date, b.admin_action,
@@ -145,6 +158,7 @@ try {
             GROUP BY b.id
             ORDER BY b.start_date DESC
         ";
+
         $batchStmt = $conn->prepare($batchQuery);
         $batchStmt->bind_param("i", $course_id);
         $batchStmt->execute();
@@ -173,7 +187,7 @@ try {
                 }
             }
 
-            // ✅ Fetch enrolled students
+            // Enrolled students fetch
             $studentQuery = "
                 SELECT sp.id AS student_id, u.user_name AS name, u.email, u.phone_number,
                        e.enrollment_date, e.status AS enrollment_status
@@ -185,6 +199,7 @@ try {
                 WHERE sb.batch_id = ?
                 ORDER BY u.user_name ASC
             ";
+
             $sstmt = $conn->prepare($studentQuery);
             $sstmt->bind_param("ii", $course_id, $batch_id);
             $sstmt->execute();
@@ -214,7 +229,7 @@ try {
             ];
         }
 
-        // ✅ Fetch faculty list
+        // Faculty list
         $faculty = [];
         if ($institute_id > 0) {
             $facultyQuery = "
@@ -244,7 +259,10 @@ try {
             "status"  => true,
             "message" => "Course details with batches, enrolled students, and faculty fetched successfully.",
             "role"    => $role,
+
+            // ✅ admin_action INCLUDED HERE
             "course"  => $course,
+
             "batches" => $batchData,
             "active_batches" => $active_batches,
             "faculty" => $faculty
