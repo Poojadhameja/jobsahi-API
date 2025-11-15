@@ -33,8 +33,7 @@ $queryCourses = "
         c.title AS course_name,
         cc.category_name AS category,
         COUNT(DISTINCT sce.student_id) AS enrolled,
-        CASE WHEN c.certification_allowed = 1 THEN 'Active' ELSE 'Inactive' END AS certificate,
-        'View' AS status
+        CASE WHEN c.certification_allowed = 1 THEN 'Active' ELSE 'Inactive' END AS certificate
     FROM courses c
     LEFT JOIN course_category cc ON c.category_id = cc.id
     LEFT JOIN student_course_enrollments sce ON c.id = sce.course_id

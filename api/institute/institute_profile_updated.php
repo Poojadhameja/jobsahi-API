@@ -25,7 +25,6 @@ try {
 
     // 🎯 NEW: Different behaviour for POST vs PUT
     if ($method === 'POST') {
-        // For POST → if profile already exists, BLOCK it
         if ($profile_id) {
             echo json_encode([
                 "success" => false,
@@ -33,9 +32,7 @@ try {
             ]);
             exit;
         }
-        // For POST with no profile → we will CREATE below
     } else { // PUT
-        // For PUT → must have existing profile
         if (!$profile_id) {
             echo json_encode(["success" => false, "message" => "Institute profile not found"]);
             exit;
@@ -126,7 +123,6 @@ try {
             exit;
         }
 
-        // ❗ Only delete old file for PUT (when profile already exists)
         if ($method === 'PUT' && $profile_id) {
             $old_stmt = $conn->prepare("SELECT institute_logo FROM institute_profiles WHERE id = ?");
             $old_stmt->bind_param("i", $profile_id);
@@ -141,14 +137,12 @@ try {
             $old_stmt->close();
         }
 
-        // Save new file
         $safe_name = 'logo_' . $user_id . '.' . $ext;
         $file_path = $upload_dir . $safe_name;
 
         if (is_uploaded_file($tmpName)) {
             move_uploaded_file($tmpName, $file_path);
         } else {
-            // from PUT manual parsing
             rename($tmpName, $file_path);
         }
 
@@ -172,7 +166,8 @@ try {
         'contact_person',
         'contact_designation',
         'accreditation',
-        'established_year'
+        'established_year',
+        'phone_number'
     ];
 
     if ($user_role === 'admin') {
@@ -184,7 +179,7 @@ try {
     ===================================================== */
 
     if ($method === 'PUT') {
-        // ---------- UPDATE EXISTING PROFILE ----------
+
         $update_fields = [];
         $update_values = [];
         $types         = '';
@@ -217,7 +212,7 @@ try {
         $stmt->execute();
 
     } else {
-        // ---------- CREATE NEW PROFILE (POST) ----------
+
         $columns      = ['user_id'];
         $placeholders = ['?'];
         $values       = [$user_id];
@@ -232,7 +227,7 @@ try {
             }
         }
 
-        if (count($columns) === 1) { // only user_id present
+        if (count($columns) === 1) {
             echo json_encode(["success" => false, "message" => "No valid fields to create profile"]);
             exit;
         }
@@ -244,12 +239,54 @@ try {
         $stmt->bind_param($types, ...$values);
         $stmt->execute();
 
-        // NEW profile id
         $profile_id = $conn->insert_id;
     }
 
     /* =====================================================
-       ✅ Fetch created/updated profile (UNCHANGED)
+       🔥 SYNC USERS TABLE WITH institute_profiles CHANGES
+    ===================================================== */
+
+    // Fetch current user record
+    $user_stmt = $conn->prepare("SELECT user_name, phone_number FROM users WHERE id = ? LIMIT 1");
+    $user_stmt->bind_param("i", $user_id);
+    $user_stmt->execute();
+    $current_user = $user_stmt->get_result()->fetch_assoc();
+    $user_stmt->close();
+
+    // 1️⃣ Update user_name when institute_name changes
+    if (isset($input['institute_name']) && $input['institute_name'] !== "") {
+        if ($current_user['user_name'] !== $input['institute_name']) {
+            $u1 = $conn->prepare("UPDATE users SET user_name = ? WHERE id = ?");
+            $u1->bind_param("si", $input['institute_name'], $user_id);
+            $u1->execute();
+            $u1->close();
+        }
+    }
+
+    // 2️⃣ Update phone_number
+    if (isset($input['phone_number']) && $input['phone_number'] !== "") {
+        if ($current_user['phone_number'] !== $input['phone_number']) {
+            $u2 = $conn->prepare("UPDATE users SET phone_number = ? WHERE id = ?");
+            $u2->bind_param("si", $input['phone_number'], $user_id);
+            $u2->execute();
+            $u2->close();
+        }
+    }
+
+    // 3️⃣ On POST, if user_name empty → copy institute_name
+    if ($method === 'POST') {
+        if (isset($input['institute_name']) && $input['institute_name'] !== "") {
+            if (empty($current_user['user_name'])) {
+                $u3 = $conn->prepare("UPDATE users SET user_name = ? WHERE id = ?");
+                $u3->bind_param("si", $input['institute_name'], $user_id);
+                $u3->execute();
+                $u3->close();
+            }
+        }
+    }
+
+    /* =====================================================
+       ✅ Fetch final updated profile
     ===================================================== */
     $fetch_sql = "SELECT p.*, u.email, u.user_name, u.phone_number 
                   FROM institute_profiles p
