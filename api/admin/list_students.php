@@ -158,27 +158,32 @@ try {
 
         $ids = implode(",", $student_profile_ids);
 
-        $jobStmt = $conn->prepare("
-            SELECT 
-                a.student_id,
-                j.title AS job_title,
-                a.status AS placement_status,
-                a.job_selected
-            FROM applications a
-            INNER JOIN jobs j ON j.id = a.job_id
-            WHERE a.student_id IN ($ids)
-              AND a.deleted_at IS NULL
-        ");
+     $jobStmt = $conn->prepare("
+    SELECT 
+        a.student_id,
+        j.title AS job_title,
+        rp.company_name AS company_name,   -- 🔥 NEW FIELD
+        a.status AS placement_status,
+        a.job_selected
+    FROM applications a
+    INNER JOIN jobs j ON j.id = a.job_id
+    LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id   -- 🔥 JOIN ADDED
+    WHERE a.student_id IN ($ids)
+      AND a.deleted_at IS NULL
+");
+
         $jobStmt->execute();
         $jobResult = $jobStmt->get_result();
 
         while ($job = $jobResult->fetch_assoc()) {
 
-            $students[$job['student_id']]['applied_jobs'][] = [
-                "job_title" => $job['job_title'],
-                "status" => $job['placement_status'],
-                "job_selected" => $job['job_selected']
-            ];
+           $students[$job['student_id']]['applied_jobs'][] = [
+    "job_title" => $job['job_title'],
+    "company_name" => $job['company_name'],  // 🔥 COMPANY ADDED
+    "status" => $job['placement_status'],
+    "job_selected" => $job['job_selected']
+];
+
 
             // Auto placement label
             if ($job['placement_status'] == 'selected') {

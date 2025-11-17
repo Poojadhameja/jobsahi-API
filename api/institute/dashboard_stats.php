@@ -83,11 +83,9 @@ try {
     $stmt3->close();
 
     // ------------------------------------------------------------------
-    // 🟩 Placement Rate (Final Logic)
+    // 🟩 Placement Rate
     // ------------------------------------------------------------------
-    // Placement Rate = (Number of students selected in jobs / Total number of job applications) × 100
 
-    // Total job applications for this institute's students
     $stmtA = $conn->prepare("
         SELECT COUNT(DISTINCT a.id)
         FROM applications a
@@ -104,7 +102,6 @@ try {
     $stmtA->fetch();
     $stmtA->close();
 
-    // Students selected in jobs (status = 'selected' OR job_selected = 1)
     $stmtB = $conn->prepare("
         SELECT COUNT(DISTINCT a.id)
         FROM applications a
@@ -122,17 +119,18 @@ try {
     $stmtB->fetch();
     $stmtB->close();
 
-    $placement_rate = 0;
-    if ($total_applications > 0) {
-        $placement_rate = round(($selected_count / $total_applications) * 100, 1);
-    }
+    $placement_rate = ($total_applications > 0)
+        ? round(($selected_count / $total_applications) * 100, 1)
+        : 0;
 
     // ------------------------------------------------------------------
-    // 3️⃣ Recent Activities (unchanged)
+    // 3️⃣ Recent Activities
     // ------------------------------------------------------------------
+
     $recent_activities = [];
+    $activity_keys = []; // to remove duplicates
 
-    // Enrollments
+    // Enrollment
     $q1 = $conn->prepare("
         SELECT u.user_name AS student_name, c.title AS course_title, e.created_at
         FROM student_course_enrollments e
@@ -149,15 +147,19 @@ try {
     $q1->execute();
     $res1 = $q1->get_result();
     while ($row = $res1->fetch_assoc()) {
-        $recent_activities[] = [
-            "title"     => "New student {$row['student_name']} enrolled in {$row['course_title']}",
-            "timestamp" => $row['created_at'],
-            "type"      => "enrollment"
-        ];
+        $key = md5("enroll-" . $row['student_name'] . $row['course_title']);
+        if (!isset($activity_keys[$key])) {
+            $activity_keys[$key] = true;
+            $recent_activities[] = [
+                "title"     => "New student {$row['student_name']} enrolled in {$row['course_title']}",
+                "timestamp" => $row['created_at'],
+                "type"      => "enrollment"
+            ];
+        }
     }
     $q1->close();
 
-    // Certificates
+    // Certificate
     $q2 = $conn->prepare("
         SELECT u.user_name AS student_name, c.title AS course_title, cert.created_at
         FROM certificates cert
@@ -173,15 +175,19 @@ try {
     $q2->execute();
     $res2 = $q2->get_result();
     while ($row = $res2->fetch_assoc()) {
-        $recent_activities[] = [
-            "title"     => "Certificate generated for {$row['student_name']} in {$row['course_title']}",
-            "timestamp" => $row['created_at'],
-            "type"      => "certificate"
-        ];
+        $key = md5("cert-" . $row['student_name'] . $row['course_title']);
+        if (!isset($activity_keys[$key])) {
+            $activity_keys[$key] = true;
+            $recent_activities[] = [
+                "title"     => "Certificate generated for {$row['student_name']} in {$row['course_title']}",
+                "timestamp" => $row['created_at'],
+                "type"      => "certificate"
+            ];
+        }
     }
     $q2->close();
 
-    // Courses Updated
+    // Updates
     $q3 = $conn->prepare("
         SELECT title, updated_at
         FROM courses
@@ -193,11 +199,15 @@ try {
     $q3->execute();
     $res3 = $q3->get_result();
     while ($row = $res3->fetch_assoc()) {
-        $recent_activities[] = [
-            "title"     => "{$row['title']} course updated",
-            "timestamp" => $row['updated_at'],
-            "type"      => "update"
-        ];
+        $key = md5("update-" . $row['title']);
+        if (!isset($activity_keys[$key])) {
+            $activity_keys[$key] = true;
+            $recent_activities[] = [
+                "title"     => "{$row['title']} course updated",
+                "timestamp" => $row['updated_at'],
+                "type"      => "update"
+            ];
+        }
     }
     $q3->close();
 
@@ -205,15 +215,16 @@ try {
     $recent_activities = array_slice($recent_activities, 0, 6);
 
     // ------------------------------------------------------------------
-    // 4️⃣ Course Statistics Section (UPDATED - Daily Completion Logic)
+    // 4️⃣ Course Statistics (remove duplicate course names)
     // ------------------------------------------------------------------
+
     $course_statistics = [];
+    $course_keys = [];
+
     $stmt4 = $conn->prepare("
         SELECT 
             c.id,
             c.title AS course_title,
-            COUNT(DISTINCT e.student_id) AS total_enrolled,
-            COUNT(DISTINCT cert.student_id) AS total_certified,
             ROUND(
                 AVG(
                     CASE
@@ -229,8 +240,6 @@ try {
             ) AS completion_rate
         FROM courses c
         LEFT JOIN batches b ON b.course_id = c.id
-        LEFT JOIN student_course_enrollments e ON e.course_id = c.id
-        LEFT JOIN certificates cert ON cert.course_id = c.id
         WHERE c.institute_id = ?
         GROUP BY c.id
         ORDER BY c.title ASC
@@ -239,10 +248,14 @@ try {
     $stmt4->execute();
     $res4 = $stmt4->get_result();
     while ($row = $res4->fetch_assoc()) {
-        $course_statistics[] = [
-            "course_title"    => $row['course_title'],
-            "completion_rate" => round($row['completion_rate'] ?? 0, 1)
-        ];
+        $key = md5($row['course_title']);
+        if (!isset($course_keys[$key])) {
+            $course_keys[$key] = true;
+            $course_statistics[] = [
+                "course_title"    => $row['course_title'],
+                "completion_rate" => round($row['completion_rate'] ?? 0, 1)
+            ];
+        }
     }
     $stmt4->close();
 

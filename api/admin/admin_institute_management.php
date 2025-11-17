@@ -28,9 +28,24 @@ if ($user_role === 'institute') {
    ============================================================ */
 $whereInstitute = $institute_id ? "WHERE c.institute_id = $institute_id" : "";
 
+// $queryCourses = "
+//     SELECT 
+//         c.title AS course_name,
+//         cc.category_name AS category,
+//         COUNT(DISTINCT sce.student_id) AS enrolled,
+//         CASE WHEN c.certification_allowed = 1 THEN 'Active' ELSE 'Inactive' END AS certificate,
+//         'View' AS status
+//     FROM courses c
+//     LEFT JOIN course_category cc ON c.category_id = cc.id
+//     LEFT JOIN student_course_enrollments sce ON c.id = sce.course_id
+//     $whereInstitute
+//     GROUP BY c.title, cc.category_name, c.certification_allowed
+//     ORDER BY MAX(c.created_at) DESC
+// ";
 $queryCourses = "
     SELECT 
         c.title AS course_name,
+        c.description AS description,
         cc.category_name AS category,
         COUNT(DISTINCT sce.student_id) AS enrolled,
         CASE WHEN c.certification_allowed = 1 THEN 'Active' ELSE 'Inactive' END AS certificate,
@@ -39,9 +54,10 @@ $queryCourses = "
     LEFT JOIN course_category cc ON c.category_id = cc.id
     LEFT JOIN student_course_enrollments sce ON c.id = sce.course_id
     $whereInstitute
-    GROUP BY c.title, cc.category_name, c.certification_allowed
+    GROUP BY c.title, c.description, cc.category_name, c.certification_allowed
     ORDER BY MAX(c.created_at) DESC
 ";
+
 
 $resultCourses = $conn->query($queryCourses);
 $courseList = $resultCourses ? $resultCourses->fetch_all(MYSQLI_ASSOC) : [];
