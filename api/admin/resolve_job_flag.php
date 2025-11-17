@@ -3,22 +3,27 @@
 require_once '../cors.php';
 require_once '../db.php';
 
-// ✅ Authenticate JWT (admin only)
+// Only Admin
 $decoded = authenticateJWT(['admin']);
 
 try {
-    // ✅ Get flag ID
+
     $flag_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+
     if ($flag_id <= 0) {
         echo json_encode(["status" => false, "message" => "Invalid job flag ID"]);
         exit();
     }
 
-    // ✅ Check if job flag exists and get job_id + current admin_action
-    $check = $conn->prepare("SELECT id, job_id, admin_action FROM job_flags WHERE id = ?");
-    $check->bind_param("i", $flag_id);
-    $check->execute();
-    $res = $check->get_result();
+    // Fetch flag (including existing admin_action)
+    $stmt = $conn->prepare("
+        SELECT id, job_id, admin_action 
+        FROM job_flags 
+        WHERE id = ?
+    ");
+    $stmt->bind_param("i", $flag_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
 
     if ($res->num_rows === 0) {
         echo json_encode(["status" => false, "message" => "Job flag not found"]);
@@ -27,35 +32,59 @@ try {
 
     $flag = $res->fetch_assoc();
     $job_id = intval($flag['job_id']);
-    $current_action = $flag['admin_action']; // can be approved/rejected/pending
+    $current_action = strtolower(trim($flag['admin_action']));
 
-    // ✅ Step 1: Mark flag as reviewed but do not change admin_action
-    $updateFlag = $conn->prepare("UPDATE job_flags SET reviewed = 1 WHERE id = ?");
-    $updateFlag->bind_param("i", $flag_id);
+    // VALID ACTIONS
+    $valid = ['approved', 'rejected', 'pending'];
+    if (!in_array($current_action, $valid)) {
+        $current_action = 'pending';
+    }
+
+    // ---------------------------------------------------
+    // ⭐ ADMIN LOGIC (NO URL INPUT)
+    // ---------------------------------------------------
+    // pending → approved
+    // approved → keep approved
+    // rejected → keep rejected
+    if ($current_action === 'pending') {
+        $new_action = 'approved';
+    } else {
+        $new_action = $current_action; // keep as is
+    }
+
+    // Step 1: Update job_flags
+    $updateFlag = $conn->prepare("
+        UPDATE job_flags 
+        SET reviewed = 1, admin_action = ? 
+        WHERE id = ?
+    ");
+    $updateFlag->bind_param("si", $new_action, $flag_id);
     $updateFlag->execute();
 
-    // ✅ Step 2: Approve the related job regardless of flag’s status
+    // Step 2: Update job status
     if ($job_id > 0) {
-        $updateJob = $conn->prepare("UPDATE jobs SET admin_action = 'approved' WHERE id = ?");
-        $updateJob->bind_param("i", $job_id);
+        $updateJob = $conn->prepare("
+            UPDATE jobs 
+            SET admin_action = ? 
+            WHERE id = ?
+        ");
+        $updateJob->bind_param("si", $new_action, $job_id);
         $updateJob->execute();
     }
 
-    // ✅ Step 3: Confirm result
-    $confirm = $conn->prepare("SELECT id, job_id, reviewed, admin_action FROM job_flags WHERE id = ?");
-    $confirm->bind_param("i", $flag_id);
-    $confirm->execute();
-    $updatedFlag = $confirm->get_result()->fetch_assoc();
-
+    // FINAL SHORT OUTPUT
     echo json_encode([
-        "status" => true,
-        "message" => "Job flag resolved successfully (job approved by admin)",
-        "flag" => $updatedFlag,
-        "job_id" => $job_id
+        "status"        => true,
+        "message"       => "Job flag resolved successfully",
+        "flag_id"       => $flag_id,
+        "admin_action"  => $new_action
     ]);
 
 } catch (Exception $e) {
-    echo json_encode(["status" => false, "message" => "Error: " . $e->getMessage()]);
+    echo json_encode([
+        "status" => false,
+        "message" => $e->getMessage()
+    ]);
 }
 
 $conn->close();
