@@ -105,8 +105,9 @@ if ($job_id > 0) {
 
     $job = mysqli_fetch_assoc($result);
 
-    // ✅ Add "is_saved" flag for students
+    // ✅ Add "is_saved" and "is_applied" flags for students
     if ($userRole === 'student' && $student_profile_id) {
+        // Check if job is saved
         $check_saved_sql = "SELECT 1 FROM saved_jobs WHERE student_id = ? AND job_id = ?";
         $check_stmt = mysqli_prepare($conn, $check_saved_sql);
         mysqli_stmt_bind_param($check_stmt, "ii", $student_profile_id, $job_id);
@@ -114,6 +115,15 @@ if ($job_id > 0) {
         $check_result = mysqli_stmt_get_result($check_stmt);
         $job['is_saved'] = (mysqli_num_rows($check_result) > 0) ? 1 : 0;
         mysqli_stmt_close($check_stmt);
+
+        // ✅ Check if job is applied by this student (with proper filtering)
+        $check_applied_sql = "SELECT 1 FROM applications WHERE student_id = ? AND job_id = ? AND (deleted_at IS NULL OR deleted_at = '0000-00-00 00:00:00')";
+        $check_applied_stmt = mysqli_prepare($conn, $check_applied_sql);
+        mysqli_stmt_bind_param($check_applied_stmt, "ii", $student_profile_id, $job_id);
+        mysqli_stmt_execute($check_applied_stmt);
+        $check_applied_result = mysqli_stmt_get_result($check_applied_stmt);
+        $job['is_applied'] = (mysqli_num_rows($check_applied_result) > 0) ? 1 : 0;
+        mysqli_stmt_close($check_applied_stmt);
     }
 
     mysqli_stmt_close($stmt);
@@ -210,13 +220,21 @@ $sql = "SELECT
             (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS views,
             rp.company_name";
 
-// Check if job is saved for students - using saved_jobs table
+// Check if job is saved and applied for students - using saved_jobs and applications tables
 if ($userRole === 'student' && $student_profile_id) {
     $sql .= ",
             CASE 
                 WHEN EXISTS (SELECT 1 FROM saved_jobs sj WHERE sj.student_id = ? AND sj.job_id = j.id) THEN 1 
                 ELSE 0 
-            END as is_saved";
+            END as is_saved,
+            CASE 
+                WHEN EXISTS (
+                    SELECT 1 FROM applications a 
+                    WHERE a.student_id = ? AND a.job_id = j.id 
+                    AND (a.deleted_at IS NULL OR a.deleted_at = '0000-00-00 00:00:00')
+                ) THEN 1 
+                ELSE 0 
+            END as is_applied";
 }
 
 $sql .= " FROM jobs j
@@ -235,12 +253,12 @@ if (!$stmt) {
     exit;
 }
 
-// Bind parameters - add student_id if needed
+// Bind parameters - add student_id if needed (twice for is_saved and is_applied checks)
 if ($userRole === 'student' && $student_profile_id) {
     if (!empty($params)) {
-        mysqli_stmt_bind_param($stmt, "i" . $types, $student_profile_id, ...$params);
+        mysqli_stmt_bind_param($stmt, "ii" . $types, $student_profile_id, $student_profile_id, ...$params);
     } else {
-        mysqli_stmt_bind_param($stmt, "i", $student_profile_id);
+        mysqli_stmt_bind_param($stmt, "ii", $student_profile_id, $student_profile_id);
     }
 } else {
     // Bind filters for non-students

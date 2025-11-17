@@ -62,8 +62,9 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
         $user    = mysqli_fetch_assoc($result);
         $user_id = $user['id'];
 
-        // ✅ Generate OTP
-        $otp        = generateOTP();
+        // ✅ Generate OTP (4 digits for forgot_password, 6 for others)
+        $otp_length = ($purpose === 'forgot_password') ? 4 : 6;
+        $otp        = generateOTP($otp_length);
         $expires_at = date('Y-m-d H:i:s', time() + 300); // 5 min expiry
 
         // ✅ Delete any existing OTP for this user and purpose first
@@ -81,29 +82,39 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
             mysqli_stmt_bind_param($insert_stmt, "isss", $user_id, $otp, $purpose, $expires_at);
 
             if (mysqli_stmt_execute($insert_stmt)) {
-                // ✅ Send Email
-                $email_sent = sendPasswordResetOTP($email, $user['user_name'], $otp);
-
-                if ($email_sent) {
-                    echo json_encode([
-                        "message"    => "OTP sent successfully for $purpose",
-                        "status"     => true,
-                        "purpose"    => $purpose,
-                        "user_id"    => $user_id,
-                        "expires_in" => 300
-                    ]);
-                } else {
-                    // If email fails, delete the OTP from database
-                    $cleanup_sql = "DELETE FROM otp_requests WHERE user_id = ? AND otp_code = ? AND purpose = ?";
-                    if ($cleanup_stmt = mysqli_prepare($conn, $cleanup_sql)) {
-                        mysqli_stmt_bind_param($cleanup_stmt, "iss", $user_id, $otp, $purpose);
-                        mysqli_stmt_execute($cleanup_stmt);
-                        mysqli_stmt_close($cleanup_stmt);
-                    }
-                    
-                    echo json_encode(["message" => "Failed to send OTP email", "status" => false]);
+                // ✅ OTP saved to database successfully
+                // ✅ Return response immediately (fast response)
+                http_response_code(200);
+                echo json_encode([
+                    "message"    => "OTP generated successfully for $purpose",
+                    "status"     => true,
+                    "purpose"    => $purpose,
+                    "user_id"    => $user_id,
+                    "expires_in" => 300
+                ]);
+                
+                // ✅ Send Email in background (non-blocking) after response is sent
+                // Close output buffer and send email without blocking
+                if (ob_get_level()) {
+                    ob_end_flush();
                 }
+                flush();
+                
+                // Send email with timeout to prevent hanging
+                set_time_limit(10); // Max 10 seconds for email
+                try {
+                    $email_sent = @sendPasswordResetOTP($email, $user['user_name'], $otp);
+                    if (!$email_sent) {
+                        error_log("Email sending failed for user_id: $user_id, purpose: $purpose, but OTP saved: $otp");
+                    }
+                } catch (Exception $e) {
+                    error_log("Email sending error for user_id: $user_id: " . $e->getMessage());
+                }
+                
+                // Exit to prevent any further execution
+                exit;
             } else {
+                http_response_code(500);
                 echo json_encode(["message" => "Failed to save OTP", "status" => false]);
             }
             mysqli_stmt_close($insert_stmt);

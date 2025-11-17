@@ -35,20 +35,95 @@ if ($interview_id <= 0) {
 ===================================================
 */
 
-if ($user_role === 'admin') {
-    $sql = "SELECT id, application_id, scheduled_at, mode, location, status, feedback, 
-                   created_at, modified_at, deleted_at, admin_action
-            FROM interviews 
-            WHERE id = ? LIMIT 1";
-} else {
-    $sql = "SELECT id, application_id, scheduled_at, mode, location, status, feedback, 
-                   created_at, modified_at, deleted_at, admin_action
-            FROM interviews 
-            WHERE id = ? AND admin_action = 'approved' LIMIT 1";
+// ✅ Get student_profile_id for student role to verify ownership
+$student_profile_id = null;
+$user_id = $decoded['user_id'] ?? $decoded['id'] ?? null;
+
+if ($user_role === 'student' && $user_id) {
+    $stmt = $conn->prepare("SELECT id FROM student_profiles WHERE user_id = ? LIMIT 1");
+    if (!$stmt) {
+        echo json_encode(["message" => "Database prepare error: " . mysqli_error($conn), "status" => false]);
+        exit;
+    }
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($result->num_rows > 0) {
+        $student_profile_id = intval($result->fetch_assoc()['id']);
+    }
+    $stmt->close();
+    
+    if (!$student_profile_id) {
+        echo json_encode(["message" => "Student profile not found", "status" => false]);
+        exit;
+    }
 }
 
+// ---- Build SQL with JOINs to get all comprehensive details ----
+$sql = "SELECT 
+            i.id AS interview_id,
+            i.application_id,
+            i.scheduled_at,
+            i.mode,
+            i.platform_name,
+            i.interview_link,
+            i.location AS interview_location,
+            i.status AS interview_status,
+            i.interview_info,
+            i.created_at AS interview_created_at,
+            i.modified_at AS interview_modified_at,
+            i.deleted_at,
+            i.admin_action,
+            a.id AS application_id_full,
+            a.student_id,
+            a.status AS application_status,
+            a.applied_at,
+            a.cover_letter,
+            j.id AS job_id,
+            j.title AS job_title,
+            j.description AS job_description,
+            j.location AS job_location,
+            j.job_type,
+            j.salary_min,
+            j.salary_max,
+            j.experience_required,
+            j.skills_required,
+            j.application_deadline,
+            j.is_remote,
+            j.no_of_vacancies,
+            rp.id AS recruiter_id,
+            rp.company_name,
+            rp.location AS company_location
+        FROM interviews i
+        INNER JOIN applications a ON i.application_id = a.id
+        INNER JOIN jobs j ON a.job_id = j.id
+        INNER JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
+        WHERE i.id = ?";
+
+$params = [$interview_id];
+$types = "i";
+
+// ✅ Role-based filter on admin_action
+if ($user_role !== 'admin') {
+    $sql .= " AND i.admin_action = 'approved'";
+}
+
+// ✅ Verify student ownership for student role
+if ($user_role === 'student' && $student_profile_id) {
+    $sql .= " AND a.student_id = ?";
+    $params[] = $student_profile_id;
+    $types .= "i";
+}
+
+$sql .= " LIMIT 1";
+
 $stmt = mysqli_prepare($conn, $sql);
-mysqli_stmt_bind_param($stmt, "i", $interview_id);
+if (!$stmt) {
+    echo json_encode(["message" => "Database prepare error: " . mysqli_error($conn), "status" => false]);
+    exit;
+}
+
+mysqli_stmt_bind_param($stmt, $types, ...$params);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 
@@ -57,11 +132,11 @@ if (mysqli_num_rows($result) === 0) {
     exit;
 }
 
-$interview = mysqli_fetch_assoc($result);
+$row = mysqli_fetch_assoc($result);
 mysqli_stmt_close($stmt);
 
 // ---- Fetch Interview Panel ----
-$panel_sql = "SELECT id, interview_id, panelist_name
+$panel_sql = "SELECT id, interview_id, panelist_name, feedback AS panel_feedback, rating
               FROM interview_panel 
               WHERE interview_id = ?";
 $panel_stmt = mysqli_prepare($conn, $panel_sql);
@@ -70,18 +145,67 @@ mysqli_stmt_execute($panel_stmt);
 $panel_result = mysqli_stmt_get_result($panel_stmt);
 
 $panels = [];
-while ($row = mysqli_fetch_assoc($panel_result)) {
-    $panels[] = $row;
+while ($panel_row = mysqli_fetch_assoc($panel_result)) {
+    $panels[] = [
+        "id" => (int)$panel_row['id'],
+        "panelist_name" => $panel_row['panelist_name'],
+        "feedback" => $panel_row['panel_feedback'],
+        "rating" => $panel_row['rating'] !== null ? (float)$panel_row['rating'] : null
+    ];
 }
 mysqli_stmt_close($panel_stmt);
 
-$interview['panel'] = $panels;
+// ---- Build comprehensive response with all details ----
+// Interview-specific details in separate object to avoid confusion with job location
+$interview_data = [
+    "interview" => [
+        "id" => (int)$row['interview_id'],
+        "application_id" => (int)$row['application_id'],
+        "scheduled_at" => $row['scheduled_at'],
+        "mode" => $row['mode'],
+        "status" => $row['interview_status'],
+        "location" => $row['mode'] === 'offline' ? $row['interview_location'] : null,
+        "platform_name" => $row['mode'] === 'online' ? $row['platform_name'] : null,
+        "interview_link" => $row['mode'] === 'online' ? $row['interview_link'] : null,
+        "interview_info" => $row['interview_info'],
+        "created_at" => $row['interview_created_at'],
+        "modified_at" => $row['interview_modified_at'],
+        "admin_action" => $row['admin_action'],
+        "panel" => $panels
+    ],
+    "application" => [
+        "id" => (int)$row['application_id_full'],
+        "student_id" => (int)$row['student_id'],
+        "status" => $row['application_status'],
+        "applied_at" => $row['applied_at'],
+        "cover_letter" => $row['cover_letter']
+    ],
+    "job" => [
+        "id" => (int)$row['job_id'],
+        "title" => $row['job_title'],
+        "description" => $row['job_description'],
+        "location" => $row['job_location'],
+        "job_type" => $row['job_type'],
+        "salary_min" => $row['salary_min'] !== null ? (float)$row['salary_min'] : null,
+        "salary_max" => $row['salary_max'] !== null ? (float)$row['salary_max'] : null,
+        "experience_required" => $row['experience_required'],
+        "skills_required" => $row['skills_required'],
+        "application_deadline" => $row['application_deadline'],
+        "is_remote" => (bool)$row['is_remote'],
+        "no_of_vacancies" => $row['no_of_vacancies'] !== null ? (int)$row['no_of_vacancies'] : null
+    ],
+        "company" => [
+            "id" => (int)$row['recruiter_id'],
+            "company_name" => $row['company_name'],
+            "location" => $row['company_location']
+        ]
+];
 
 echo json_encode([
     "message" => "Interview detail fetched successfully",
     "status" => true,
     "role" => $user_role,
-    "data" => $interview,
+    "data" => $interview_data,
     "timestamp" => date('Y-m-d H:i:s')
 ]);
 

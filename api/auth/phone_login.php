@@ -3,6 +3,7 @@
 require_once '../cors.php';
 require_once '../db.php'; // ✅ make sure this has $conn
 require_once '../helpers/otp_helper.php';
+require_once '../helpers/sms_helper.php';
 
 // ✅ Allow only POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -54,9 +55,9 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
         $user = mysqli_fetch_assoc($result);
         $user_id = $user['id'];
 
-        // ✅ Generate OTP
-        $otp = generateOTP();
-        $purpose = 'phone_login';
+        // ✅ Generate OTP (4 digits for phone login)
+        $otp = generateOTP(4);
+        $purpose = 'phone_login'; // Phone login purpose
         $expires_at = date('Y-m-d H:i:s', time() + 300); // 5 minutes expiry
 
         // ✅ Delete any existing OTP requests for this user and purpose
@@ -74,7 +75,15 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
             mysqli_stmt_bind_param($insert_stmt, "isss", $user_id, $otp, $purpose, $expires_at);
 
             if (mysqli_stmt_execute($insert_stmt)) {
-                // ✅ Send SMS with OTP (implement later)
+                // ✅ Send SMS with OTP
+                $sms_sent = sendOTPviaSMS($phone, $otp, 'fast2sms');
+                
+                // Note: Even if SMS fails, we return success to prevent phone number enumeration
+                // In production, you might want to log SMS failures
+                if (!$sms_sent) {
+                    error_log("SMS sending failed for phone: $phone, OTP: $otp");
+                }
+                
                 http_response_code(200);
                 echo json_encode([
                     "message"    => "OTP sent to your phone",

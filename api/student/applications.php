@@ -11,12 +11,42 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
+// ✅ Get role and user_id
+$role = strtolower($current_user['role'] ?? '');
+$user_id = $current_user['user_id'] ?? null;
+
+// ✅ For students: Automatically get their student_profile_id from JWT
+$current_student_profile_id = null;
+if ($role === 'student' && $user_id) {
+    $stmt = $conn->prepare("SELECT id FROM student_profiles WHERE user_id = ? LIMIT 1");
+    if ($stmt) {
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $res = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        if ($res) {
+            $current_student_profile_id = (int)$res['id'];
+        }
+    }
+}
+
 // ---- Fetch Filters ----
 $student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : null;
 $status     = isset($_GET['status']) ? trim($_GET['status']) : null;
 $job_id     = isset($_GET['job_id']) ? intval($_GET['job_id']) : null;
 $limit      = isset($_GET['limit']) ? intval($_GET['limit']) : 50;
 $offset     = isset($_GET['offset']) ? intval($_GET['offset']) : 0;
+
+// ✅ Security: Students can only see their own applications
+if ($role === 'student') {
+    if ($current_student_profile_id) {
+        // Force student_id to be the logged-in student's ID (ignore any user input)
+        $student_id = $current_student_profile_id;
+    } else {
+        echo json_encode(["status" => false, "message" => "Student profile not found"]);
+        exit;
+    }
+}
 
 // ---- Build SQL ----
 $sql = "SELECT 
@@ -30,22 +60,36 @@ $sql = "SELECT
             j.location,
             j.job_type,
             j.salary_min,
-            j.salary_max
+            j.salary_max,
+            rp.company_name
         FROM applications a
         JOIN jobs j ON a.job_id = j.id
+        LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
         WHERE 1=1";
 
-// ✅ Always filter only approved admin_action
+// ✅ Always filter only approved admin_action and non-deleted
 $sql .= " AND LOWER(a.admin_action) = 'approved'";
+$sql .= " AND (a.deleted_at IS NULL OR a.deleted_at = '0000-00-00 00:00:00')";
 
 $params = [];
 $types = "";
 
-// ---- Optional filters ----
+// ---- Student ID filter (REQUIRED for security) ----
 if (!empty($student_id) && $student_id > 0) {
     $sql .= " AND a.student_id = ?";
     $params[] = $student_id;
     $types .= "i";
+} else {
+    // ✅ If student_id is not provided and role is not admin, return empty (security)
+    if ($role !== 'admin') {
+        echo json_encode([
+            "status" => false, 
+            "message" => "student_id is required",
+            "count" => 0,
+            "data" => []
+        ]);
+        exit;
+    }
 }
 
 if (!empty($status)) {

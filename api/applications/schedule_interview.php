@@ -26,8 +26,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 i.scheduled_at AS date,
                 TIME(i.scheduled_at) AS timeSlot,
                 i.mode AS interviewMode,
+                i.platform_name AS platform_name,
+                i.interview_link AS interview_link,
                 i.location AS location,
-                i.feedback AS feedback,
+                i.interview_info AS interview_info,
                 rp.company_name AS scheduledBy,
                 i.created_at AS createdAt,
                 i.status
@@ -59,8 +61,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 "date"          => date('Y-m-d', strtotime($row['date'])),
                 "timeSlot"      => date('H:i', strtotime($row['timeSlot'])),
                 "interviewMode" => ucfirst($row['interviewMode']),
-                "location"      => $row['location'],
-                "feedback"      => $row['feedback'],
+                "location"      => $row['interviewMode'] === 'offline' ? $row['location'] : null,
+                "platform_name" => $row['interviewMode'] === 'online' ? $row['platform_name'] : null,
+                "interview_link" => $row['interviewMode'] === 'online' ? $row['interview_link'] : null,
+                "interview_info" => $row['interview_info'],
                 "scheduledBy"   => $row['scheduledBy'],
                 "status"        => $row['status'],
                 "createdAt"     => $row['createdAt']
@@ -91,9 +95,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $student_id    = isset($data['student_id']) ? intval($data['student_id']) : 0;
     $scheduled_at  = isset($data['scheduled_at']) ? trim($data['scheduled_at']) : '';
     $mode          = isset($data['mode']) ? trim($data['mode']) : 'online';
-    $location      = isset($data['location']) ? trim($data['location']) : '';
+    $location      = isset($data['location']) ? trim($data['location']) : ''; // For offline interviews
+    $platform_name = isset($data['platform_name']) ? trim($data['platform_name']) : ''; // For online: Zoom, Google Meet, Teams
+    $interview_link = isset($data['interview_link']) ? trim($data['interview_link']) : ''; // For online: meeting link
     $status        = isset($data['status']) ? trim($data['status']) : 'scheduled';
-    $feedback      = isset($data['feedback']) ? trim($data['feedback']) : '';
+    $interview_info = isset($data['interview_info']) ? trim($data['interview_info']) : ''; // Additional info
 
     // ✅ Validate input
     if ($job_id <= 0 || $student_id <= 0) {
@@ -167,11 +173,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // ✅ Step 4: Insert new interview record
+        // For offline: location is required, for online: platform_name and interview_link
+        if ($mode === 'online') {
+            if (empty($interview_link)) {
+                echo json_encode(["status" => "error", "message" => "interview_link is required for online interviews"]);
+                exit();
+            }
+            if (empty($platform_name)) {
+                echo json_encode(["status" => "error", "message" => "platform_name is required for online interviews"]);
+                exit();
+            }
+        } else {
+            if (empty($location)) {
+                echo json_encode(["status" => "error", "message" => "location is required for offline interviews"]);
+                exit();
+            }
+        }
+
         $insert = $conn->prepare("
-            INSERT INTO interviews (application_id, scheduled_at, mode, location, status, feedback, admin_action, created_at, modified_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'approved', NOW(), NOW())
+            INSERT INTO interviews (
+                application_id, scheduled_at, mode, platform_name, interview_link, location, 
+                status, interview_info, admin_action, created_at, modified_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'approved', NOW(), NOW())
         ");
-        $insert->bind_param("isssss", $application_id, $scheduled_at, $mode, $location, $status, $feedback);
+        $insert->bind_param("isssssss", $application_id, $scheduled_at, $mode, $platform_name, $interview_link, $location, $status, $interview_info);
 
         if (!$insert->execute()) {
             throw new Exception("Failed to insert interview: " . $insert->error);
@@ -190,14 +216,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // ✅ Step 6: Build response
         $responseData = [
-            "interviewId"   => $interview_id, // ✅ added here too for frontend consistency
+            "interviewId"   => $interview_id,
             "candidateName" => $candidate_name,
             "candidateId"   => $student_id,
             "date"          => date('Y-m-d', strtotime($scheduled_at)),
             "timeSlot"      => date('H:i', strtotime($scheduled_at)),
             "interviewMode" => ucfirst($mode),
-            "location"      => $location,
-            "feedback"      => $feedback,
+            "location"      => $mode === 'offline' ? $location : null,
+            "platform_name" => $mode === 'online' ? $platform_name : null,
+            "interview_link" => $mode === 'online' ? $interview_link : null,
+            "interview_info" => $interview_info,
             "scheduledBy"   => $company_name,
             "createdAt"     => date('Y-m-d\TH:i:s')
         ];

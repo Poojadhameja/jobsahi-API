@@ -88,7 +88,15 @@ if ($user_role === 'student' && $student_profile_id) {
                     WHERE sj.job_id = j.id AND sj.student_id = ?
                 ) THEN 1 
                 ELSE 0 
-            END as is_saved";
+            END as is_saved,
+            CASE 
+                WHEN EXISTS (
+                    SELECT 1 FROM applications a 
+                    WHERE a.job_id = j.id AND a.student_id = ?
+                    AND (a.deleted_at IS NULL OR a.deleted_at = '0000-00-00 00:00:00')
+                ) THEN 1 
+                ELSE 0 
+            END as is_applied";
 }
 
 $sql .= " FROM jobs j
@@ -105,7 +113,8 @@ if (!$stmt) {
 }
 
 if ($user_role === 'student' && $student_profile_id) {
-    mysqli_stmt_bind_param($stmt, "ii", $student_profile_id, $job_id);
+    // Bind student_id twice: once for is_saved, once for is_applied
+    mysqli_stmt_bind_param($stmt, "iii", $student_profile_id, $student_profile_id, $job_id);
 } else {
     mysqli_stmt_bind_param($stmt, "i", $job_id);
 }
@@ -147,6 +156,10 @@ $formatted_job = [
         'person_name' => $job['person_name'] ?? '',
         'phone' => $job['phone'] ?? '',
         'additional_contact' => $job['additional_contact'] ?? '',
+        
+        // ✅ Student-specific flags (return as 1 or 0 like jobs.php for consistency)
+        'is_saved' => isset($job['is_saved']) ? (int)$job['is_saved'] : 0,
+        'is_applied' => isset($job['is_applied']) ? (int)$job['is_applied'] : 0,
     ],
     'company_info' => [
         'recruiter_id' => intval($job['recruiter_id']),
