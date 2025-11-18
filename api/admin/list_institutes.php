@@ -21,16 +21,11 @@ try {
             ip.website,
             ip.description,
             ip.address,
-            ip.city,
-            ip.state,
-            ip.country,
             ip.postal_code,
             ip.contact_person,
             ip.contact_designation,
             ip.accreditation,
             ip.established_year,
-            ip.location,
-            ip.courses_offered,
             ip.admin_action,
             ip.created_at as profile_created_at,
             ip.modified_at as profile_modified_at,
@@ -114,45 +109,30 @@ try {
             }
         }
 
-        /* ====================================================
-           PUSH FINAL STRUCTURE
-        ==================================================== */
-        $institutes[] = [
-            "user_info" => [
-                "user_id" => $row["user_id"],
-                "user_name" => $row["user_name"],
-                "email" => $row["email"],
-                "phone_number" => $row["phone_number"]
-            ],
-
-            "profile_info" => [
-                "institute_id" => $row["institute_id"],
-                "institute_name" => $row["institute_name"],
-                "institute_type" => $row["institute_type"],
-                "institute_logo" => $row["institute_logo"],
-                "website" => $row["website"],
-                "description" => $row["description"],
-                "address" => $row["address"],
-                "city" => $row["city"],
-                "state" => $row["state"],
-                "country" => $row["country"],
-                "postal_code" => $row["postal_code"],
-                "contact_person" => $row["contact_person"],
-                "contact_designation" => $row["contact_designation"],
-                "accreditation" => $row["accreditation"],
-                "established_year" => $row["established_year"],
-                "location" => $row["location"],
-                "courses_offered" => $row["courses_offered"],
-                "admin_action" => $row["admin_action"],
-                "created_at" => $row["profile_created_at"],
-                "modified_at" => $row["profile_modified_at"],
-                "deleted_at" => $row["profile_deleted_at"]
-            ],
-
-            // 👉 NEW: ADD COURSE LIST HERE
-            "courses" => $courses
-        ];
-    }
+            $institutes[] = [
+                'user_info' => [
+                    'user_id' => $row['user_id'],
+                    'user_name' => $row['user_name'],
+                    'email' => $row['email'],
+                    'phone_number' => $row['phone_number'],
+                ],
+                'profile_info' => [
+                    'institute_id' => $row['institute_id'],
+                    'institute_name' => $row['institute_name'],
+                    'institute_type' => $row['institute_type'],
+                    'institute_logo' => $row['institute_logo'],
+                    'website' => $row['website'],
+                    'description' => $row['description'],
+                    'address' => $row['address'],
+                    'accreditation' => $row['accreditation'],
+                    'established_year' => $row['established_year'],
+                    'admin_action' => $row['admin_action'],
+                    'created_at' => $row['profile_created_at'],
+                    'modified_at' => $row['profile_modified_at'],
+                    'deleted_at' => $row['profile_deleted_at']
+                ]
+            ];
+        }
 
     echo json_encode([
         "status" => true,

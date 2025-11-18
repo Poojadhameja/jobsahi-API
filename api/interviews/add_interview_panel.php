@@ -33,26 +33,43 @@ if (empty($panelist_name) || empty($feedback)) {
 
 try {
     // 🔹 If recruiter, ensure they own this interview
-    if ($user_role === 'recruiter') {
-        $check = $conn->prepare("
-            SELECT i.id 
-            FROM interviews i
-            JOIN applications a ON i.application_id = a.id
-            JOIN jobs j ON a.job_id = j.id
-            WHERE i.id = ? AND j.recruiter_id = ?
-        ");
-        $check->bind_param("ii", $interview_id, $user_id);
-        $check->execute();
-        $result = $check->get_result();
+   // 🔹 If recruiter, ensure they own this interview
+if ($user_role === 'recruiter') {
 
-        if ($result->num_rows === 0) {
-            echo json_encode([
-                "status" => false,
-                "message" => "Unauthorized or invalid interview ID"
-            ]);
-            exit();
-        }
+    // Step 1: Get recruiter_profile_id from logged-in user_id
+    $rp = $conn->prepare("SELECT id FROM recruiter_profiles WHERE user_id = ?");
+    $rp->bind_param("i", $user_id);
+    $rp->execute();
+    $rp_res = $rp->get_result();
+    
+    if ($rp_res->num_rows === 0) {
+        echo json_encode(["status" => false, "message" => "Recruiter profile not found"]);
+        exit();
     }
+
+    $recruiter_profile_id = intval($rp_res->fetch_assoc()['id']);
+
+    // Step 2: Now verify interview ownership using recruiter_profile_id
+    $check = $conn->prepare("
+        SELECT i.id 
+        FROM interviews i
+        JOIN applications a ON i.application_id = a.id
+        JOIN jobs j ON a.job_id = j.id
+        WHERE i.id = ? AND j.recruiter_id = ?
+    ");
+    $check->bind_param("ii", $interview_id, $recruiter_profile_id);
+    $check->execute();
+    $result = $check->get_result();
+
+    if ($result->num_rows === 0) {
+        echo json_encode([
+            "status" => false,
+            "message" => "You are not authorized to add panel feedback for this interview"
+        ]);
+        exit();
+    }
+}
+
 
     // 🔹 Check if feedback already exists for this panelist
     $exists = $conn->prepare("SELECT id FROM interview_panel WHERE interview_id = ? AND panelist_name = ?");

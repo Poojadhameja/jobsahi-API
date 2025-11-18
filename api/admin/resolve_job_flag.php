@@ -61,7 +61,10 @@ try {
     ]);
 
 } catch (Exception $e) {
-    echo json_encode(["status" => false, "message" => "Error: " . $e->getMessage()]);
+    echo json_encode([
+        "status" => false,
+        "message" => $e->getMessage()
+    ]);
 }
 
 $conn->close();

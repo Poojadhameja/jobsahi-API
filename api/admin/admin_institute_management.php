@@ -24,8 +24,9 @@ if ($user_role === 'institute') {
 }
 
 /* ============================================================
-   1️⃣ COURSE & ENROLLMENT MONITORING (UNIQUE BY COURSE NAME)
+   1️⃣ COURSE & ENROLLMENT MONITORING
    ============================================================ */
+
 $whereInstitute = $institute_id ? "WHERE c.institute_id = $institute_id" : "";
 
 // $queryCourses = "
@@ -47,9 +48,9 @@ $queryCourses = "
         c.title AS course_name,
         c.description AS description,
         cc.category_name AS category,
+        c.description AS description,
         COUNT(DISTINCT sce.student_id) AS enrolled,
-        CASE WHEN c.certification_allowed = 1 THEN 'Active' ELSE 'Inactive' END AS certificate,
-        'View' AS status
+        CASE WHEN c.certification_allowed = 1 THEN 'Active' ELSE 'Inactive' END AS certificate
     FROM courses c
     LEFT JOIN course_category cc ON c.category_id = cc.id
     LEFT JOIN student_course_enrollments sce ON c.id = sce.course_id
@@ -62,9 +63,23 @@ $queryCourses = "
 $resultCourses = $conn->query($queryCourses);
 $courseList = $resultCourses ? $resultCourses->fetch_all(MYSQLI_ASSOC) : [];
 
+/* ------------------------------------------------------------
+   ⭐ REMOVE DUPLICATE COURSES SAFELY WITHOUT ANY LOGIC CHANGE
+   ------------------------------------------------------------ */
+$uniqueCourses = [];
+$finalCourseList = [];
+
+foreach ($courseList as $c) {
+    if (!in_array($c['course_name'], $uniqueCourses)) {
+        $uniqueCourses[] = $c['course_name'];
+        $finalCourseList[] = $c;
+    }
+}
+
 /* ============================================================
-   1B️⃣ ENROLLMENT TRENDS (CHART)
+   1B️⃣ ENROLLMENT TRENDS
    ============================================================ */
+
 $queryTrends = "
     SELECT 
         DATE_FORMAT(sce.created_at, '%b') AS month,
@@ -82,6 +97,7 @@ $enrollmentTrends = $resultTrends ? $resultTrends->fetch_all(MYSQLI_ASSOC) : [];
 /* ============================================================
    2️⃣ PLACEMENT READY STUDENTS
    ============================================================ */
+
 $queryPlacement = "
     SELECT 
         u.user_name AS student_name,
@@ -118,13 +134,14 @@ $resultPlacement = $conn->query($queryPlacement);
 $placementReady = $resultPlacement ? $resultPlacement->fetch_all(MYSQLI_ASSOC) : [];
 
 /* ============================================================
-   ✅ FINAL RESPONSE
+   FINAL RESPONSE
    ============================================================ */
+
 echo json_encode([
     "success" => true,
     "data" => [
         "course_enrollment" => [
-            "course_list" => $courseList,
+            "course_list" => $finalCourseList,  // ⭐ now unique!
             "enrollment_trends" => $enrollmentTrends
         ],
         "placement_ready_students" => $placementReady

@@ -48,21 +48,39 @@ try {
 
     // ✅ 2. Update student's batch
     if ($new_batch_id > 0) {
-        // Check if entry exists
-        $check = $conn->prepare("SELECT id FROM student_batches WHERE student_id = ?");
+
+        // 🔍 FIXED: Get only the latest batch row for this student
+        $check = $conn->prepare("
+            SELECT id 
+            FROM student_batches 
+            WHERE student_id = ? 
+            ORDER BY id DESC 
+            LIMIT 1
+        ");
         $check->bind_param("i", $student_id);
         $check->execute();
-        $check->store_result();
-        $exists = ($check->num_rows > 0);
+        $check->bind_result($batch_row_id);
+        $exists = $check->fetch();
         $check->close();
 
-        if ($exists) {
-            $stmt = $conn->prepare("UPDATE student_batches SET batch_id = ?, admin_action = 'approved' WHERE student_id = ?");
-            $stmt->bind_param("ii", $new_batch_id, $student_id);
+        if ($exists && $batch_row_id > 0) {
+            // 🔥 UPDATE ONLY THIS ONE ROW (NOT ALL)
+            $stmt = $conn->prepare("
+                UPDATE student_batches 
+                SET batch_id = ?, admin_action = 'approved' 
+                WHERE id = ?
+                LIMIT 1
+            ");
+            $stmt->bind_param("ii", $new_batch_id, $batch_row_id);
             $stmt->execute();
             $stmt->close();
+
         } else {
-            $stmt = $conn->prepare("INSERT INTO student_batches (student_id, batch_id, admin_action) VALUES (?, ?, 'approved')");
+            // Insert new batch entry
+            $stmt = $conn->prepare("
+                INSERT INTO student_batches (student_id, batch_id, admin_action) 
+                VALUES (?, ?, 'approved')
+            ");
             $stmt->bind_param("ii", $student_id, $new_batch_id);
             $stmt->execute();
             $stmt->close();
