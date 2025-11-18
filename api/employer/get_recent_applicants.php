@@ -21,7 +21,7 @@ try {
         exit;
     }
 
-    // 🔹 Get recruiter_profile id (indexed column id,user_id)
+    // 🔹 Get recruiter_profile id (indexed)
     $stmt_rec = $conn->prepare("
         SELECT id 
         FROM recruiter_profiles 
@@ -39,9 +39,9 @@ try {
         exit;
     }
 
-    // ==========================================================
-    // PART 1 — Recent 5 Applicants (Quick fetch)
-    // ==========================================================
+    /* ==========================================================
+        PART 1 — Recent 5 Applicants
+    ========================================================== */
     $stmt_recent = $conn->prepare("
         SELECT 
             u.user_name AS candidate_name,
@@ -60,9 +60,9 @@ try {
     $stmt_recent->execute();
     $recent_applicants = $stmt_recent->get_result()->fetch_all(MYSQLI_ASSOC);
 
-    // ==========================================================
-    // PART 2 — All Applicants (Optimized + pagination)
-    // ==========================================================
+    /* ==========================================================
+        PART 2 — All Applicants (with pagination + search)
+    ========================================================== */
     $search = isset($_GET['search']) ? trim($_GET['search']) : '';
     $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 50;
     $offset = isset($_GET['offset']) ? intval($_GET['offset']) : 0;
@@ -86,31 +86,34 @@ try {
         $types .= "ss";
     }
 
-    // ✅ Count total (for pagination)
+    // TOTAL COUNT
     $stmt_count = $conn->prepare("SELECT COUNT(*) AS total $base_sql");
     $stmt_count->bind_param($types, ...$params);
     $stmt_count->execute();
     $total = $stmt_count->get_result()->fetch_assoc()['total'] ?? 0;
 
-    // ✅ Main data query (indexed join + pagination)
+    // MAIN APPLICANTS QUERY
     $sql_all = "
         SELECT 
             a.id AS application_id,
             a.status,
             a.cover_letter,
             DATE_FORMAT(a.applied_at, '%d-%m-%Y %h:%i %p') AS applied_date,
+
             s.id AS student_id,
             s.education,
             s.skills,
             s.bio,
             s.resume,
-            s.portfolio_link,
+            s.socials,         -- ⭐ NEW SOCIALS JSON
             s.location AS candidate_location,
             s.experience AS experience_years,
+
             u.user_name AS candidate_name,
             u.email AS candidate_email,
             u.phone_number,
             u.is_verified,
+
             j.id AS job_id,
             j.title AS job_title,
             j.location AS job_location,
@@ -119,6 +122,7 @@ try {
         ORDER BY a.applied_at DESC
         LIMIT ? OFFSET ?
     ";
+
     $params[] = $limit;
     $params[] = $offset;
     $types .= "ii";
@@ -128,20 +132,38 @@ try {
     $stmt_all->execute();
     $result_all = $stmt_all->get_result();
 
-    // ✅ Base URL setup for resumes
+    // URL setup
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
     $host = $_SERVER['HTTP_HOST'];
     $resume_folder = '/jobsahi-API/api/uploads/resume/';
 
     $all_applicants = [];
+
     while ($row = $result_all->fetch_assoc()) {
+
+        /* ------------------------------
+            Decode SKILLS
+        ------------------------------ */
         $skills = [];
         if (!empty($row['skills'])) {
             $decoded = json_decode($row['skills'], true);
             $skills = is_array($decoded) ? $decoded : explode(',', $row['skills']);
         }
 
-        // ✅ Resume full URL builder
+        /* ------------------------------
+            Decode SOCIALS JSON
+        ------------------------------ */
+        $socials = [];
+        if (!empty($row['socials'])) {
+            $decodedSocials = json_decode($row['socials'], true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decodedSocials)) {
+                $socials = $decodedSocials;
+            }
+        }
+
+        /* ------------------------------
+            Resume file URL
+        ------------------------------ */
         $resume_url = null;
         if (!empty($row['resume'])) {
             $clean_resume = str_replace(["\\", "/uploads/resume/", "./", "../"], "", $row['resume']);
@@ -151,30 +173,40 @@ try {
             }
         }
 
+        /* ------------------------------
+            FINAL STRUCTURED OUTPUT
+        ------------------------------ */
         $all_applicants[] = [
             "application_id" => (int)$row['application_id'],
             "student_id"     => (int)$row['student_id'],
             "job_id"         => (int)$row['job_id'],
+
             "name"           => $row['candidate_name'],
             "email"          => $row['candidate_email'],
             "phone_number"   => $row['phone_number'] ?: "N/A",
+
             "education"      => $row['education'] ?: "N/A",
             "skills"         => $skills,
+
+            "socials"        => $socials,  // ⭐ Correct JSON Array
+
             "applied_for"    => $row['job_title'],
             "status"         => ucfirst($row['status']),
             "verified"       => (bool)$row['is_verified'],
+
             "location"       => $row['candidate_location'] ?: $row['job_location'],
             "experience"     => $row['experience_years'] ?: "N/A",
             "job_type"       => ucfirst($row['job_type']),
             "bio"            => $row['bio'] ?: "—",
+
             "applied_date"   => $row['applied_date'] ?: null,
-            "resume_url"     => $resume_url, // ✅ Full URL
-            "portfolio_link" => $row['portfolio_link'] ?: null,
+            "resume_url"     => $resume_url,
+
             "cover_letter"   => $row['cover_letter'] ?: "—"
         ];
     }
 
-    // ✅ Final Response
+    // FINAL RESPONSE
     echo json_encode([
         "status" => true,
         "message" => "Applicants fetched successfully",
