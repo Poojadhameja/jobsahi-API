@@ -214,6 +214,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $update->bind_param("ii", $interview_id, $application_id);
         $update->execute();
 
+        // ✅ Step 5.5: Send notification to student if not already sent
+        // Get student user_id and job details
+        $notif_sql = "
+            SELECT sp.user_id, j.title as job_title, j.id as job_id
+            FROM applications a
+            JOIN student_profiles sp ON a.student_id = sp.id
+            JOIN jobs j ON a.job_id = j.id
+            WHERE a.id = ?
+        ";
+        $notif_stmt = $conn->prepare($notif_sql);
+        $notif_stmt->bind_param("i", $application_id);
+        $notif_stmt->execute();
+        $notif_result = $notif_stmt->get_result();
+        
+        if ($notif_result->num_rows > 0) {
+            $notif_data = $notif_result->fetch_assoc();
+            $student_user_id = intval($notif_data['user_id']);
+            $job_title = $notif_data['job_title'];
+            $job_id = intval($notif_data['job_id']);
+            
+            // Send notification
+            require_once '../helpers/notification_helper.php';
+            $notification_result = NotificationHelper::notifyShortlisted($student_user_id, $job_title, $job_id);
+            
+            // Log notification result (optional)
+            if (!$notification_result['success']) {
+                error_log("Failed to send shortlist notification: " . $notification_result['message']);
+            }
+        }
+        $notif_stmt->close();
+
         // ✅ Step 6: Build response
         $responseData = [
             "interviewId"   => $interview_id,

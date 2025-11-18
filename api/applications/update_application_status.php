@@ -87,6 +87,39 @@ try {
     $update_stmt->execute();
 
     if ($update_stmt->affected_rows > 0) {
+        // ✅ Send notification if student is shortlisted
+        if ($new_status === 'shortlisted') {
+            // Get student user_id from application
+            $student_sql = "
+                SELECT sp.user_id, j.title as job_title, j.id as job_id
+                FROM applications a
+                JOIN student_profiles sp ON a.student_id = sp.id
+                JOIN jobs j ON a.job_id = j.id
+                WHERE a.id = ?
+            ";
+            $student_stmt = $conn->prepare($student_sql);
+            $student_stmt->bind_param("i", $application_id);
+            $student_stmt->execute();
+            $student_result = $student_stmt->get_result();
+            
+            if ($student_result->num_rows > 0) {
+                $student_data = $student_result->fetch_assoc();
+                $student_user_id = intval($student_data['user_id']);
+                $job_title = $student_data['job_title'];
+                $job_id = intval($student_data['job_id']);
+                
+                // Send notification
+                require_once '../helpers/notification_helper.php';
+                $notification_result = NotificationHelper::notifyShortlisted($student_user_id, $job_title, $job_id);
+                
+                // Log notification result (optional)
+                if (!$notification_result['success']) {
+                    error_log("Failed to send shortlist notification: " . $notification_result['message']);
+                }
+            }
+            $student_stmt->close();
+        }
+        
         echo json_encode([
             "status" => true,
             "message" => "Application updated successfully",

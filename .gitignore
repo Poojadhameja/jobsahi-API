@@ -22,3 +22,6 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Firebase Service Account JSON (Sensitive - Never commit!)
+config/firebase-service-account.json
