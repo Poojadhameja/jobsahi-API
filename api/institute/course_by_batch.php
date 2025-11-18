@@ -33,7 +33,7 @@ try {
     $current_date = new DateTime();
 
     // ----------------------------------------------------------
-    // 1️⃣ OVERVIEW PAGE: All Courses + Batch Stats
+    // 1️⃣ OVERVIEW PAGE: All Courses + Batch Stats + FIXED TOTAL STUDENTS
     // ----------------------------------------------------------
     if ($course_id === 0) {
 
@@ -55,7 +55,21 @@ try {
         while ($course = $courses->fetch_assoc()) {
             $course_id = intval($course['course_id']);
 
-            $batchQuery = "SELECT id, start_date, end_date, admin_action FROM batches WHERE course_id = ?";
+            // 🔥 FIXED BATCH QUERY — COUNT DISTINCT STUDENTS
+            $batchQuery = "
+                SELECT 
+                    b.id,
+                    b.start_date,
+                    b.end_date,
+                    b.admin_action,
+                    COUNT(DISTINCT sb.student_id) AS total_students
+                FROM batches b
+                LEFT JOIN student_batches sb ON b.id = sb.batch_id
+                WHERE b.course_id = ?
+                GROUP BY b.id
+                ORDER BY b.start_date DESC
+            ";
+
             $batchStmt = $conn->prepare($batchQuery);
             $batchStmt->bind_param("i", $course_id);
             $batchStmt->execute();
@@ -65,10 +79,15 @@ try {
             $active_batches = 0;
             $progress_sum = 0;
             $progress_count = 0;
+            $total_students = 0;
 
             while ($batch = $batches->fetch_assoc()) {
                 $total_batches++;
-                if (strtolower($batch['admin_action']) === 'approved') $active_batches++;
+                $total_students += intval($batch['total_students']);
+
+                if (strtolower($batch['admin_action']) === 'approved') {
+                    $active_batches++;
+                }
 
                 $progress = 0;
                 if (!empty($batch['start_date']) && !empty($batch['end_date'])) {
@@ -87,8 +106,11 @@ try {
                 $progress_count++;
             }
 
-            $overall_progress = ($progress_count > 0) ? round($progress_sum / $progress_count, 2) : 0;
+            $overall_progress = ($progress_count > 0)
+                ? round(($progress_sum / $progress_count), 2)
+                : 0;
 
+            // FINAL DATA
             $overviewData[] = [
                 "course_id"        => $course['course_id'],
                 "course_title"     => $course['course_title'],
@@ -97,6 +119,10 @@ try {
                 "total_batches"    => $total_batches,
                 "active_batches"   => $active_batches,
                 "overall_progress" => $overall_progress,
+
+                // 🔥 FIXED VALUE
+                "total_students"   => $total_students,
+
                 "admin_action"     => $course['admin_action']
             ];
         }
@@ -143,12 +169,17 @@ try {
         $course = $courseResult->fetch_assoc();
 
         // ---------------------------------------------------
-        // FETCH BATCHES
+        // FETCH BATCHES + FIXED DISTINCT STUDENTS
         // ---------------------------------------------------
         $batchQuery = "
-            SELECT b.id AS batch_id, b.name AS batch_name, b.batch_time_slot,
-                   b.start_date, b.end_date, b.admin_action,
-                   COUNT(sb.student_id) AS enrolled_students
+            SELECT 
+                b.id AS batch_id, 
+                b.name AS batch_name, 
+                b.batch_time_slot,
+                b.start_date, 
+                b.end_date, 
+                b.admin_action,
+                COUNT(DISTINCT sb.student_id) AS enrolled_students
             FROM batches b
             LEFT JOIN student_batches sb ON b.id = sb.batch_id
             WHERE b.course_id = ?
@@ -166,27 +197,14 @@ try {
 
         while ($batch = $batches->fetch_assoc()) {
             $batch_id = intval($batch['batch_id']);
-            $progress = 0;
 
             if (strtolower($batch['admin_action']) === 'approved') {
                 $active_batches++;
             }
 
-            if (!empty($batch['start_date']) && !empty($batch['end_date'])) {
-                $start = new DateTime($batch['start_date']);
-                $end = new DateTime($batch['end_date']);
-                if ($current_date < $start) $progress = 0;
-                elseif ($current_date >= $end) $progress = 100;
-                else {
-                    $days = $start->diff($end)->days;
-                    $elapsed = $start->diff($current_date)->days;
-                    $progress = ($days > 0) ? round(($elapsed / $days) * 100, 2) : 0;
-                }
-            }
-
-            // --------------------------------------------------
-            // FIXED STUDENT QUERY (NO DUPLICATES)
-            // --------------------------------------------------
+            // -----------------------------------------
+            // FIXED STUDENT FETCHER — DISTINCT ONLY
+            // -----------------------------------------
             $studentQuery = "
                 SELECT DISTINCT
                     sp.id AS student_id,
@@ -228,14 +246,13 @@ try {
                 "start_date"        => $batch['start_date'],
                 "end_date"          => $batch['end_date'],
                 "status"            => ucfirst($batch['admin_action']),
-                "completion_percent"=> $progress,
                 "enrolled_students" => intval($batch['enrolled_students']),
                 "students"          => $students
             ];
         }
 
         // ---------------------------------------------------
-        // FACULTY LIST
+        // FACULTY LIST (UNCHANGED)
         // ---------------------------------------------------
         $faculty = [];
         if ($institute_id > 0) {
@@ -266,7 +283,6 @@ try {
             "status"  => true,
             "message" => "Course details with batches, enrolled students, and faculty fetched successfully.",
             "role"    => $role,
-
             "course"  => $course,
             "batches" => $batchData,
             "active_batches" => $active_batches,
