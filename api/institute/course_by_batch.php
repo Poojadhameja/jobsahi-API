@@ -89,7 +89,6 @@ try {
 
             $overall_progress = ($progress_count > 0) ? round($progress_sum / $progress_count, 2) : 0;
 
-            // ✅ admin_action ADDED HERE
             $overviewData[] = [
                 "course_id"        => $course['course_id'],
                 "course_title"     => $course['course_title'],
@@ -98,7 +97,7 @@ try {
                 "total_batches"    => $total_batches,
                 "active_batches"   => $active_batches,
                 "overall_progress" => $overall_progress,
-                "admin_action"     => $course['admin_action']   // ← added
+                "admin_action"     => $course['admin_action']
             ];
         }
 
@@ -144,10 +143,8 @@ try {
         $course = $courseResult->fetch_assoc();
 
         // ---------------------------------------------------
-        // course object now includes admin_action (NO LOGIC CHANGED)
+        // FETCH BATCHES
         // ---------------------------------------------------
-
-        // Fetch batches
         $batchQuery = "
             SELECT b.id AS batch_id, b.name AS batch_name, b.batch_time_slot,
                    b.start_date, b.end_date, b.admin_action,
@@ -187,16 +184,24 @@ try {
                 }
             }
 
-            // Enrolled students fetch
+            // --------------------------------------------------
+            // FIXED STUDENT QUERY (NO DUPLICATES)
+            // --------------------------------------------------
             $studentQuery = "
-                SELECT sp.id AS student_id, u.user_name AS name, u.email, u.phone_number,
-                       e.enrollment_date, e.status AS enrollment_status
+                SELECT DISTINCT
+                    sp.id AS student_id,
+                    u.user_name AS name,
+                    u.email,
+                    u.phone_number,
+                    MIN(e.enrollment_date) AS enrollment_date,
+                    MAX(e.status) AS enrollment_status
                 FROM student_batches sb
                 INNER JOIN student_profiles sp ON sb.student_id = sp.id
                 INNER JOIN users u ON sp.user_id = u.id
                 LEFT JOIN student_course_enrollments e 
                        ON e.student_id = sp.id AND e.course_id = ?
                 WHERE sb.batch_id = ?
+                GROUP BY sp.id, u.user_name, u.email, u.phone_number
                 ORDER BY u.user_name ASC
             ";
 
@@ -229,7 +234,9 @@ try {
             ];
         }
 
-        // Faculty list
+        // ---------------------------------------------------
+        // FACULTY LIST
+        // ---------------------------------------------------
         $faculty = [];
         if ($institute_id > 0) {
             $facultyQuery = "
@@ -260,9 +267,7 @@ try {
             "message" => "Course details with batches, enrolled students, and faculty fetched successfully.",
             "role"    => $role,
 
-            // ✅ admin_action INCLUDED HERE
             "course"  => $course,
-
             "batches" => $batchData,
             "active_batches" => $active_batches,
             "faculty" => $faculty
