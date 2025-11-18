@@ -1,5 +1,5 @@
 <?php
-// verify-otp.php - Verify OTP (for any purpose)
+// verify_otp.php - Verify OTP (for any purpose) - Alias version with underscore
 require_once '../cors.php';
 
 // Get and decode JSON data

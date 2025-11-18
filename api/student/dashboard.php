@@ -56,8 +56,11 @@ $counters = array(
     'interviews' => 0
 );
 
-// 1. Count Applied Jobs
-$applied_sql = "SELECT COUNT(*) as count FROM applications WHERE student_id = ?";
+// 1. Count Applied Jobs (only approved and non-deleted)
+$applied_sql = "SELECT COUNT(*) as count FROM applications 
+                WHERE student_id = ? 
+                AND LOWER(admin_action) = 'approved'
+                AND (deleted_at IS NULL OR deleted_at = '0000-00-00 00:00:00')";
 if ($applied_stmt = mysqli_prepare($conn, $applied_sql)) {
     mysqli_stmt_bind_param($applied_stmt, "i", $student_profile_id);
     mysqli_stmt_execute($applied_stmt);
@@ -95,9 +98,12 @@ if ($recommended_stmt = mysqli_prepare($conn, $recommended_sql)) {
     mysqli_stmt_close($recommended_stmt);
 }
 
-// 4. Count Interviews
+// 4. Count Interviews (only approved and non-deleted)
 $interviews_sql = "SELECT COUNT(*) as count FROM applications 
-                   WHERE student_id = ? AND status IN ('interview_scheduled', 'interview_completed', 'interview_pending')";
+                   WHERE student_id = ? 
+                   AND status IN ('interview_scheduled', 'interview_completed', 'interview_pending')
+                   AND LOWER(admin_action) = 'approved'
+                   AND (deleted_at IS NULL OR deleted_at = '0000-00-00 00:00:00')";
 if ($interviews_stmt = mysqli_prepare($conn, $interviews_sql)) {
     mysqli_stmt_bind_param($interviews_stmt, "i", $student_profile_id);
     mysqli_stmt_execute($interviews_stmt);

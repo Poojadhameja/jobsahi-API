@@ -51,7 +51,8 @@ $experience_required = $input['experience_required'] ?? '';
 $application_deadline = $input['application_deadline'] ?? null;
 $is_remote = $input['is_remote'] ?? 0;
 $no_of_vacancies = $input['no_of_vacancies'] ?? 1;
-$vacancyStatus = $input['vacancyStatus'] ?? '';
+$vacancyStatus = $input['vacancyStatus'] ?? 'open';
+$status = $input['status'] ?? 'open';
 $admin_action = 'pending';
 
 // Recruiter info
@@ -103,7 +104,7 @@ $job_stmt->bind_param(
     $application_deadline,
     $is_remote,
     $no_of_vacancies,
-    $vacancyStatus,
+    $status,
     $admin_action
 );
 

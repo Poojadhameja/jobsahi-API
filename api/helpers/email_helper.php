@@ -1,13 +1,36 @@
 <?php
 // email_helper.php - Fixed Email sending functions
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
+
+// Company Email Configuration (only define if not already defined)
+if (!defined('COMPANY_EMAIL')) {
+    define('COMPANY_EMAIL', 'himanshushrirang6@gmail.com');
+}
+if (!defined('COMPANY_NAME')) {
+    define('COMPANY_NAME', 'JobSahi');
+}
+if (!defined('COMPANY_EMAIL_PASSWORD')) {
+    define('COMPANY_EMAIL_PASSWORD', ''); // Add Gmail App Password here if using PHPMailer
+}
+
+// Try to load PHPMailer if available
+$phpmailer_available = false;
+if (file_exists(__DIR__ . '/../../vendor/autoload.php')) {
+    require_once __DIR__ . '/../../vendor/autoload.php';
+    $phpmailer_available = class_exists('PHPMailer\PHPMailer\PHPMailer');
+}
 
 // Check if function already exists to prevent redeclaration
 if (!function_exists('sendPasswordResetOTP')) {
     function sendPasswordResetOTP($email, $name, $otp) {
-        // Use PHPMailer instead of basic mail() function
-        return sendPasswordResetOTPWithPHPMailer($email, $name, $otp);
+        global $phpmailer_available;
+        
+        // Use PHPMailer if available, otherwise fallback to basic mail()
+        if ($phpmailer_available) {
+            return sendPasswordResetOTPWithPHPMailer($email, $name, $otp);
+        } else {
+            // Fallback to basic mail() function
+            return sendPasswordResetOTPWithLocalSMTP($email, $name, $otp);
+        }
     }
 }
 
@@ -16,7 +39,7 @@ if (!function_exists('sendPasswordResetOTPWithLocalSMTP')) {
     // Configure SMTP settings programmatically
     ini_set("SMTP", "smtp.gmail.com");
     ini_set("smtp_port", "587");
-    ini_set("sendmail_from", "your-email@gmail.com");
+    ini_set("sendmail_from", COMPANY_EMAIL);
     
     $subject = "Password Reset OTP";
     $message = "
@@ -38,7 +61,8 @@ if (!function_exists('sendPasswordResetOTPWithLocalSMTP')) {
     
     $headers = "MIME-Version: 1.0" . "\r\n";
     $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
-    $headers .= "From: noreply@yourapp.com" . "\r\n";
+    $headers .= "From: " . COMPANY_NAME . " <" . COMPANY_EMAIL . ">" . "\r\n";
+    $headers .= "Reply-To: " . COMPANY_EMAIL . "\r\n";
     
     return mail($email, $subject, $message, $headers);
     }
@@ -46,15 +70,21 @@ if (!function_exists('sendPasswordResetOTPWithLocalSMTP')) {
 
 if (!function_exists('sendPasswordResetOTPWithPHPMailer')) {
     function sendPasswordResetOTPWithPHPMailer($toEmail, $toName, $otp) {
-    $mail = new PHPMailer(true);
+    // Check if PHPMailer is available
+    if (!class_exists('PHPMailer\PHPMailer\PHPMailer')) {
+        error_log("PHPMailer not available, falling back to basic mail()");
+        return sendPasswordResetOTPWithLocalSMTP($toEmail, $toName, $otp);
+    }
+    
+    $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
     try {
         // SMTP configuration
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
-        $mail->Username = 'simranjn54@gmail.com'; // Replace with your Gmail
-        $mail->Password = 'ixpk mawa dpzo iwhw'; // Replace with your Gmail App Password
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Username = COMPANY_EMAIL; // Company email
+        $mail->Password = COMPANY_EMAIL_PASSWORD ?: ''; // Gmail App Password (add if using PHPMailer)
+        $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         
         // Additional SMTP options for XAMPP compatibility
@@ -67,7 +97,8 @@ if (!function_exists('sendPasswordResetOTPWithPHPMailer')) {
         );
         
         // Sender and recipient
-        $mail->setFrom('your-gmail@gmail.com', 'JobSahi Support');
+        $mail->setFrom(COMPANY_EMAIL, COMPANY_NAME . ' Support');
+        $mail->addReplyTo(COMPANY_EMAIL, COMPANY_NAME . ' Support');
         $mail->addAddress($toEmail, $toName);
         
         // Email content
@@ -132,7 +163,13 @@ if (!function_exists('sendPasswordResetOTPWithPHPMailer')) {
 
 if (!function_exists('sendPasswordResetOTPWithDebug')) {
     function sendPasswordResetOTPWithDebug($toEmail, $toName, $otp, $debug = false) {
-    $mail = new PHPMailer(true);
+    // Check if PHPMailer is available
+    if (!class_exists('PHPMailer\PHPMailer\PHPMailer')) {
+        error_log("PHPMailer not available, falling back to basic mail()");
+        return sendPasswordResetOTPWithLocalSMTP($toEmail, $toName, $otp);
+    }
+    
+    $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
     
     try {
         if ($debug) {
@@ -144,9 +181,9 @@ if (!function_exists('sendPasswordResetOTPWithDebug')) {
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
-        $mail->Username = 'simranjn54@gmail.com';
-        $mail->Password = 'ixpk mawa dpzo iwhw';
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Username = COMPANY_EMAIL; // Company email
+        $mail->Password = COMPANY_EMAIL_PASSWORD ?: ''; // Gmail App Password (add if using PHPMailer)
+        $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->Timeout = 60; // Increase timeout
         
@@ -163,7 +200,8 @@ if (!function_exists('sendPasswordResetOTPWithDebug')) {
         $mail->CharSet = 'UTF-8';
         $mail->Encoding = 'base64';
         
-        $mail->setFrom('your-gmail@gmail.com', 'JobSahi Support');
+        $mail->setFrom(COMPANY_EMAIL, COMPANY_NAME . ' Support');
+        $mail->addReplyTo(COMPANY_EMAIL, COMPANY_NAME . ' Support');
         $mail->addAddress($toEmail, $toName);
         $mail->isHTML(true);
         $mail->Subject = "Password Reset OTP - JobSahi";
@@ -211,7 +249,7 @@ if (!function_exists('testEmailConfiguration')) {
     function testEmailConfiguration() {
     $testResult = [
         'php_mail_function' => function_exists('mail'),
-        'phpmailer_available' => class_exists('PHPMailer\\PHPMailer\\PHPMailer'),
+        'phpmailer_available' => class_exists('PHPMailer\PHPMailer\PHPMailer'),
         'smtp_settings' => [
             'SMTP' => ini_get('SMTP'),
             'smtp_port' => ini_get('smtp_port'),

@@ -21,12 +21,13 @@ if ($user_role === 'admin') {
                 u.email,
                 u.user_name,
                 u.phone_number,
+                sp.contact_email,
+                sp.contact_phone,
                 sp.skills, 
                 sp.education, 
                 sp.resume, 
                 sp.certificates,
-                sp.portfolio_link, 
-                sp.linkedin_url, 
+                sp.socials,
                 sp.dob, 
                 sp.gender, 
                 sp.job_type, 
@@ -55,12 +56,13 @@ if ($user_role === 'admin') {
                 u.email,
                 u.user_name,
                 u.phone_number,
+                sp.contact_email,
+                sp.contact_phone,
                 sp.skills, 
                 sp.education, 
                 sp.resume, 
                 sp.certificates,
-                sp.portfolio_link, 
-                sp.linkedin_url, 
+                sp.socials,
                 sp.dob, 
                 sp.gender, 
                 sp.job_type, 
@@ -98,43 +100,39 @@ if ($result && mysqli_num_rows($result) > 0) {
 
     while ($student = mysqli_fetch_assoc($result)) {
 
-        // ✅ Convert resume path → full URL
-        if (!empty($student['resume'])) {
-            $clean_resume = str_replace(["\\", "/uploads/resume/", "./", "../"], "", $student['resume']);
-            $resume_local = __DIR__ . '/../uploads/resume/' . $clean_resume;
-            if (file_exists($resume_local)) {
-                $student['resume'] = $protocol . $host . $resume_base . $clean_resume;
-            }
-        }
-
-        // ✅ Convert certificates path → full URL
-        if (!empty($student['certificates'])) {
-            $clean_cert = str_replace(["\\", "/uploads/student_certificate/", "./", "../"], "", $student['certificates']);
-            $cert_local = __DIR__ . '/../uploads/student_certificate/' . $clean_cert;
-            if (file_exists($cert_local)) {
-                $student['certificates'] = $protocol . $host . $cert_base . $clean_cert;
-            }
-        }
-
-        // ✅ Decode Experience JSON (if valid)
+        // ✅ Decode Experience - Multiple experiences array
         $experienceData = [];
         if (!empty($student['experience'])) {
             $decoded = json_decode($student['experience'], true);
             if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                $experienceData = $decoded;
+                // Check if it's array of experiences or old format
+                if (isset($decoded[0]) && is_array($decoded[0])) {
+                    // New format: Array of experience objects
+                    $experienceData = $decoded;
+                } elseif (isset($decoded['level']) || isset($decoded['years'])) {
+                    // Old format: {level, years, details}
+                    // Convert to new format
+                    $experienceData = [];
+                    if (!empty($decoded['details']) && is_array($decoded['details'])) {
+                        foreach ($decoded['details'] as $detail) {
+                            $experienceData[] = [
+                                "company_name" => $detail['company'] ?? '',
+                                "position" => $detail['position'] ?? '',
+                                "start_date" => $detail['start_date'] ?? '',
+                                "end_date" => $detail['end_date'] ?? '',
+                                "company_location" => $detail['company_location'] ?? '',
+                                "description" => $detail['description'] ?? ''
+                            ];
+                        }
+                    }
+                } else {
+                    // Try to treat as array of experiences
+                    $experienceData = $decoded;
+                }
             } else {
-                $experienceData = [
-                    "level" => "",
-                    "years" => $student['experience'],
-                    "details" => []
-                ];
+                // Plain string - convert to empty array
+                $experienceData = [];
             }
-        } else {
-            $experienceData = [
-                "level" => "",
-                "years" => "",
-                "details" => []
-            ];
         }
 
         // ✅ Decode Projects JSON (if valid)
@@ -148,11 +146,88 @@ if ($result && mysqli_num_rows($result) > 0) {
             }
         }
 
+        // ✅ Decode Skills - Convert to array format
+        $skillsData = [];
+        if (!empty($student['skills'])) {
+            $decodedSkills = json_decode($student['skills'], true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decodedSkills)) {
+                // Already JSON array format
+                $skillsData = $decodedSkills;
+            } else {
+                // Convert comma-separated string to array
+                $skillsData = array_filter(array_map('trim', explode(',', $student['skills'])));
+                $skillsData = array_values($skillsData); // Re-index array
+            }
+        }
+
+        // ✅ Decode Education - Multiple educations array
+        $educationData = [];
+        if (!empty($student['education'])) {
+            $decodedEducation = json_decode($student['education'], true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decodedEducation)) {
+                // Check if it's array of educations or old single object format
+                if (isset($decodedEducation[0]) && is_array($decodedEducation[0])) {
+                    // New format: Array of education objects
+                    $educationData = $decodedEducation;
+                } elseif (isset($decodedEducation['course_name']) || isset($decodedEducation['college_name'])) {
+                    // Old format: Single education object - convert to array
+                    $educationData = [$decodedEducation];
+                } else {
+                    // Try to treat as array
+                    $educationData = $decodedEducation;
+                }
+            } else {
+                // Plain text - convert to old format then to new
+                $educationData = [[
+                    "qualification" => $student['education'],
+                    "institute" => "",
+                    "start_year" => "",
+                    "end_year" => !empty($student['graduation_year']) ? strval($student['graduation_year']) : "",
+                    "is_pursuing" => false,
+                    "pursuing_year" => null,
+                    "cgpa" => !empty($student['cgpa']) ? floatval($student['cgpa']) : null
+                ]];
+            }
+        }
+        // Normalize education array structure
+        foreach ($educationData as &$edu) {
+            if (!isset($edu['qualification'])) $edu['qualification'] = $edu['course_name'] ?? '';
+            if (!isset($edu['institute'])) $edu['institute'] = $edu['college_name'] ?? '';
+            if (!isset($edu['start_year'])) $edu['start_year'] = $edu['start_date'] ?? '';
+            if (!isset($edu['end_year'])) $edu['end_year'] = $edu['end_date'] ?? $edu['graduation_year'] ?? '';
+            if (!isset($edu['is_pursuing'])) $edu['is_pursuing'] = false;
+            if (!isset($edu['pursuing_year'])) $edu['pursuing_year'] = null;
+            if (!isset($edu['cgpa'])) $edu['cgpa'] = null;
+        }
+
+        // ✅ Decode Languages - Convert to array format (spoken languages)
+        $languagesData = [];
+        if (!empty($student['languages'])) {
+            $decodedLanguages = json_decode($student['languages'], true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decodedLanguages)) {
+                // Already JSON array format
+                $languagesData = $decodedLanguages;
+            } else {
+                // Convert comma-separated string to array
+                $languagesData = array_filter(array_map('trim', explode(',', $student['languages'])));
+                $languagesData = array_values($languagesData); // Re-index array
+            }
+        }
+
+        // ✅ Decode Social Links - Multiple social links array from socials field
+        $socialLinksData = [];
+        if (!empty($student['socials'])) {
+            $decodedSocials = json_decode($student['socials'], true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decodedSocials)) {
+                // Already JSON array format
+                $socialLinksData = $decodedSocials;
+            }
+        }
+
         // ✅ Normalize empty/null fields
         foreach ([
-            'skills', 'education', 'resume', 'certificates', 'portfolio_link',
-            'linkedin_url', 'dob', 'gender', 'job_type', 'trade', 'location',
-            'bio', 'languages', 'aadhar_number', 'graduation_year', 'cgpa'
+            'resume', 'certificates', 'dob', 'gender', 'job_type', 'trade', 'location',
+            'bio', 'aadhar_number'
         ] as $field) {
             if (!isset($student[$field]) || $student[$field] === null) {
                 $student[$field] = "";
@@ -173,26 +248,25 @@ if ($result && mysqli_num_rows($result) > 0) {
                 "latitude" => $student['latitude'] ? floatval($student['latitude']) : null,
                 "longitude" => $student['longitude'] ? floatval($student['longitude']) : null
             ],
+            "contact_info" => [
+                "contact_email" => $student['contact_email'] ?? null,
+                "contact_phone" => $student['contact_phone'] ?? null
+            ],
             "professional_info" => [
-                "skills" => $student['skills'],
-                "education" => $student['education'],
-                "experience" => $experienceData,
+                "skills" => $skillsData,  // ✅ Array format: ["PHP", "HTML", "CSS"]
+                "education" => $educationData,  // ✅ Array of education objects
+                "experience" => $experienceData,  // ✅ Array of experience objects
                 "projects" => $projectsData,
                 "job_type" => $student['job_type'],
                 "trade" => $student['trade'],
-                "graduation_year" => $student['graduation_year'],
-                "cgpa" => $student['cgpa'],
-                "languages" => $student['languages']
+                "languages" => $languagesData  // ✅ Array format: ["Hindi", "English", "Gujarati"]
             ],
             "documents" => [
                 "resume" => $student['resume'],
                 "certificates" => $student['certificates'],
                 "aadhar_number" => $student['aadhar_number']
             ],
-            "social_links" => [
-                "portfolio_link" => $student['portfolio_link'],
-                "linkedin_url" => $student['linkedin_url']
-            ],
+            "social_links" => $socialLinksData,  // ✅ Array of social link objects
             "additional_info" => [
                 "bio" => $student['bio']
             ],

@@ -119,34 +119,57 @@ $insert_sql = "INSERT INTO applications (
     applied_at
 ) VALUES (?, ?, ?, NOW())";
 
-$insert_stmt = $conn->prepare($insert_sql);
-$insert_stmt->bind_param("iis", $job_id, $student_profile_id, $input['cover_letter']);
+$insert_stmt = mysqli_prepare($conn, $insert_sql);
 
-if ($insert_stmt->execute()) {
-    $application_id = $insert_stmt->insert_id;
-    $insert_stmt->close();
+if (!$insert_stmt) {
+    http_response_code(500);
+    echo json_encode([
+        "status" => false,
+        "message" => "Database prepare error: " . mysqli_error($conn)
+    ]);
+    exit;
+}
 
-    // ✅ Fetch newly inserted application details
-    $get_sql = "
-        SELECT 
-            a.id,
-            a.job_id,
-            a.student_id,
-            a.cover_letter,
-            a.status,
-            a.applied_at,
-            j.title AS job_title
-        FROM applications a
-        JOIN jobs j ON a.job_id = j.id
-        WHERE a.id = ?
-    ";
-    $get_stmt = $conn->prepare($get_sql);
-    $get_stmt->bind_param("i", $application_id);
-    $get_stmt->execute();
-    $result = $get_stmt->get_result();
-    $application_data = $result->fetch_assoc();
-    $get_stmt->close();
+mysqli_stmt_bind_param(
+    $insert_stmt,
+    "iis",
+    $job_id,
+    $student_id,
+    $input['cover_letter']
+);
 
+if (mysqli_stmt_execute($insert_stmt)) {
+    $application_id = mysqli_insert_id($conn);
+    mysqli_stmt_close($insert_stmt);
+
+    // Fetch newly inserted application
+    $get_application_sql = "SELECT 
+        a.id,
+        a.job_id,
+        a.student_id,
+        a.cover_letter,
+        a.status,
+        a.applied_at,
+        j.title as job_title,
+        j.recruiter_id
+    FROM applications a
+    JOIN jobs j ON a.job_id = j.id
+    WHERE a.id = ?";
+    
+    $get_stmt = mysqli_prepare($conn, $get_application_sql);
+    if (!$get_stmt) {
+        http_response_code(500);
+        echo json_encode([
+            "status" => false,
+            "message" => "Database prepare error: " . mysqli_error($conn)
+        ]);
+        exit;
+    }
+    
+    mysqli_stmt_bind_param($get_stmt, "i", $application_id);
+    mysqli_stmt_execute($get_stmt);
+    $result = mysqli_stmt_get_result($get_stmt);
+    $application_data = mysqli_fetch_assoc($result);
     if (is_array($application_data)) {
         $application_data['resume_link'] = $resume_url; // ✅ Add resume URL
     }
@@ -157,15 +180,14 @@ if ($insert_stmt->execute()) {
         "message" => "Application submitted successfully",
         "application_id" => $application_id,
         "data" => $application_data
-    ], JSON_PRETTY_PRINT);
-
+    ]);
 } else {
     http_response_code(500);
     echo json_encode([
         "status" => false,
-        "message" => "Database error: " . $insert_stmt->error
+        "message" => "Database error: " . mysqli_stmt_error($insert_stmt)
     ]);
-    $insert_stmt->close();
+    mysqli_stmt_close($insert_stmt);
 }
 
 $conn->close();

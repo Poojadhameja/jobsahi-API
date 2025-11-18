@@ -22,7 +22,11 @@ $data = json_decode(file_get_contents("php://input"), true);
 $interview_id = isset($data['interview_id']) ? intval($data['interview_id']) : 0;
 $scheduled_at = isset($data['scheduled_at']) ? trim($data['scheduled_at']) : '';
 $status       = isset($data['status']) ? trim($data['status']) : '';
-$feedback     = isset($data['feedback']) ? trim($data['feedback']) : '';
+$mode         = isset($data['mode']) ? trim($data['mode']) : '';
+$location     = isset($data['location']) ? trim($data['location']) : '';
+$platform_name = isset($data['platform_name']) ? trim($data['platform_name']) : '';
+$interview_link = isset($data['interview_link']) ? trim($data['interview_link']) : '';
+$interview_info = isset($data['interview_info']) ? trim($data['interview_info']) : '';
 
 if ($interview_id <= 0) {
     echo json_encode(["status" => false, "message" => "Missing or invalid interview_id"]);
@@ -96,9 +100,29 @@ try {
         $params[] = $status;
         $types .= 's';
     }
-    if (!empty($feedback)) {
-        $fields[] = "feedback = ?";
-        $params[] = $feedback;
+    if (!empty($mode)) {
+        $fields[] = "mode = ?";
+        $params[] = $mode;
+        $types .= 's';
+    }
+    if (isset($data['location'])) {
+        $fields[] = "location = ?";
+        $params[] = $location;
+        $types .= 's';
+    }
+    if (isset($data['platform_name'])) {
+        $fields[] = "platform_name = ?";
+        $params[] = $platform_name;
+        $types .= 's';
+    }
+    if (isset($data['interview_link'])) {
+        $fields[] = "interview_link = ?";
+        $params[] = $interview_link;
+        $types .= 's';
+    }
+    if (isset($data['interview_info'])) {
+        $fields[] = "interview_info = ?";
+        $params[] = $interview_info;
         $types .= 's';
     }
 
@@ -127,7 +151,11 @@ try {
             i.id AS interview_id,
             i.scheduled_at,
             i.status,
-            i.feedback,
+            i.mode,
+            i.location,
+            i.platform_name,
+            i.interview_link,
+            i.interview_info,
             u.user_name AS candidateName,
             rp.company_name AS scheduledBy,
             i.created_at
@@ -152,7 +180,11 @@ try {
         "date"          => date('Y-m-d', strtotime($updated['scheduled_at'])),
         "timeSlot"      => date('H:i', strtotime($updated['scheduled_at'])),
         "status"        => ucfirst($updated['status']),
-        "feedback"      => $updated['feedback'],
+        "mode"          => $updated['mode'],
+        "location"      => $updated['mode'] === 'offline' ? $updated['location'] : null,
+        "platform_name" => $updated['mode'] === 'online' ? $updated['platform_name'] : null,
+        "interview_link" => $updated['mode'] === 'online' ? $updated['interview_link'] : null,
+        "interview_info" => $updated['interview_info'],
         "scheduledBy"   => $updated['scheduledBy'],
         "createdAt"     => $updated['created_at']
     ];
