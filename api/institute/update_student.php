@@ -1,60 +1,83 @@
 <?php
-// update_student.php – Update student batch and course status
+// update_student.php – Auto-detect course_id from batch, update only selected course
 require_once '../cors.php';
 require_once '../db.php';
 
-// ✅ Authenticate only Institute or Admin
+// Authenticate Admin or Institute
 $decoded = authenticateJWT(['institute', 'admin']);
-$role = strtolower($decoded['role']);
+$role    = strtolower($decoded['role']);
 $user_id = intval($decoded['user_id']);
 
-// ✅ Allow only PUT method
 if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
-    http_response_code(405);
     echo json_encode(["status" => false, "message" => "Only PUT method allowed"]);
     exit;
 }
 
-// ✅ Read JSON body
+// Get JSON input
 $input = json_decode(file_get_contents("php://input"), true);
 if (!$input) {
     echo json_encode(["status" => false, "message" => "Invalid JSON input"]);
     exit;
 }
 
-$student_id = intval($input['student_id'] ?? 0);
+$student_id   = intval($input['student_id'] ?? 0);
 $new_batch_id = intval($input['batch_id'] ?? 0);
-$new_status = trim($input['status'] ?? ''); // enrolled / completed / dropped
+$new_status   = trim($input['status'] ?? '');
 
 if ($student_id <= 0) {
-    echo json_encode(["status" => false, "message" => "Student ID is required"]);
+    echo json_encode(["status" => false, "message" => "student_id is required"]);
     exit;
 }
 
 try {
+
     $conn->begin_transaction();
 
-    // ✅ 1. Update course status in student_course_enrollments
+    /* =============================================================
+       1️⃣ AUTO-DETECT course_id FROM batch_id  (Always reliable)
+       ============================================================= */
+
+    $course_id = null;
+
+    if ($new_batch_id > 0) {
+        $stmt = $conn->prepare("SELECT course_id FROM batches WHERE id = ? LIMIT 1");
+        $stmt->bind_param("i", $new_batch_id);
+        $stmt->execute();
+        $stmt->bind_result($course_id);
+        $stmt->fetch();
+        $stmt->close();
+    }
+
+    if (!$course_id) {
+        throw new Exception("Batch is not linked to any course, cannot detect course_id");
+    }
+
+    /* =============================================================
+       2️⃣ UPDATE ONLY THIS COURSE STATUS
+       ============================================================= */
     if ($new_status !== '') {
+
         $stmt = $conn->prepare("
-            UPDATE student_course_enrollments 
-            SET status = ?, modified_at = NOW() 
-            WHERE student_id = ?
+            UPDATE student_course_enrollments
+            SET status = ?, modified_at = NOW()
+            WHERE student_id = ? AND course_id = ?
+            LIMIT 1
         ");
-        $stmt->bind_param("si", $new_status, $student_id);
+
+        $stmt->bind_param("sii", $new_status, $student_id, $course_id);
         $stmt->execute();
         $stmt->close();
     }
 
-    // ✅ 2. Update student's batch
+    /* =============================================================
+       3️⃣ UPDATE ONLY THE LATEST BATCH ROW FOR THE STUDENT
+       ============================================================= */
     if ($new_batch_id > 0) {
 
-        // 🔍 FIXED: Get only the latest batch row for this student
         $check = $conn->prepare("
-            SELECT id 
-            FROM student_batches 
-            WHERE student_id = ? 
-            ORDER BY id DESC 
+            SELECT id FROM student_batches
+            WHERE student_id = ?
+            ORDER BY id DESC
             LIMIT 1
         ");
         $check->bind_param("i", $student_id);
@@ -64,10 +87,10 @@ try {
         $check->close();
 
         if ($exists && $batch_row_id > 0) {
-            // 🔥 UPDATE ONLY THIS ONE ROW (NOT ALL)
+
             $stmt = $conn->prepare("
-                UPDATE student_batches 
-                SET batch_id = ?, admin_action = 'approved' 
+                UPDATE student_batches
+                SET batch_id = ?, admin_action = 'approved'
                 WHERE id = ?
                 LIMIT 1
             ");
@@ -76,15 +99,32 @@ try {
             $stmt->close();
 
         } else {
-            // Insert new batch entry
+
             $stmt = $conn->prepare("
-                INSERT INTO student_batches (student_id, batch_id, admin_action) 
+                INSERT INTO student_batches (student_id, batch_id, admin_action)
                 VALUES (?, ?, 'approved')
             ");
             $stmt->bind_param("ii", $student_id, $new_batch_id);
             $stmt->execute();
             $stmt->close();
         }
+    }
+
+    /* =============================================================
+       4️⃣ FETCH UPDATED BATCH NAME FOR UI
+       ============================================================= */
+    $batch_name = null;
+    if ($new_batch_id > 0) {
+
+        $stmt = $conn->prepare("SELECT name FROM batches WHERE id = ? LIMIT 1");
+        $stmt->bind_param("i", $new_batch_id);
+        $stmt->execute();
+
+        $result = $stmt->get_result();
+        if ($row = $result->fetch_assoc()) {
+            $batch_name = $row['name'];
+        }
+        $stmt->close();
     }
 
     $conn->commit();
@@ -94,16 +134,20 @@ try {
         "message" => "Student details updated successfully",
         "data" => [
             "student_id" => $student_id,
-            "batch_id" => $new_batch_id,
-            "status" => $new_status
+            "course_id"  => $course_id,    // Auto-detected
+            "batch_id"   => $new_batch_id,
+            "batch_name" => $batch_name,
+            "status"     => $new_status
         ]
     ]);
 
 } catch (Exception $e) {
-    $conn->rollBack();
+
+    $conn->rollback();
+
     echo json_encode([
         "status" => false,
-        "message" => "Error: " . $e->getMessage()
+        "message" => $e->getMessage()
     ]);
 }
 ?>
