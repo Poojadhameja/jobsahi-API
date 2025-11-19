@@ -139,8 +139,7 @@ try {
                 "total_students" => $totalStudents,
                 "applied_jobs" => $appliedJobs,
                 "interview_jobs" => $interviewJobs,
-                "active_jobs" => $activeJobs,
-                "active_courses" => $activeCourses
+                "active_jobs" => $activeJobs
             ],
             "placement_funnel" => [
                 "applications" => $funnelApplications,
