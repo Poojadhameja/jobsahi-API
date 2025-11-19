@@ -249,38 +249,71 @@ try {
             ];
         }
 
-        // ---------------------------------------------------------
-        // ASSIGNED FACULTY (unchanged)
-        // ---------------------------------------------------------
-        $faculty = [];
+       // ---------------------------------------------------------
+// FACULTY SECTION
+// ---------------------------------------------------------
+$faculty = [];
 
-        $facultyQuery = "
-            SELECT 
-                fu.id AS faculty_id,
-                fu.name,
-                fu.email,
-                fu.phone,
-                fu.role
-            FROM faculty_users fu
-            WHERE fu.id = ?
-              AND fu.admin_action = 'approved'
-            LIMIT 1
-        ";
+if ($instructor_id > 0) {
+    // Fetch only assigned instructor
+    $facultyQuery = "
+        SELECT 
+            fu.id AS faculty_id,
+            fu.name,
+            fu.email,
+            fu.phone,
+            fu.role
+        FROM faculty_users fu
+        WHERE fu.id = ?
+          AND fu.admin_action = 'approved'
+        LIMIT 1
+    ";
 
-        $fstmt = $conn->prepare($facultyQuery);
-        $fstmt->bind_param("i", $instructor_id);
-        $fstmt->execute();
-        $facultyResult = $fstmt->get_result();
+    $fstmt = $conn->prepare($facultyQuery);
+    $fstmt->bind_param("i", $instructor_id);
+    $fstmt->execute();
+    $facultyResult = $fstmt->get_result();
 
-        while ($f = $facultyResult->fetch_assoc()) {
-            $faculty[] = [
-                "faculty_id" => intval($f['faculty_id']),
-                "name"       => $f['name'],
-                "email"      => $f['email'],
-                "phone"      => $f['phone'],
-                "role"       => ucfirst($f['role'])
-            ];
-        }
+    while ($f = $facultyResult->fetch_assoc()) {
+        $faculty[] = [
+            "faculty_id" => intval($f['faculty_id']),
+            "name"       => $f['name'],
+            "email"      => $f['email'],
+            "phone"      => $f['phone'],
+            "role"       => ucfirst($f['role'])
+        ];
+    }
+} else {
+    // Fetch ALL faculty of the institute (for assignment)
+    $facultyQuery = "
+        SELECT 
+            id AS faculty_id,
+            name,
+            email,
+            phone,
+            role
+        FROM faculty_users
+        WHERE institute_id = ?
+          AND admin_action = 'approved'
+        ORDER BY name ASC
+    ";
+
+    $fstmt = $conn->prepare($facultyQuery);
+    $fstmt->bind_param("i", $institute_id);
+    $fstmt->execute();
+    $facultyResult = $fstmt->get_result();
+
+    while ($f = $facultyResult->fetch_assoc()) {
+        $faculty[] = [
+            "faculty_id" => intval($f['faculty_id']),
+            "name"       => $f['name'],
+            "email"      => $f['email'],
+            "phone"      => $f['phone'],
+            "role"       => ucfirst($f['role'])
+        ];
+    }
+}
+
 
         // Final batch array
         $batchData[] = [
