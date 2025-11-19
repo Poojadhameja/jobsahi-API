@@ -15,83 +15,79 @@ try {
         exit;
     }
 
-    // ✅ Fetch institute profile id (if any)
-    $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
+    // ✅ Fetch institute profile id
+    $stmt = $conn->prepare("SELECT id, institute_logo FROM institute_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
-    $stmt->bind_result($profile_id);
+    $stmt->bind_result($profile_id, $old_logo);
     $stmt->fetch();
     $stmt->close();
 
-    // 🎯 NEW: Different behaviour for POST vs PUT
-    if ($method === 'POST') {
-        if ($profile_id) {
-            echo json_encode([
-                "success" => false,
-                "message" => "Institute profile already exists for this user"
-            ]);
-            exit;
-        }
-    } else { // PUT
-        if (!$profile_id) {
-            echo json_encode(["success" => false, "message" => "Institute profile not found"]);
-            exit;
-        }
+    if ($method === 'POST' && $profile_id) {
+        echo json_encode(["success" => false, "message" => "Institute profile already exists"]);
+        exit;
     }
 
-    // ✅ Upload folder setup
+    if ($method === 'PUT' && !$profile_id) {
+        echo json_encode(["success" => false, "message" => "Institute profile not found"]);
+        exit;
+    }
+
+    // ================================
+    // Upload Folder Setup
+    // ================================
     $upload_dir    = __DIR__ . '/../uploads/institute_logo/';
     $relative_path = '/uploads/institute_logo/';
     if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
 
     $input         = [];
-    $file_uploaded = false;
     $contentType   = $_SERVER["CONTENT_TYPE"] ?? '';
+    $file_uploaded = false;
 
-    /* =====================================================
-       ✅ CASE 1: POST — multipart/form-data
-    ===================================================== */
+    // --------------------------------------------------
+    // POST → multipart/form-data
+    // --------------------------------------------------
     if ($method === 'POST' && strpos($contentType, "multipart/form-data") !== false) {
         $input = $_POST;
     }
 
-    /* =====================================================
-       ✅ CASE 2: PUT — supports multipart/form-data or JSON
-    ===================================================== */
+    // --------------------------------------------------
+    // PUT → JSON OR multipart/form-data
+    // --------------------------------------------------
     elseif ($method === 'PUT') {
         if (strpos($contentType, "multipart/form-data") !== false) {
 
-            // Parse multipart
+            // Parse multipart PUT body
             $raw_data = file_get_contents("php://input");
             $boundary = substr($contentType, strpos($contentType, "boundary=") + 9);
             $blocks   = preg_split("/-+$boundary/", $raw_data);
             array_pop($blocks);
 
             foreach ($blocks as $block) {
-                if (empty($block)) continue;
+                if (empty(trim($block))) continue;
 
                 if (
                     strpos($block, 'application/octet-stream') !== false ||
                     strpos($block, 'Content-Type: image') !== false
                 ) {
-
                     preg_match('/name="([^"]*)"; filename="([^"]*)"/', $block, $matches);
                     if (!isset($matches[1]) || !isset($matches[2])) continue;
+
                     $name     = $matches[1];
                     $filename = $matches[2];
 
                     preg_match("/Content-Type: (.*)\r\n\r\n/", $block, $typeMatch);
-                    $fileType    = trim($typeMatch[1] ?? 'application/octet-stream');
+                    $fileType = trim($typeMatch[1] ?? 'application/octet-stream');
                     $fileContent = substr($block, strpos($block, "\r\n\r\n") + 4);
                     $fileContent = substr($fileContent, 0, strlen($fileContent) - 2);
 
-                    $tempFile = tempnam(sys_get_temp_dir(), 'php');
-                    file_put_contents($tempFile, $fileContent);
+                    $tmp = tempnam(sys_get_temp_dir(), 'php');
+                    file_put_contents($tmp, $fileContent);
 
                     $_FILES[$name] = [
                         'name'     => $filename,
                         'type'     => $fileType,
-                        'tmp_name' => $tempFile,
+                        'tmp_name' => $tmp,
                         'error'    => 0,
                         'size'     => strlen($fileContent)
                     ];
@@ -100,260 +96,154 @@ try {
                     $input[$matches[1]] = trim($matches[2]);
                 }
             }
-
         } else {
-            // JSON Body
-            $raw          = file_get_contents("php://input");
-            $decoded_json = json_decode($raw, true);
-            if (json_last_error() === JSON_ERROR_NONE) $input = $decoded_json;
+            // JSON
+            $raw = file_get_contents("php://input");
+            $json = json_decode($raw, true);
+            if (json_last_error() === JSON_ERROR_NONE) $input = $json;
         }
     }
 
-    /* =====================================================
-       ✅ Handle institute_logo upload  (UNCHANGED)
-    ===================================================== */
+    // =====================================================
+    // 🔥 LOGO UPLOAD (UPDATED WITH UNIQUE FILENAME)
+    // =====================================================
     if (!empty($_FILES['institute_logo']['name'])) {
-        $fileName = $_FILES['institute_logo']['name'];
-        $tmpName  = $_FILES['institute_logo']['tmp_name'];
-        $ext      = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-        $allowed_exts = ['jpg', 'jpeg', 'png', 'webp', 'svg'];
+        $file = $_FILES['institute_logo'];
+        $ext  = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        $allowed = ['jpg', 'jpeg', 'png', 'webp', 'svg'];
 
-        if (!in_array($ext, $allowed_exts)) {
-            echo json_encode(["success" => false, "message" => "Invalid file type"]);
+        if (!in_array($ext, $allowed)) {
+            echo json_encode(["success" => false, "message" => "Invalid image format"]);
             exit;
         }
 
-        if ($method === 'PUT' && $profile_id) {
-            $old_stmt = $conn->prepare("SELECT institute_logo FROM institute_profiles WHERE id = ?");
-            $old_stmt->bind_param("i", $profile_id);
-            $old_stmt->execute();
-            $old_result = $old_stmt->get_result();
-            if ($old = $old_result->fetch_assoc()) {
-                if (!empty($old['institute_logo'])) {
-                    $old_file = __DIR__ . '/..' . $old['institute_logo'];
-                    if (file_exists($old_file)) unlink($old_file);
-                }
-            }
-            $old_stmt->close();
-        }
-
-        $safe_name = 'logo_' . $user_id . '.' . $ext;
+        // ⭐ NEW UNIQUE FILENAME (fix caching issue)
+        $safe_name = 'logo_' . $user_id . '_' . time() . '.' . $ext;
         $file_path = $upload_dir . $safe_name;
 
-        if (is_uploaded_file($tmpName)) {
-            move_uploaded_file($tmpName, $file_path);
+        // Upload file
+        if (is_uploaded_file($file['tmp_name'])) {
+            move_uploaded_file($file['tmp_name'], $file_path);
         } else {
-            rename($tmpName, $file_path);
+            rename($file['tmp_name'], $file_path);
         }
 
+        // Delete old logo safely
+        if (!empty($old_logo)) {
+            $old_file = __DIR__ . '/../' . ltrim($old_logo, '/');
+            if (file_exists($old_file)) unlink($old_file);
+        }
+
+        // Save DB path
         $input['institute_logo'] = $relative_path . $safe_name;
-        $file_uploaded           = true;
+        $file_uploaded = true;
     }
 
-    /* =====================================================
-       ✅ Common allowed fields
-    ===================================================== */
-
+    // Allowed Fields
     $allowed_fields = [
-        'institute_name',
-        'registration_number',
-        'institute_logo',
-        'institute_type',
-        'website',
-        'description',
-        'address',
-        'postal_code',
-        'contact_person',
-        'contact_designation',
-        'accreditation',
-        'established_year'
+        'institute_name', 'registration_number', 'institute_logo',
+        'institute_type', 'website', 'description', 'address',
+        'postal_code', 'contact_person', 'contact_designation',
+        'accreditation', 'established_year'
     ];
 
-    if ($user_role === 'admin') {
-        $allowed_fields[] = 'admin_action';
-    }
+    if ($user_role === 'admin') $allowed_fields[] = 'admin_action';
 
-    /* =====================================================
-       ✅ DB OPERATION: INSERT for POST, UPDATE for PUT
-    ===================================================== */
-
+    // ================================
+    // UPDATE operation
+    // ================================
     if ($method === 'PUT') {
+        $updates = [];
+        $vals    = [];
+        $types   = '';
 
-        $update_fields = [];
-        $update_values = [];
-        $types         = '';
-
-        foreach ($allowed_fields as $field) {
-            if (isset($input[$field]) && $input[$field] !== "") {
-                $update_fields[]  = "$field = ?";
-                $update_values[]  = $input[$field];
-                $types           .= 's';
+        foreach ($allowed_fields as $f) {
+            if (isset($input[$f]) && $input[$f] !== "") {
+                $updates[] = "$f = ?";
+                $vals[]    = $input[$f];
+                $types    .= 's';
             }
         }
 
-        if (empty($update_fields)) {
-            echo json_encode(["success" => false, "message" => "No valid fields to update"]);
-            exit;
+        if (!empty($updates)) {
+            $updates[] = "modified_at = NOW()";
+            $sql = "UPDATE institute_profiles SET ".implode(', ', $updates)." WHERE id = ? AND user_id = ?";
+            $vals[]  = $profile_id;
+            $vals[]  = $user_id;
+            $types  .= 'ii';
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param($types, ...$vals);
+            $stmt->execute();
         }
 
-        $update_fields[] = "modified_at = NOW()";
-
-        $sql = "UPDATE institute_profiles 
-                SET " . implode(', ', $update_fields) . "
-                WHERE id = ? AND user_id = ? AND deleted_at IS NULL";
-
-        $update_values[] = $profile_id;
-        $update_values[] = $user_id;
-        $types          .= 'ii';
-
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param($types, ...$update_values);
-        $stmt->execute();
-
-    } else {
-
-        $columns      = ['user_id'];
-        $placeholders = ['?'];
-        $values       = [$user_id];
-        $types        = 'i';
-
-        foreach ($allowed_fields as $field) {
-            if (isset($input[$field]) && $input[$field] !== "") {
-                $columns[]      = $field;
-                $placeholders[] = '?';
-                $values[]       = $input[$field];
-                $types         .= 's';
-            }
-        }
-
-        if (count($columns) === 1) {
-            echo json_encode(["success" => false, "message" => "No valid fields to create profile"]);
-            exit;
-        }
-
-        $sql = "INSERT INTO institute_profiles (" . implode(', ', $columns) . ", created_at, modified_at)
-                VALUES (" . implode(', ', $placeholders) . ", NOW(), NOW())";
-
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param($types, ...$values);
-        $stmt->execute();
-
-        $profile_id = $conn->insert_id;
     }
 
-    /* =====================================================
-       🔥 SYNC USERS TABLE WITH institute_profiles CHANGES
-    ===================================================== */
+    // ================================
+    // FETCH UPDATED PROFILE
+    // ================================
+    $fetch = $conn->prepare("SELECT p.*, u.email, u.user_name, u.phone_number 
+                             FROM institute_profiles p
+                             INNER JOIN users u ON p.user_id = u.id
+                             WHERE p.id = ? LIMIT 1");
+    $fetch->bind_param("i", $profile_id);
+    $fetch->execute();
+    $profile = $fetch->get_result()->fetch_assoc();
+    $fetch->close();
 
-    // Fetch current user record
-    $user_stmt = $conn->prepare("SELECT user_name, phone_number FROM users WHERE id = ? LIMIT 1");
-    $user_stmt->bind_param("i", $user_id);
-    $user_stmt->execute();
-    $current_user = $user_stmt->get_result()->fetch_assoc();
-    $user_stmt->close();
+    // ================================
+    // ⭐ FULL URL FOR LOGO
+    // ================================
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+    $host     = $_SERVER['HTTP_HOST'];
 
-    // 1️⃣ Update user_name when institute_name changes
-    if (isset($input['institute_name']) && $input['institute_name'] !== "") {
-        if ($current_user['user_name'] !== $input['institute_name']) {
-            $u1 = $conn->prepare("UPDATE users SET user_name = ? WHERE id = ?");
-            $u1->bind_param("si", $input['institute_name'], $user_id);
-            $u1->execute();
-            $u1->close();
-        }
-    }
+    $logo_full_url = !empty($profile['institute_logo'])
+        ? $protocol . $host . "/jobsahi-API/api" . $profile['institute_logo']
+        : null;
 
-    // 2️⃣ Update phone_number
-    if (isset($input['phone_number']) && $input['phone_number'] !== "") {
-        if ($current_user['phone_number'] !== $input['phone_number']) {
-            $u2 = $conn->prepare("UPDATE users SET phone_number = ? WHERE id = ?");
-            $u2->bind_param("si", $input['phone_number'], $user_id);
-            $u2->execute();
-            $u2->close();
-        }
-    }
-
-    // 3️⃣ On POST, if user_name empty → copy institute_name
-    if ($method === 'POST') {
-        if (isset($input['institute_name']) && $input['institute_name'] !== "") {
-            if (empty($current_user['user_name'])) {
-                $u3 = $conn->prepare("UPDATE users SET user_name = ? WHERE id = ?");
-                $u3->bind_param("si", $input['institute_name'], $user_id);
-                $u3->execute();
-                $u3->close();
-            }
-        }
-    }
-
-    /* =====================================================
-       ✅ Fetch final updated profile
-    ===================================================== */
-    $fetch_sql = "SELECT p.*, u.email, u.user_name, u.phone_number 
-                  FROM institute_profiles p
-                  INNER JOIN users u ON p.user_id = u.id
-                  WHERE p.id = ? LIMIT 1";
-
-    $fetch_stmt = $conn->prepare($fetch_sql);
-    $fetch_stmt->bind_param('i', $profile_id);
-    $fetch_stmt->execute();
-    $result  = $fetch_stmt->get_result();
-    $profile = $result->fetch_assoc();
-
-    if ($profile) {
-        echo json_encode([
-            "success" => true,
-            "message" => ($method === 'POST')
-                ? "Institute profile created successfully"
-                : "Institute profile updated successfully",
-            "data" => [
-                "profile_id" => intval($profile['id']),
-                "user_id"    => intval($profile['user_id']),
-
-                "personal_info" => [
-                    "email"        => $profile['email'],
-                    "user_name"    => $profile['user_name'],
-                    "phone_number" => $profile['phone_number']
-                ],
-
-                "institute_info" => [
-                    "institute_name"      => $profile['institute_name'],
-                    "registration_number" => $profile['registration_number'],
-                    "institute_logo"      => $profile['institute_logo'],
-                    "institute_type"      => $profile['institute_type'],
-                    "website"             => $profile['website'],
-                    "description"         => $profile['description'],
-                    "accreditation"       => $profile['accreditation'],
-                    "established_year"    => $profile['established_year']
-                ],
-
-                "contact_info" => [
-                    "address"            => $profile['address'],
-                    "postal_code"        => $profile['postal_code'],
-                    "contact_person"     => $profile['contact_person'],
-                    "contact_designation"=> $profile['contact_designation']
-                ],
-
-                "status" => [
-                    "admin_action" => $profile['admin_action'],
-                    "created_at"   => $profile['created_at'],
-                    "modified_at"  => $profile['modified_at']
-                ]
+    // ================================
+    // RESPONSE
+    // ================================
+    echo json_encode([
+        "success" => true,
+        "message" => "Institute profile updated successfully",
+        "data" => [
+            "profile_id" => intval($profile['id']),
+            "user_id"    => intval($profile['user_id']),
+            "personal_info" => [
+                "email"        => $profile['email'],
+                "user_name"    => $profile['user_name'],
+                "phone_number" => $profile['phone_number']
             ],
-            "meta" => [
-                "updated_by" => $user_role,
-                "timestamp"  => date('Y-m-d H:i:s')
+            "institute_info" => [
+                "institute_name"      => $profile['institute_name'],
+                "registration_number" => $profile['registration_number'],
+                "institute_logo"      => $logo_full_url,
+                "institute_type"      => $profile['institute_type'],
+                "website"             => $profile['website'],
+                "description"         => $profile['description'],
+                "accreditation"       => $profile['accreditation'],
+                "established_year"    => $profile['established_year']
+            ],
+            "contact_info" => [
+                "address"            => $profile['address'],
+                "postal_code"        => $profile['postal_code'],
+                "contact_person"     => $profile['contact_person'],
+                "contact_designation"=> $profile['contact_designation']
+            ],
+            "status" => [
+                "admin_action" => $profile['admin_action'],
+                "created_at"   => $profile['created_at'],
+                "modified_at"  => $profile['modified_at']
             ]
-        ], JSON_PRETTY_PRINT);
-
-    } else {
-        echo json_encode(["success" => false, "message" => "Profile saved but not found"]);
-    }
-
-    if (isset($stmt) && $stmt instanceof mysqli_stmt) {
-        $stmt->close();
-    }
-    $conn->close();
+        ],
+        "meta" => [
+            "updated_by" => $user_role,
+            "timestamp"  => date('Y-m-d H:i:s')
+        ]
+    ], JSON_PRETTY_PRINT);
 
 } catch (Exception $e) {
-    echo json_encode(["success" => false, "message" => "Error: " . $e->getMessage()]);
+    echo json_encode(["success" => false, "message" => $e->getMessage()]);
 }
 ?>
