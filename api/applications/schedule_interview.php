@@ -86,24 +86,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 }
 
 /* =========================================================
-   POST METHOD: Schedule a new interview (using job_id)
+   POST METHOD: Schedule a new interview (using application_id or job_id+student_id)
    ========================================================= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = json_decode(file_get_contents("php://input"), true);
 
-    $job_id        = isset($data['job_id']) ? intval($data['job_id']) : 0;
-    $student_id    = isset($data['student_id']) ? intval($data['student_id']) : 0;
-    $scheduled_at  = isset($data['scheduled_at']) ? trim($data['scheduled_at']) : '';
-    $mode          = isset($data['mode']) ? trim($data['mode']) : 'online';
-    $location      = isset($data['location']) ? trim($data['location']) : ''; // For offline interviews
-    $platform_name = isset($data['platform_name']) ? trim($data['platform_name']) : ''; // For online: Zoom, Google Meet, Teams
+    $application_id = isset($data['application_id']) ? intval($data['application_id']) : 0;
+    $job_id         = isset($data['job_id']) ? intval($data['job_id']) : 0;
+    $student_id     = isset($data['student_id']) ? intval($data['student_id']) : 0;
+    $scheduled_at   = isset($data['scheduled_at']) ? trim($data['scheduled_at']) : '';
+    $mode           = isset($data['mode']) ? trim($data['mode']) : 'online';
+    $location       = isset($data['location']) ? trim($data['location']) : ''; // For offline interviews
+    $platform_name  = isset($data['platform_name']) ? trim($data['platform_name']) : ''; // For online: Zoom, Google Meet, Teams
     $interview_link = isset($data['interview_link']) ? trim($data['interview_link']) : ''; // For online: meeting link
-    $status        = isset($data['status']) ? trim($data['status']) : 'scheduled';
+    $status         = isset($data['status']) ? trim($data['status']) : 'scheduled';
     $interview_info = isset($data['interview_info']) ? trim($data['interview_info']) : ''; // Additional info
 
-    // ✅ Validate input
-    if ($job_id <= 0 || $student_id <= 0) {
-        echo json_encode(["status" => "error", "message" => "Missing or invalid job_id or student_id"]);
+    // ✅ Validate input - application_id OR (job_id + student_id) required
+    if ($application_id <= 0 && ($job_id <= 0 || $student_id <= 0)) {
+        echo json_encode(["status" => "error", "message" => "Missing: Either application_id OR (job_id + student_id) is required"]);
         exit();
     }
     if (empty($scheduled_at)) {
@@ -112,22 +113,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     try {
-        // ✅ Step 1: Find application_id using job_id + student_id
-        $find_sql = "SELECT id FROM applications WHERE job_id = ? AND student_id = ? LIMIT 1";
-        $find_stmt = $conn->prepare($find_sql);
-        $find_stmt->bind_param("ii", $job_id, $student_id);
-        $find_stmt->execute();
-        $find_res = $find_stmt->get_result();
+        // ✅ Step 1: Get application_id (either directly or find from job_id + student_id)
+        if ($application_id > 0) {
+            // Use provided application_id directly
+            $find_sql = "SELECT id FROM applications WHERE id = ? LIMIT 1";
+            $find_stmt = $conn->prepare($find_sql);
+            $find_stmt->bind_param("i", $application_id);
+            $find_stmt->execute();
+            $find_res = $find_stmt->get_result();
 
-        if ($find_res->num_rows === 0) {
-            echo json_encode(["status" => "error", "message" => "No application found for given job and student"]);
-            exit();
+            if ($find_res->num_rows === 0) {
+                echo json_encode(["status" => "error", "message" => "Application not found for given application_id"]);
+                exit();
+            }
+        } else {
+            // Find application_id using job_id + student_id (backward compatibility)
+            $find_sql = "SELECT id FROM applications WHERE job_id = ? AND student_id = ? LIMIT 1";
+            $find_stmt = $conn->prepare($find_sql);
+            $find_stmt->bind_param("ii", $job_id, $student_id);
+            $find_stmt->execute();
+            $find_res = $find_stmt->get_result();
+
+            if ($find_res->num_rows === 0) {
+                echo json_encode(["status" => "error", "message" => "No application found for given job and student"]);
+                exit();
+            }
+
+            $app_data = $find_res->fetch_assoc();
+            $application_id = intval($app_data['id']);
         }
 
-        $app_data = $find_res->fetch_assoc();
-        $application_id = intval($app_data['id']);
-
-        // ✅ Step 2: Verify application + recruiter ownership
+        // ✅ Step 2: Verify application + recruiter ownership and get student_id
         $check_sql = "
             SELECT a.id, a.student_id, j.recruiter_id, u.user_name AS candidate_name, rp.company_name 
             FROM applications a
@@ -135,21 +151,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             JOIN users u ON sp.user_id = u.id
             JOIN jobs j ON a.job_id = j.id
             JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
-            WHERE a.id = ? AND a.student_id = ?
+            WHERE a.id = ?
         ";
         $check_stmt = $conn->prepare($check_sql);
-        $check_stmt->bind_param("ii", $application_id, $student_id);
+        $check_stmt->bind_param("i", $application_id);
         $check_stmt->execute();
         $res = $check_stmt->get_result();
 
         if ($res->num_rows === 0) {
-            echo json_encode(["status" => "error", "message" => "Invalid job_id or student_id"]);
+            echo json_encode(["status" => "error", "message" => "Application not found or invalid"]);
             exit();
         }
 
         $app = $res->fetch_assoc();
+        $student_id = intval($app['student_id']); // Get student_id from application
         $candidate_name = $app['candidate_name'];
         $company_name   = $app['company_name'];
+        
+        // ✅ If job_id and student_id were provided, verify they match the application
+        if ($job_id > 0 && $student_id > 0) {
+            if (intval($app['student_id']) !== $student_id) {
+                echo json_encode(["status" => "error", "message" => "Student ID mismatch with application"]);
+                exit();
+            }
+        }
 
         // ✅ Step 3: Verify recruiter ownership (if recruiter role)
         if ($user_role === 'recruiter') {
@@ -171,6 +196,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit();
             }
         }
+
+        // ✅ Step 3.5: Check if interview already exists for this application
+        $existing_interview_sql = "
+            SELECT id, scheduled_at, mode, platform_name, interview_link, location, status, interview_info
+            FROM interviews 
+            WHERE application_id = ? 
+            AND (deleted_at IS NULL OR deleted_at = '0000-00-00 00:00:00')
+            ORDER BY created_at DESC
+            LIMIT 1
+        ";
+        $existing_stmt = $conn->prepare($existing_interview_sql);
+        $existing_stmt->bind_param("i", $application_id);
+        $existing_stmt->execute();
+        $existing_result = $existing_stmt->get_result();
+        
+        if ($existing_result->num_rows > 0) {
+            // Interview already exists - return existing interview instead of creating new one
+            $existing_interview = $existing_result->fetch_assoc();
+            $existing_interview_id = intval($existing_interview['id']);
+            
+            // Return existing interview details
+            $responseData = [
+                "interviewId"   => $existing_interview_id,
+                "candidateName" => $candidate_name,
+                "candidateId"   => $student_id,
+                "date"          => date('Y-m-d', strtotime($existing_interview['scheduled_at'])),
+                "timeSlot"      => date('H:i', strtotime($existing_interview['scheduled_at'])),
+                "interviewMode" => ucfirst($existing_interview['mode']),
+                "location"      => $existing_interview['mode'] === 'offline' ? $existing_interview['location'] : null,
+                "platform_name" => $existing_interview['mode'] === 'online' ? $existing_interview['platform_name'] : null,
+                "interview_link" => $existing_interview['mode'] === 'online' ? $existing_interview['interview_link'] : null,
+                "interview_info" => $existing_interview['interview_info'],
+                "scheduledBy"   => $company_name,
+                "createdAt"     => date('Y-m-d\TH:i:s', strtotime($existing_interview['scheduled_at']))
+            ];
+
+            echo json_encode([
+                "status"  => "success",
+                "message" => "Interview already exists for this application. Returning existing interview.",
+                "data"    => $responseData,
+                "is_existing" => true
+            ]);
+            $existing_stmt->close();
+            $conn->close();
+            exit();
+        }
+        $existing_stmt->close();
 
         // ✅ Step 4: Insert new interview record
         // For offline: location is required, for online: platform_name and interview_link
