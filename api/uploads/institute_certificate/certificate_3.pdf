@@ -1,0 +1,29 @@
+%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595]
+/Resources << /Font << /F1 5 0 R /F2 9 0 R /F3 10 0 R >> /XObject <<
+>> >> /Contents 4 0 R >> endobj
+4 0 obj << /Length 463 >> stream
+q 0.95 0.97 0.99 rg 50 70 742 475 re f Q
+q 1.5 w 0.15 0.35 0.65 RG 52 72 738 471 re S Q
+BT /F3 32 Tf 0.1 0.35 0.65 rg 421 410 Td () Tj ET
+BT /F1 9 Tf 0.2 0.4 0.6 rg 421 375 Td () Tj ET
+BT /F1 9 Tf 0.2 0.4 0.6 rg 421 362 Td () Tj ET
+BT /F1 9 Tf 0.2 0.4 0.6 rg 421 349 Td () Tj ET
+BT /F2 26 Tf 0.1 0.35 0.65 rg 336.5 300 Td (Aarti Nathani) Tj ET
+BT /F1 16 Tf 0 0 0 rg 337 270 Td (Assistant Electrician) Tj ET
+BT /F1 10 Tf 0 0 0 rg 60 85 Td (Date: 20/11/2025) Tj ET
+
+endstream endobj
+5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+9 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> endobj
+10 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >> endobj
+
+xref
+0 11
+0000000000 65535 f
+trailer << /Size 11 /Root 1 0 R >>
+startxref
+1027
+%%EOF
