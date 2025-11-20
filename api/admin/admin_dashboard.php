@@ -7,9 +7,9 @@ $decoded = authenticateJWT(['admin']);
 
 try {
 
-    // --------------------------------------------------
-    // 1️⃣ Total Students
-    // --------------------------------------------------
+    /* --------------------------------------------------
+       1️⃣ Total Students
+    -------------------------------------------------- */
     $totalStudents = $conn->query("
         SELECT COUNT(*) AS total 
         FROM student_profiles
@@ -17,9 +17,9 @@ try {
     ")->fetch_assoc()['total'] ?? 0;
 
 
-    // --------------------------------------------------
-    // 2️⃣ Applied Jobs (applications count)
-    // --------------------------------------------------
+    /* --------------------------------------------------
+       2️⃣ Applied Jobs
+    -------------------------------------------------- */
     $appliedJobs = $conn->query("
         SELECT COUNT(*) AS total 
         FROM applications
@@ -27,9 +27,9 @@ try {
     ")->fetch_assoc()['total'] ?? 0;
 
 
-    // --------------------------------------------------
-    // 3️⃣ Interview Jobs (unique interview IDs)
-    // --------------------------------------------------
+    /* --------------------------------------------------
+       3️⃣ Interview Jobs
+    -------------------------------------------------- */
     $interviewJobs = $conn->query("
         SELECT COUNT(DISTINCT interview_id) AS total
         FROM applications
@@ -37,31 +37,37 @@ try {
     ")->fetch_assoc()['total'] ?? 0;
 
 
-    // --------------------------------------------------
-    // 4️⃣ Active Jobs (jobs.status = open)
-    // --------------------------------------------------
+    /* --------------------------------------------------
+       4️⃣ Active Jobs
+    -------------------------------------------------- */
     $activeJobs = $conn->query("
         SELECT COUNT(*) AS total 
         FROM jobs 
-        WHERE status='open' AND admin_action='approved'
-    ")->fetch_assoc()['total'] ?? 0;
-
-
-    // --------------------------------------------------
-    // 5️⃣ Active Courses (remove offers)
-    // --------------------------------------------------
-    $activeCourses = $conn->query("
-        SELECT COUNT(*) AS total 
-        FROM courses
-        WHERE status='active' 
+        WHERE status='open'
           AND admin_action='approved'
     ")->fetch_assoc()['total'] ?? 0;
 
 
-    // --------------------------------------------------
-    // 6️⃣ Placement Funnel
-    // --------------------------------------------------
-    $funnelApplications = $conn->query("SELECT COUNT(*) AS c FROM applications")->fetch_assoc()['c'] ?? 0;
+    /* --------------------------------------------------
+       5️⃣ Active Courses (Remove offers)
+    -------------------------------------------------- */
+    $activeCourses = $conn->query("
+        SELECT COUNT(*) AS total 
+        FROM courses
+        WHERE status='active'
+          AND admin_action='approved'
+    ")->fetch_assoc()['total'] ?? 0;
+
+
+    /* --------------------------------------------------
+       6️⃣ Placement Funnel
+       Replace Offers → Active Courses
+    -------------------------------------------------- */
+
+    $funnelApplications = $conn->query("
+        SELECT COUNT(*) AS c 
+        FROM applications
+    ")->fetch_assoc()['c'] ?? 0;
 
     $funnelInterviews = $conn->query("
         SELECT COUNT(*) AS c 
@@ -69,44 +75,42 @@ try {
         WHERE status='shortlisted'
     ")->fetch_assoc()['c'] ?? 0;
 
-    $funnelOffers = $conn->query("
-        SELECT COUNT(*) AS c 
-        FROM applications 
-        WHERE status='selected'
-    ")->fetch_assoc()['c'] ?? 0;
+    // ❌ Old
+    // $funnelOffers = ...
+
+    // ✅ New → Active Courses
+    $funnelActiveCourses = $activeCourses;
 
     $funnelHired = $conn->query("
         SELECT COUNT(*) AS c 
         FROM applications 
-        WHERE job_selected=1
+        WHERE job_selected = 1
     ")->fetch_assoc()['c'] ?? 0;
 
 
-    // --------------------------------------------------
-    // 7️⃣ Applications Trend (Last 6 Months)
-    // --------------------------------------------------
-    $trendQuery = "
+    /* --------------------------------------------------
+       7️⃣ Applications Trend (Last 6 months)
+    -------------------------------------------------- */
+    $trendResult = $conn->query("
         SELECT 
             DATE_FORMAT(applied_at, '%b') AS month_name,
             COUNT(*) AS total
         FROM applications
         WHERE applied_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-        GROUP BY MONTH(applied_at)
+        GROUP BY YEAR(applied_at), MONTH(applied_at)
         ORDER BY applied_at ASC
-    ";
-    $trendResult = $conn->query($trendQuery);
+    ");
+
     $applicationsTrend = [];
     while ($row = $trendResult->fetch_assoc()) {
         $applicationsTrend[] = $row;
     }
 
 
-    // --------------------------------------------------
-    // 8️⃣ Top Jobs in Demand (Best 6)
-    // Logic: jobs where students applied the fastest
-    // --------------------------------------------------
-
-    $topJobsQuery = "
+    /* --------------------------------------------------
+       8️⃣ Top Jobs in Demand
+    -------------------------------------------------- */
+    $topJobsResult = $conn->query("
         SELECT 
             j.id,
             j.title,
@@ -116,19 +120,17 @@ try {
         GROUP BY j.id
         ORDER BY total_applications DESC
         LIMIT 6
-    ";
+    ");
 
-    $topJobsResult = $conn->query($topJobsQuery);
     $topJobs = [];
     while ($row = $topJobsResult->fetch_assoc()) {
         $topJobs[] = $row;
     }
 
 
-    // --------------------------------------------------
-    // Final JSON Response
-    // --------------------------------------------------
-
+    /* --------------------------------------------------
+       FINAL RESPONSE
+    -------------------------------------------------- */
     echo json_encode([
         "status" => true,
         "message" => "Admin dashboard data loaded successfully",
@@ -137,13 +139,12 @@ try {
                 "total_students" => $totalStudents,
                 "applied_jobs" => $appliedJobs,
                 "interview_jobs" => $interviewJobs,
-                "active_jobs" => $activeJobs,
-                "active_courses" => $activeCourses
+                "active_jobs" => $activeJobs
             ],
             "placement_funnel" => [
                 "applications" => $funnelApplications,
                 "interviews" => $funnelInterviews,
-                "offers" => $funnelOffers,
+                "active_courses" => $funnelActiveCourses,  // ✔ new
                 "hired" => $funnelHired
             ],
             "applications_trend" => $applicationsTrend,
@@ -152,6 +153,9 @@ try {
     ]);
 
 } catch (Exception $e) {
-    echo json_encode(["status" => false, "error" => $e->getMessage()]);
+    echo json_encode([
+        "status" => false,
+        "error" => $e->getMessage()
+    ]);
 }
 ?>

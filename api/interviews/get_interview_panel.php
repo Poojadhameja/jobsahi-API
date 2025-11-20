@@ -1,22 +1,17 @@
 <?php
-// get_interview_panel.php - Fetch all or specific interview panel feedbacks
 require_once '../cors.php';
 require_once '../db.php';
 
-// ✅ Authenticate for multiple roles
-$decoded = authenticateJWT(['admin', 'recruiter', 'institute', 'student']); 
-$user_id = $decoded['user_id'];
+$decoded = authenticateJWT(['admin','recruiter','institute','student']);
+$user_id = intval($decoded['user_id']);
 $user_role = strtolower($decoded['role'] ?? '');
 
-// ✅ Read optional filters
 $panel_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 $interview_id = isset($_GET['interview_id']) ? intval($_GET['interview_id']) : 0;
 
 try {
 
-    // -------------------------------------------------------------
     // BASE QUERY
-    // -------------------------------------------------------------
     $sql = "
         SELECT 
             ip.id,
@@ -31,9 +26,6 @@ try {
         WHERE 1
     ";
 
-    // -------------------------------------------------------------
-    // FILTERS (panel_id / interview_id)
-    // -------------------------------------------------------------
     if ($panel_id > 0) {
         $sql .= " AND ip.id = $panel_id";
     }
@@ -42,57 +34,54 @@ try {
         $sql .= " AND ip.interview_id = $interview_id";
     }
 
-    // -------------------------------------------------------------
-    // RECRUITER FILTER (THE MAIN FIX 🚀)
-    // -------------------------------------------------------------
+    // ===============================
+    // 🔐 RECRUITER FILTER (FINAL)
+    // ===============================
     if ($user_role === 'recruiter') {
 
-        // Step 1: Get recruiter_profile_id from users.id
-        $rec = $conn->prepare("SELECT id FROM recruiter_profiles WHERE user_id = ?");
-        $rec->bind_param("i", $user_id);
-        $rec->execute();
-        $rec_res = $rec->get_result();
+        // 1️⃣ GET recruiter_profile_id
+        $rp = $conn->prepare("SELECT id FROM recruiter_profiles WHERE user_id = ?");
+        $rp->bind_param("i", $user_id);
+        $rp->execute();
+        $rp_result = $rp->get_result();
 
-        if ($rec_res->num_rows === 0) {
+        if ($rp_result->num_rows === 0) {
             echo json_encode(["status" => true, "message" => "No records found", "data" => []]);
             exit;
         }
 
-        $rec_row = $rec_res->fetch_assoc();
-        $recruiter_profile_id = intval($rec_row['id']);
+        $recruiter_profile_id = intval($rp_result->fetch_assoc()['id']);
 
-        // Step 2: Filter interview panel by recruiter-owned interviews
-        $sql .= " AND i.id IN (
-            SELECT i2.id 
-            FROM interviews i2
-            JOIN applications a2 ON i2.application_id = a2.id
-            JOIN jobs j2 ON a2.job_id = j2.id
-            WHERE j2.recruiter_id = $recruiter_profile_id
-        )";
+        // 2️⃣ ONLY VALID WAY (Matches YOUR Database)
+        $sql .= "
+            AND i.id IN (
+                SELECT i2.id
+                FROM interviews i2
+                JOIN applications a2 ON i2.application_id = a2.id
+                JOIN jobs j2 ON a2.job_id = j2.id
+                WHERE j2.recruiter_id = $recruiter_profile_id
+            )
+        ";
     }
 
     $sql .= " ORDER BY ip.created_at DESC";
 
-    // -------------------------------------------------------------
-    // EXECUTE FINAL QUERY
-    // -------------------------------------------------------------
+    // EXECUTE
     $result = $conn->query($sql);
 
-    $panelists = [];
+    $rows = [];
     while ($row = $result->fetch_assoc()) {
-        $panelists[] = $row;
+        $rows[] = $row;
     }
 
-    // -------------------------------------------------------------
-    // RESPONSE
-    // -------------------------------------------------------------
-    if (empty($panelists)) {
+    if (empty($rows)) {
         echo json_encode(["status" => true, "message" => "No records found", "data" => []]);
     } else {
-        echo json_encode(["status" => true, "message" => "Data fetched successfully", "data" => $panelists]);
+        echo json_encode(["status" => true, "message" => "Data fetched successfully", "data" => $rows]);
     }
 
 } catch (Throwable $e) {
+
     echo json_encode([
         "status" => false,
         "message" => "Server error: " . $e->getMessage()

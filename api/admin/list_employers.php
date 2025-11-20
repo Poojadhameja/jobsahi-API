@@ -51,7 +51,7 @@ try {
 
 
     /* =========================================================
-       2️⃣ Recruiter Listing
+       2️⃣ Recruiter Listing (Existing Logic)
        ========================================================= */
     $query = "
         SELECT 
@@ -82,15 +82,16 @@ try {
 
     $employers = [];
 
-    // Base URL for logo files
+    // ✅ Base URL for logo files
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
     $host = $_SERVER['HTTP_HOST'];
     $logo_base = '/jobsahi-API/api/uploads/recruiter_logo/';
 
     while ($row = $result->fetch_assoc()) {
+        // ✅ Status Mapping
         $status = strtolower($row['admin_action'] ?? 'pending');
 
-        // Company logo full URL
+        // ✅ Company logo full URL logic
         $company_logo = $row['company_logo'] ?? "";
         if (!empty($company_logo)) {
             $clean_logo = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $company_logo);
@@ -122,12 +123,12 @@ try {
     }
 
     /* =========================================================
-       ✅ Final Response WITH summary restored
+       ✅ Final Response
        ========================================================= */
     echo json_encode([
         "status" => true,
         "message" => "Employers retrieved successfully",
-        "summary" => $summary,                // 🔥 RESTORED EXACTLY LIKE OLD CODE
+        "summary" => $summary,
         "total_count" => count($employers),
         "data" => $employers,
         "meta" => [

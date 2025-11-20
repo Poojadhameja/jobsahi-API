@@ -1,6 +1,5 @@
 <?php
 require_once '../cors.php';
-require_once '../db.php';
 
 // ✅ Authenticate recruiter
 $decoded = authenticateJWT(['recruiter', 'admin']);
@@ -40,11 +39,9 @@ try {
             u.user_name AS candidate_name,
             j.title AS job_title,
             i.mode AS interview_mode,
-            i.platform_name,
-            i.interview_link,
             i.location AS interview_location,
             DATE_FORMAT(i.scheduled_at, '%h:%i %p') AS interview_time,
-            DATE(i.scheduled_at) AS interview_date
+DATE(i.scheduled_at) AS interview_date
         FROM interviews i
         INNER JOIN applications a ON a.id = i.application_id
         INNER JOIN jobs j ON j.id = a.job_id
@@ -65,11 +62,9 @@ try {
             "name" => $row['candidate_name'],
             "job_title" => $row['job_title'],
             "mode" => ucfirst($row['interview_mode']),
-            "location" => $row['interview_mode'] === 'offline' ? $row['interview_location'] : null,
-            "platform_name" => $row['interview_mode'] === 'online' ? $row['platform_name'] : null,
-            "interview_link" => $row['interview_mode'] === 'online' ? $row['interview_link'] : null,
+            "location" => $row['interview_location'],
             "time" => $row['interview_time'],
-            "scheduled_at" => $row['interview_date']
+             "scheduled_at" => $row['interview_date'] // ✅ added full date
         ];
         http_response_code(200);
         echo json_encode(["candidate_interview_details" => $data, "status" => true]);
