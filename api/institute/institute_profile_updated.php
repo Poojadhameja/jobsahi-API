@@ -1,4 +1,4 @@
-<?php
+<?php 
 require_once '../cors.php';
 require_once '../db.php';
 
@@ -15,11 +15,11 @@ try {
         exit;
     }
 
-    // ✅ Fetch institute profile id
-    $stmt = $conn->prepare("SELECT id, institute_logo FROM institute_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
+    // Fetch institute profile id
+    $stmt = $conn->prepare("SELECT id, institute_logo, institute_name FROM institute_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
-    $stmt->bind_result($profile_id, $old_logo);
+    $stmt->bind_result($profile_id, $old_logo, $old_institute_name);
     $stmt->fetch();
     $stmt->close();
 
@@ -33,9 +33,7 @@ try {
         exit;
     }
 
-    // ================================
-    // Upload Folder Setup
-    // ================================
+    // Upload Folder
     $upload_dir    = __DIR__ . '/../uploads/institute_logo/';
     $relative_path = '/uploads/institute_logo/';
     if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
@@ -44,20 +42,14 @@ try {
     $contentType   = $_SERVER["CONTENT_TYPE"] ?? '';
     $file_uploaded = false;
 
-    // --------------------------------------------------
-    // POST → multipart/form-data
-    // --------------------------------------------------
+    // POST
     if ($method === 'POST' && strpos($contentType, "multipart/form-data") !== false) {
         $input = $_POST;
     }
-
-    // --------------------------------------------------
-    // PUT → JSON OR multipart/form-data
-    // --------------------------------------------------
+    // PUT JSON + multipart parsing
     elseif ($method === 'PUT') {
         if (strpos($contentType, "multipart/form-data") !== false) {
 
-            // Parse multipart PUT body
             $raw_data = file_get_contents("php://input");
             $boundary = substr($contentType, strpos($contentType, "boundary=") + 9);
             $blocks   = preg_split("/-+$boundary/", $raw_data);
@@ -97,16 +89,15 @@ try {
                 }
             }
         } else {
-            // JSON
             $raw = file_get_contents("php://input");
             $json = json_decode($raw, true);
             if (json_last_error() === JSON_ERROR_NONE) $input = $json;
         }
     }
 
-    // =====================================================
-    // 🔥 LOGO UPLOAD (UPDATED WITH UNIQUE FILENAME)
-    // =====================================================
+    /* =====================================================
+       🔥 LOGO UPLOAD
+    ===================================================== */
     if (!empty($_FILES['institute_logo']['name'])) {
         $file = $_FILES['institute_logo'];
         $ext  = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
@@ -117,116 +108,101 @@ try {
             exit;
         }
 
-        // ⭐ NEW UNIQUE FILENAME (fix caching issue)
         $safe_name = 'logo_' . $user_id . '_' . time() . '.' . $ext;
         $file_path = $upload_dir . $safe_name;
 
-        // Upload file
         if (is_uploaded_file($file['tmp_name'])) {
             move_uploaded_file($file['tmp_name'], $file_path);
         } else {
             rename($file['tmp_name'], $file_path);
         }
 
-        // Delete old logo safely
         if (!empty($old_logo)) {
             $old_file = __DIR__ . '/../' . ltrim($old_logo, '/');
             if (file_exists($old_file)) unlink($old_file);
         }
 
-        // Save DB path
         $input['institute_logo'] = $relative_path . $safe_name;
         $file_uploaded = true;
     }
 
+    /* =====================================================
+       🔥 NEW RULE: user_name AND institute_name MUST MATCH
+    ===================================================== */
+
+    if (!empty($input['institute_name'])) {
+        $input['user_name'] = $input['institute_name'];   // auto sync
+    }
+
+    if (!empty($input['user_name'])) {
+        $input['institute_name'] = $input['user_name'];   // auto sync
+    }
+
     // ================================
-    // 🔥 NEW: UPDATE USERS TABLE
+    // UPDATE users table
     // ================================
     $user_updates = [];
     $user_vals    = [];
     $user_types   = '';
 
-    // Check if email or phone is being updated
     if (isset($input['email']) && !empty($input['email'])) {
-        // Validate email format
         if (!filter_var($input['email'], FILTER_VALIDATE_EMAIL)) {
             echo json_encode(["success" => false, "message" => "Invalid email format"]);
             exit;
         }
-        
-        // Check if email already exists for another user
+
         $check_email = $conn->prepare("SELECT id FROM users WHERE email = ? AND id != ? LIMIT 1");
         $check_email->bind_param("si", $input['email'], $user_id);
         $check_email->execute();
         $check_email->store_result();
-        
         if ($check_email->num_rows > 0) {
             echo json_encode(["success" => false, "message" => "Email already exists"]);
             exit;
         }
         $check_email->close();
-        
+
         $user_updates[] = "email = ?";
-        $user_vals[] = $input['email'];
-        $user_types .= 's';
+        $user_vals[]    = $input['email'];
+        $user_types    .= 's';
+    }
+
+    if (!empty($input['user_name'])) {
+        $user_updates[] = "user_name = ?";
+        $user_vals[]    = $input['user_name'];
+        $user_types    .= 's';
     }
 
     if (isset($input['phone_number']) && !empty($input['phone_number'])) {
-        // Validate phone number (basic validation)
-        if (!preg_match('/^[0-9]{10,15}$/', $input['phone_number'])) {
-            echo json_encode(["success" => false, "message" => "Invalid phone number format"]);
-            exit;
-        }
-        
-        // Check if phone already exists for another user
-        $check_phone = $conn->prepare("SELECT id FROM users WHERE phone_number = ? AND id != ? LIMIT 1");
-        $check_phone->bind_param("si", $input['phone_number'], $user_id);
-        $check_phone->execute();
-        $check_phone->store_result();
-        
-        if ($check_phone->num_rows > 0) {
-            echo json_encode(["success" => false, "message" => "Phone number already exists"]);
-            exit;
-        }
-        $check_phone->close();
-        
         $user_updates[] = "phone_number = ?";
-        $user_vals[] = $input['phone_number'];
-        $user_types .= 's';
+        $user_vals[]    = $input['phone_number'];
+        $user_types    .= 's';
     }
 
-    if (isset($input['user_name']) && !empty($input['user_name'])) {
-        $user_updates[] = "user_name = ?";
-        $user_vals[] = $input['user_name'];
-        $user_types .= 's';
-    }
-
-    // Execute users table update if needed
     if (!empty($user_updates)) {
         $user_updates[] = "updated_at = NOW()";
-        $user_sql = "UPDATE users SET " . implode(', ', $user_updates) . " WHERE id = ?";
+        $sql_user = "UPDATE users SET ".implode(', ', $user_updates)." WHERE id = ?";
         $user_vals[] = $user_id;
         $user_types .= 'i';
-        
-        $user_stmt = $conn->prepare($user_sql);
-        $user_stmt->bind_param($user_types, ...$user_vals);
-        $user_stmt->execute();
-        $user_stmt->close();
+
+        $stmt = $conn->prepare($sql_user);
+        $stmt->bind_param($user_types, ...$user_vals);
+        $stmt->execute();
+        $stmt->close();
     }
 
-    // Allowed Fields for institute_profiles table
+    /* ================================
+       UPDATE institute_profiles
+    ================================ */
     $allowed_fields = [
         'institute_name', 'registration_number', 'institute_logo',
-        'institute_type', 'website', 'description', 'address',
-        'postal_code', 'contact_person', 'contact_designation',
+        'institute_type', 'website', 'description', 
+        'address', 'postal_code',
+        'contact_person', 'contact_designation',
         'accreditation', 'established_year'
     ];
 
     if ($user_role === 'admin') $allowed_fields[] = 'admin_action';
 
-    // ================================
-    // UPDATE operation
-    // ================================
     if ($method === 'PUT') {
         $updates = [];
         $vals    = [];
@@ -242,22 +218,22 @@ try {
 
         if (!empty($updates)) {
             $updates[] = "modified_at = NOW()";
-            $sql = "UPDATE institute_profiles SET ".implode(', ', $updates)." WHERE id = ? AND user_id = ?";
-            $vals[]  = $profile_id;
-            $vals[]  = $user_id;
-            $types  .= 'ii';
+            $sql = "UPDATE institute_profiles SET ".implode(', ', $updates)." 
+                    WHERE id = ? AND user_id = ?";
+            $vals[] = $profile_id;
+            $vals[] = $user_id;
+            $types .= 'ii';
 
             $stmt = $conn->prepare($sql);
             $stmt->bind_param($types, ...$vals);
             $stmt->execute();
             $stmt->close();
         }
-
     }
 
-    // ================================
-    // FETCH UPDATED PROFILE
-    // ================================
+    /* ================================
+       Fetch updated profile
+    ================================ */
     $fetch = $conn->prepare("SELECT p.*, u.email, u.user_name, u.phone_number 
                              FROM institute_profiles p
                              INNER JOIN users u ON p.user_id = u.id
@@ -267,9 +243,6 @@ try {
     $profile = $fetch->get_result()->fetch_assoc();
     $fetch->close();
 
-    // ================================
-    // ⭐ FULL URL FOR LOGO
-    // ================================
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
     $host     = $_SERVER['HTTP_HOST'];
 
@@ -277,9 +250,6 @@ try {
         ? $protocol . $host . "/jobsahi-API/api" . $profile['institute_logo']
         : null;
 
-    // ================================
-    // RESPONSE
-    // ================================
     echo json_encode([
         "success" => true,
         "message" => "Institute profile updated successfully",
