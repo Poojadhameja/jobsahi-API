@@ -285,9 +285,8 @@ if ($social_links_input !== null) {
 // ✅ Convert projects to JSON
 if (is_array($projects)) $projects = json_encode($projects, JSON_UNESCAPED_UNICODE);
 
-// ✅ Start transaction
+// ✅ Begin transaction
 mysqli_autocommit($conn, false);
-
 $update_success = true;
 $error_message = "";
 
@@ -356,7 +355,7 @@ if (!$stmt) {
     mysqli_stmt_close($stmt);
 }
 
-// ✅ Update users table (email/user_name/phone)
+// ✅ Update user details if provided
 if ($update_success && ($email !== null || $user_name !== null || $phone_number !== null)) {
     $user_id_query = "SELECT user_id FROM student_profiles WHERE id = ? AND deleted_at IS NULL";
     $user_stmt = mysqli_prepare($conn, $user_id_query);
@@ -401,7 +400,7 @@ if ($update_success && ($email !== null || $user_name !== null || $phone_number 
     }
 }
 
-// ✅ Commit or rollback transaction
+// ✅ Commit or rollback
 if ($update_success) {
     mysqli_commit($conn);
     echo json_encode([
@@ -409,8 +408,8 @@ if ($update_success) {
         "message" => "Student profile updated successfully",
         "data" => [
             "profile_updated_id" => $student_id,
-            "profile_updated_by_id" => $user_id, // ✅ NEW
-            "profile_updated" => true,           // ✅ NEW
+            "profile_updated_by_id" => $user_id,
+            "profile_updated" => true,
             "updated_by" => $user_role,
             "updated_fields" => [
                 "student_profile" => true,
@@ -429,7 +428,7 @@ if ($update_success) {
         "message" => "Update failed: " . $error_message,
         "data" => [
             "profile_updated" => false,
-            "profile_updated_by_id" => $user_id, // ✅ NEW
+            "profile_updated_by_id" => $user_id,
             "error_details" => $error_message,
             "profile_id" => $student_id
         ],
@@ -440,8 +439,6 @@ if ($update_success) {
     ], JSON_PRETTY_PRINT);
 }
 
-// ✅ Restore autocommit
 mysqli_autocommit($conn, true);
-
 mysqli_close($conn);
 ?>

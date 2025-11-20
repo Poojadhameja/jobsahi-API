@@ -86,23 +86,26 @@ try {
     $stmt->execute();
     $total_batches = intval($stmt->get_result()->fetch_assoc()['total_batches'] ?? 0);
 
-    // ---------------------------------------------------
-    // 5️⃣ Student Completion by Course (Bar Chart)
-    // ---------------------------------------------------
-    $sql = "
-        SELECT 
-            c.title AS course_name,
-            SUM(CASE WHEN sce.status = 'completed' THEN 1 ELSE 0 END) AS completed_students
-        FROM student_course_enrollments sce
-        JOIN courses c ON sce.course_id = c.id
-        WHERE c.institute_id = ?
-        GROUP BY c.id
-        ORDER BY c.title ASC
-    ";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $institute_id);
-    $stmt->execute();
-    $student_completion_chart = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    // 5️⃣ Student Enrollment by Course (Bar Chart) - Only courses with enrolled students
+$sql = "
+    SELECT 
+        c.title AS course_name,
+        COUNT(sce.id) AS enrolled_students
+    FROM student_course_enrollments sce
+    JOIN courses c ON c.id = sce.course_id
+    WHERE c.institute_id = ?
+        AND c.status = 'active'
+        AND c.admin_action = 'approved'
+    GROUP BY c.id
+    HAVING enrolled_students > 0
+    ORDER BY c.created_at DESC
+    LIMIT 6
+";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("i", $institute_id);
+$stmt->execute();
+$student_completion_chart = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
 
     // ---------------------------------------------------
     // 6️⃣ Course Popularity (Pie Chart with Name)

@@ -15,7 +15,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 // ✅ Build SQL based on role
 if ($user_role === 'admin') {
-    // Admin can view all profiles (pending + approved)
     $sql = "SELECT 
                 sp.id, 
                 sp.user_id, 
@@ -51,7 +50,6 @@ if ($user_role === 'admin') {
             WHERE sp.deleted_at IS NULL 
             ORDER BY sp.created_at DESC";
 } else {
-    // Student can only view their own approved profile
     $sql = "SELECT 
                 sp.id, 
                 sp.user_id, 
@@ -93,6 +91,13 @@ $result = mysqli_query($conn, $sql);
 $students = [];
 
 if ($result && mysqli_num_rows($result) > 0) {
+
+    // ✅ Base URL setup
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+    $host = $_SERVER['HTTP_HOST'];
+    $resume_base = '/jobsahi-API/api/uploads/resume/';
+    $cert_base   = '/jobsahi-API/api/uploads/student_certificate/';
+
     while ($student = mysqli_fetch_assoc($result)) {
 
         // ✅ Decode Experience - Multiple experiences array
@@ -135,10 +140,8 @@ if ($result && mysqli_num_rows($result) > 0) {
         if (!empty($student['projects'])) {
             $decodedProjects = json_decode($student['projects'], true);
             if (json_last_error() === JSON_ERROR_NONE && is_array($decodedProjects)) {
-                // ✅ Projects array (e.g. [{name:"",link:""}])
                 $projectsData = $decodedProjects;
             } else {
-                // fallback if plain string
                 $projectsData = [["name" => $student['projects'], "link" => ""]];
             }
         }
@@ -231,7 +234,7 @@ if ($result && mysqli_num_rows($result) > 0) {
             }
         }
 
-        // ✅ Format structured response
+        // ✅ Structured formatted response
         $formattedStudent = [
             "profile_id" => intval($student['id']),
             "user_id" => intval($student['user_id']),

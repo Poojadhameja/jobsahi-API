@@ -128,12 +128,27 @@ try {
     $stmt_all->execute();
     $result_all = $stmt_all->get_result();
 
+    // ✅ Base URL setup for resumes
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+    $host = $_SERVER['HTTP_HOST'];
+    $resume_folder = '/jobsahi-API/api/uploads/resume/';
+
     $all_applicants = [];
     while ($row = $result_all->fetch_assoc()) {
         $skills = [];
         if (!empty($row['skills'])) {
             $decoded = json_decode($row['skills'], true);
             $skills = is_array($decoded) ? $decoded : explode(',', $row['skills']);
+        }
+
+        // ✅ Resume full URL builder
+        $resume_url = null;
+        if (!empty($row['resume'])) {
+            $clean_resume = str_replace(["\\", "/uploads/resume/", "./", "../"], "", $row['resume']);
+            $resume_local = __DIR__ . '/../uploads/resume/' . $clean_resume;
+            if (file_exists($resume_local)) {
+                $resume_url = $protocol . $host . $resume_folder . $clean_resume;
+            }
         }
 
         $all_applicants[] = [
@@ -153,7 +168,7 @@ try {
             "job_type"       => ucfirst($row['job_type']),
             "bio"            => $row['bio'] ?: "—",
             "applied_date"   => $row['applied_date'] ?: null,
-            "resume_url"     => $row['resume'] ?: null,
+            "resume_url"     => $resume_url, // ✅ Full URL
             "portfolio_link" => $row['portfolio_link'] ?: null,
             "cover_letter"   => $row['cover_letter'] ?: "—"
         ];

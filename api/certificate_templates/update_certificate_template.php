@@ -3,133 +3,233 @@
 require_once '../cors.php';
 require_once '../db.php';
 
-// ✅ Allow PUT as well as POST
+// -------------------------------------------------------------
+// ALLOW POST + PUT
+// -------------------------------------------------------------
 $method = $_SERVER['REQUEST_METHOD'];
 if (!in_array($method, ['PUT', 'POST'])) {
     echo json_encode(["status" => false, "message" => "Invalid request method"]);
-    exit();
+    exit;
 }
 
-// ✅ Authenticate JWT (admin or institute)
-$decoded = authenticateJWT(['admin', 'institute']);
+// -------------------------------------------------------------
+// AUTHENTICATE USER
+// -------------------------------------------------------------
+$decoded   = authenticateJWT(['admin', 'institute']);
 $user_role = strtolower($decoded['role'] ?? '');
 $user_id   = intval($decoded['user_id'] ?? 0);
 
-// ✅ Identify institute_id
+// -------------------------------------------------------------
+// FETCH INSTITUTE ID
+// -------------------------------------------------------------
 $institute_id = 0;
+
 if ($user_role === 'institute') {
-    $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ?");
+    $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
     $res = $stmt->get_result();
+
     if ($res->num_rows > 0) {
         $institute_id = intval($res->fetch_assoc()['id']);
     } else {
         echo json_encode(["status" => false, "message" => "Institute profile not found"]);
-        exit();
+        exit;
     }
+    $stmt->close();
+
 } elseif ($user_role === 'admin') {
-    $institute_id = intval($_POST['institute_id'] ?? 0);
-    if ($institute_id <= 0) {
-        echo json_encode(["status" => false, "message" => "Institute ID required for admin"]);
-        exit();
+
+    // For admin → get institute_id from body (not URL)
+    if ($method === "POST") {
+        $institute_id = intval($_POST['institute_id'] ?? 0);
     }
 }
 
-// ✅ Validate template_id
-$template_id = isset($_GET['template_id']) ? intval($_GET['template_id']) : 0;
-if ($template_id <= 0) {
-    echo json_encode(["status" => false, "message" => "Missing or invalid template_id"]);
-    exit();
+// -------------------------------------------------------------
+// INPUT PARSING (same system as recruiter API)
+// -------------------------------------------------------------
+$input = [];
+$contentType = $_SERVER["CONTENT_TYPE"] ?? "";
+
+// POST (multipart)
+if ($method === "POST" && strpos($contentType, "multipart/form-data") !== false) {
+    $input = $_POST;
 }
 
-// ✅ Fetch existing record
-$stmt = $conn->prepare("SELECT * FROM certificate_templates WHERE id = ? AND institute_id = ?");
+// PUT (multipart)
+elseif ($method === "PUT" && strpos($contentType, "multipart/form-data") !== false) {
+
+    $raw = file_get_contents("php://input");
+    $boundary = substr($contentType, strpos($contentType, "boundary=") + 9);
+    $blocks = preg_split("/-+$boundary/", $raw);
+    array_pop($blocks);
+
+    foreach ($blocks as $block) {
+        if (empty(trim($block))) continue;
+
+        // FILE field
+        if (strpos($block, 'filename=') !== false) {
+            preg_match('/name="([^"]*)"; filename="([^"]*)"/', $block, $m);
+            if (!isset($m[1]) || !isset($m[2])) continue;
+
+            $name = $m[1];
+            $filename = $m[2];
+
+            preg_match("/Content-Type: (.*)\r\n\r\n/", $block, $typeMatch);
+            $mime = trim($typeMatch[1] ?? 'application/octet-stream');
+
+            $fileContent = substr($block, strpos($block, "\r\n\r\n") + 4);
+            $fileContent = rtrim($fileContent, "\r\n");
+
+            $tempFile = tempnam(sys_get_temp_dir(), 'php');
+            file_put_contents($tempFile, $fileContent);
+
+            $_FILES[$name] = [
+                'name' => $filename,
+                'type' => $mime,
+                'tmp_name' => $tempFile,
+                'error' => 0,
+                'size' => strlen($fileContent)
+            ];
+        }
+
+        // NORMAL text fields
+        elseif (preg_match('/name="([^"]*)"\r\n\r\n(.*)\r\n/', $block, $m)) {
+            $input[$m[1]] = trim($m[2]);
+        }
+    }
+
+// PUT JSON
+} elseif ($method === "PUT") {
+    $raw = file_get_contents("php://input");
+    $json = json_decode($raw, true);
+    if (json_last_error() === JSON_ERROR_NONE) $input = $json;
+}
+
+// -------------------------------------------------------------
+// TEMPLATE ID (comes from body now, not URL)
+// -------------------------------------------------------------
+$template_id = intval($input['template_id'] ?? 0);
+
+if ($template_id <= 0) {
+    echo json_encode(["status" => false, "message" => "template_id required"]);
+    exit;
+}
+
+// -------------------------------------------------------------
+// Fetch Existing Template
+// -------------------------------------------------------------
+$stmt = $conn->prepare("SELECT * FROM certificate_templates WHERE id = ? AND institute_id = ? LIMIT 1");
 $stmt->bind_param("ii", $template_id, $institute_id);
 $stmt->execute();
 $existing = $stmt->get_result()->fetch_assoc();
+$stmt->close();
 
 if (!$existing) {
-    echo json_encode(["status" => false, "message" => "Template not found or unauthorized"]);
-    exit();
+    echo json_encode(["status" => false, "message" => "Template not found"]);
+    exit;
 }
 
-// ✅ Parse form data (from PUT or POST)
-parse_str(file_get_contents("php://input"), $_PUT);
-$data = array_merge($_POST, $_PUT);
+// -------------------------------------------------------------
+// BASIC FIELDS
+// -------------------------------------------------------------
+$template_name = trim($input['template_name'] ?? $existing['template_name']);
+$description   = trim($input['description'] ?? $existing['description']);
+$is_active     = intval($input['is_active'] ?? $existing['is_active']);
+$admin_action  = trim($input['admin_action'] ?? $existing['admin_action']);
 
-// ✅ Extract fields safely
-$template_name  = trim($data['template_name'] ?? $existing['template_name']);
-$header_text    = trim($data['header_text'] ?? $existing['header_text']);
-$footer_text    = trim($data['footer_text'] ?? $existing['footer_text']);
-$is_active      = trim($data['is_active'] ?? $existing['is_active']);
-$admin_action   = trim($data['admin_action'] ?? $existing['admin_action']);
-
-// ✅ File upload + URL update logic
-$uploadDir = "../uploads/institute_certificate_templates/";
+// -------------------------------------------------------------
+// MEDIA UPLOAD (SAME LOGIC AS BEFORE – ONLY PARSING UPDATED)
+// -------------------------------------------------------------
+$uploadDir     = __DIR__ . '/../uploads/institute_certificate_templates/';
+$relative_path = '/uploads/institute_certificate_templates/';
 if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
 
-$fileFields = ['logo_url', 'seal_url', 'signature_url', 'background_image_url'];
-$updatedUrls = [];
+$allowed = ['jpg', 'jpeg', 'png', 'webp'];
+$fields  = ['logo', 'seal', 'signature'];
 
-foreach ($fileFields as $field) {
-    if (isset($_FILES[$field]['name']) && !empty($_FILES[$field]['name'])) {
-        // 🔹 If new file uploaded
-        $filename = $field . '_' . time() . '.' . pathinfo($_FILES[$field]['name'], PATHINFO_EXTENSION);
-        $destination = $uploadDir . $filename;
-        if (move_uploaded_file($_FILES[$field]['tmp_name'], $destination)) {
-            $updatedUrls[$field] = "/uploads/institute_certificate_templates/" . $filename;
-        } else {
-            $updatedUrls[$field] = $existing[$field];
+$updated = [];
+
+// Delete helper
+function deleteOld($path) {
+    if ($path && file_exists(__DIR__ . '/..' . $path)) unlink(__DIR__ . '/..' . $path);
+}
+
+foreach ($fields as $f) {
+
+    if (!empty($_FILES[$f]['name'])) {
+
+        $ext = strtolower(pathinfo($_FILES[$f]['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, $allowed)) {
+            echo json_encode(["status" => false, "message" => "Invalid file for $f"]);
+            exit;
         }
-    } elseif (!empty($data[$field])) {
-        // 🔹 If URL passed manually in JSON
-        $updatedUrls[$field] = trim($data[$field]);
+
+        // Use original naming system
+        $fileName = "certificate_{$institute_id}_{$f}." . $ext;
+
+        // Delete old
+        deleteOld($existing[$f]);
+
+        // Save new
+        move_uploaded_file($_FILES[$f]['tmp_name'], $uploadDir . $fileName);
+
+        $updated[$f] = $relative_path . $fileName;
+
     } else {
-        // 🔹 Keep old file if nothing passed
-        $updatedUrls[$field] = $existing[$field];
+        $updated[$f] = $existing[$f];
     }
 }
 
-// ✅ Update database
+// -------------------------------------------------------------
+// UPDATE QUERY
+// -------------------------------------------------------------
 $stmt = $conn->prepare("
     UPDATE certificate_templates 
-    SET template_name=?, header_text=?, footer_text=?, is_active=?, admin_action=?,
-        logo_url=?, seal_url=?, signature_url=?, background_image_url=?,
+    SET 
+        template_name = ?, 
+        logo = ?, 
+        seal = ?, 
+        signature = ?, 
+        description = ?, 
+        is_active = ?, 
+        admin_action = ?, 
         modified_at = NOW()
-    WHERE id=? AND institute_id=?
+    WHERE id = ? AND institute_id = ?
 ");
 
 $stmt->bind_param(
-    "sssssssssii", // ✅ 9 strings + 2 integers (fixed count)
+    "sssssisii",
     $template_name,
-    $header_text,
-    $footer_text,
+    $updated['logo'],
+    $updated['seal'],
+    $updated['signature'],
+    $description,
     $is_active,
     $admin_action,
-    $updatedUrls['logo_url'],
-    $updatedUrls['seal_url'],
-    $updatedUrls['signature_url'],
-    $updatedUrls['background_image_url'],
     $template_id,
     $institute_id
 );
 
-if ($stmt->execute()) {
-    echo json_encode([
-        "status" => true,
-        "message" => "Certificate template updated successfully",
-        "template_id" => $template_id,
-        "institute_id" => $institute_id,
-        "logo_url" => $updatedUrls['logo_url'],
-        "seal_url" => $updatedUrls['seal_url'],
-        "signature_url" => $updatedUrls['signature_url'],
-        "background_image_url" => $updatedUrls['background_image_url']
-    ]);
-} else {
-    echo json_encode([
-        "status" => false,
-        "message" => "Database update failed: " . $stmt->error
-    ]);
-}
+$stmt->execute();
+
+// -------------------------------------------------------------
+// RESPONSE
+// -------------------------------------------------------------
+echo json_encode([
+    "status"        => true,
+    "message"       => "Certificate template updated successfully",
+    "template_id"   => $template_id,
+    "institute_id"  => $institute_id,
+    "template_name" => $template_name,
+    "description"   => $description,
+    "is_active"     => (bool)$is_active,
+    "admin_action"  => $admin_action,
+    "logo_url"      => $updated['logo'],
+    "seal_url"      => $updated['seal'],
+    "signature_url" => $updated['signature']
+]);
+
+$conn->close();
 ?>

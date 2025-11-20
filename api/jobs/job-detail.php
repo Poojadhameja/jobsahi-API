@@ -131,13 +131,26 @@ if (mysqli_num_rows($result) === 0) {
 $job = mysqli_fetch_assoc($result);
 mysqli_stmt_close($stmt);
 
+// ✅ Add full URL for company_logo
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+$host = $_SERVER['HTTP_HOST'];
+$logo_base = '/jobsahi-API/api/uploads/recruiter_logo/';
+
+if (!empty($job['company_logo'])) {
+    $clean_logo = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $job['company_logo']);
+    $logo_local = __DIR__ . '/../uploads/recruiter_logo/' . $clean_logo;
+    if (file_exists($logo_local)) {
+        $job['company_logo'] = $protocol . $host . $logo_base . $clean_logo;
+    }
+}
+
 // ✅ Format Response
 $formatted_job = [
     'job_info' => [
         'id' => intval($job['id']),
         'title' => $job['title'],
         'category_id' => intval($job['category_id']),
-        'category_name' => $job['category_name'] ?? '', // ✅ Added category name
+        'category_name' => $job['category_name'] ?? '',
         'description' => $job['description'],
         'location' => $job['location'],
         'skills_required' => !empty($job['skills_required']) ? array_map('trim', explode(',', $job['skills_required'])) : [],
@@ -152,7 +165,6 @@ $formatted_job = [
         'admin_action' => $job['admin_action'],
         'created_at' => $job['created_at'],
 
-        // ✅ Newly added contact info
         'person_name' => $job['person_name'] ?? '',
         'phone' => $job['phone'] ?? '',
         'additional_contact' => $job['additional_contact'] ?? '',
@@ -164,7 +176,7 @@ $formatted_job = [
     'company_info' => [
         'recruiter_id' => intval($job['recruiter_id']),
         'company_name' => $job['company_name'],
-        'company_logo' => $job['company_logo'],
+        'company_logo' => $job['company_logo'], // ✅ Now full URL
         'industry' => $job['industry'],
         'website' => $job['website'],
         'location' => $job['company_location']

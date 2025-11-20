@@ -27,11 +27,9 @@ try {
         $student_id = intval($result_sid->fetch_assoc()['id']);
     } 
     elseif ($user_role === 'admin' && isset($_GET['student_id'])) {
-        // Admin can view any student by query param
         $student_id = intval($_GET['student_id']);
     } 
     elseif ($user_role === 'institute' && isset($_GET['student_id'])) {
-        // Institute can view specific student
         $student_id = intval($_GET['student_id']);
     } 
     else {
@@ -80,6 +78,28 @@ try {
 
     $student = $student_result->fetch_assoc();
 
+    // ✅ Add resume and certificates full URLs
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+    $host = $_SERVER['HTTP_HOST'];
+    $resume_base = '/jobsahi-API/api/uploads/resume/';
+    $cert_base   = '/jobsahi-API/api/uploads/student_certificate/';
+
+    if (!empty($student['resume'])) {
+        $clean_resume = str_replace(["\\", "/uploads/resume/", "./", "../"], "", $student['resume']);
+        $resume_local = __DIR__ . '/../uploads/resume/' . $clean_resume;
+        if (file_exists($resume_local)) {
+            $student['resume'] = $protocol . $host . $resume_base . $clean_resume;
+        }
+    }
+
+    if (!empty($student['certificates'])) {
+        $clean_cert = str_replace(["\\", "/uploads/student_certificate/", "./", "../"], "", $student['certificates']);
+        $cert_local = __DIR__ . '/../uploads/student_certificate/' . $clean_cert;
+        if (file_exists($cert_local)) {
+            $student['certificates'] = $protocol . $host . $cert_base . $clean_cert;
+        }
+    }
+
     // ✅ Decode experience JSON properly
     $expDecoded = json_decode($student['experience'], true);
     if (json_last_error() !== JSON_ERROR_NONE || !is_array($expDecoded)) {
@@ -115,7 +135,6 @@ try {
         LIMIT 1
     ";
 
-    // Non-admins can only see approved enrollments/courses
     if ($user_role !== 'admin') {
         $sql_enroll = str_replace(
             "WHERE e.student_id = ?",

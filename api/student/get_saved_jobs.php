@@ -3,7 +3,7 @@
 require_once '../cors.php';
 
 // ✅ Authenticate JWT (only student can access)
-$decoded = authenticateJWT('student'); 
+$decoded = authenticateJWT('student');
 
 // Handle different key names from JWT payload safely
 $user_id = null;
@@ -32,7 +32,7 @@ $student_result = mysqli_stmt_get_result($check_student_stmt);
 
 if (mysqli_num_rows($student_result) === 0) {
     echo json_encode([
-        "message" => "Student profile not found. Please complete your profile.", 
+        "message" => "Student profile not found. Please complete your profile.",
         "status" => false,
         "user_id" => $user_id
     ]);
@@ -60,7 +60,7 @@ $offset = isset($_GET['offset']) ? intval($_GET['offset']) : 0;
 $limit = max(1, min(100, $limit)); // Limit between 1-100
 $offset = max(0, $offset);
 
-// Get saved jobs with job details from saved_jobs table
+// ✅ Main Query
 $sql = "SELECT 
             j.id,
             j.title,
@@ -101,8 +101,23 @@ mysqli_stmt_bind_param($stmt, "iii", $student_id, $limit, $offset);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 
+// ✅ Setup base URL for company logos
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+$host = $_SERVER['HTTP_HOST'];
+$logo_base = '/jobsahi-API/api/uploads/recruiter_logo/';
+
 $saved_jobs = [];
 while ($row = mysqli_fetch_assoc($result)) {
+    // ✅ Clean and convert company_logo to full URL (if exists)
+    $company_logo = $row['company_logo'] ?? "";
+    if (!empty($company_logo)) {
+        $clean_logo = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $company_logo);
+        $local_logo_path = __DIR__ . '/../uploads/recruiter_logo/' . $clean_logo;
+        if (file_exists($local_logo_path)) {
+            $company_logo = $protocol . $host . $logo_base . $clean_logo;
+        }
+    }
+
     $saved_jobs[] = [
         'saved_job_id' => intval($row['saved_job_id']),
         'job_id' => intval($row['id']),
@@ -122,7 +137,7 @@ while ($row = mysqli_fetch_assoc($result)) {
         'saved_at' => $row['saved_at'],
         'company' => [
             'company_name' => $row['company_name'],
-            'company_logo' => $row['company_logo'],
+            'company_logo' => $company_logo, // ✅ Full URL version
             'industry' => $row['industry'],
             'website' => $row['website']
         ]
@@ -131,7 +146,7 @@ while ($row = mysqli_fetch_assoc($result)) {
 
 mysqli_stmt_close($stmt);
 
-// Get total count for pagination
+// ✅ Count total for pagination
 $count_sql = "SELECT COUNT(*) as total 
               FROM saved_jobs sj
               INNER JOIN jobs j ON sj.job_id = j.id
@@ -147,6 +162,7 @@ mysqli_stmt_close($count_stmt);
 
 mysqli_close($conn);
 
+// ✅ Final JSON Response (unchanged)
 echo json_encode([
     "message" => "Saved jobs retrieved successfully",
     "status" => true,

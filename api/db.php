@@ -11,8 +11,8 @@ $BASE_DIR = dirname(__DIR__);
 
 $dbHost = 'localhost'; // Hostinger uses localhost for shared hosting
 $dbPort = '3306';
-$dbName = 'u829931622_jobsahi_data';
-$dbUser = 'u829931622_jobsahi_data';
+$dbName = 'u829931622_jobsahi_db';
+$dbUser = 'u829931622_jobsahi_db';
 $dbPass = 'Jobsahi1@';
 
 $dsn = "mysql:host={$dbHost};port={$dbPort};dbname={$dbName};charset=utf8mb4";
