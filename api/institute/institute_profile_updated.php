@@ -139,7 +139,82 @@ try {
         $file_uploaded = true;
     }
 
-    // Allowed Fields
+    // ================================
+    // 🔥 NEW: UPDATE USERS TABLE
+    // ================================
+    $user_updates = [];
+    $user_vals    = [];
+    $user_types   = '';
+
+    // Check if email or phone is being updated
+    if (isset($input['email']) && !empty($input['email'])) {
+        // Validate email format
+        if (!filter_var($input['email'], FILTER_VALIDATE_EMAIL)) {
+            echo json_encode(["success" => false, "message" => "Invalid email format"]);
+            exit;
+        }
+        
+        // Check if email already exists for another user
+        $check_email = $conn->prepare("SELECT id FROM users WHERE email = ? AND id != ? LIMIT 1");
+        $check_email->bind_param("si", $input['email'], $user_id);
+        $check_email->execute();
+        $check_email->store_result();
+        
+        if ($check_email->num_rows > 0) {
+            echo json_encode(["success" => false, "message" => "Email already exists"]);
+            exit;
+        }
+        $check_email->close();
+        
+        $user_updates[] = "email = ?";
+        $user_vals[] = $input['email'];
+        $user_types .= 's';
+    }
+
+    if (isset($input['phone_number']) && !empty($input['phone_number'])) {
+        // Validate phone number (basic validation)
+        if (!preg_match('/^[0-9]{10,15}$/', $input['phone_number'])) {
+            echo json_encode(["success" => false, "message" => "Invalid phone number format"]);
+            exit;
+        }
+        
+        // Check if phone already exists for another user
+        $check_phone = $conn->prepare("SELECT id FROM users WHERE phone_number = ? AND id != ? LIMIT 1");
+        $check_phone->bind_param("si", $input['phone_number'], $user_id);
+        $check_phone->execute();
+        $check_phone->store_result();
+        
+        if ($check_phone->num_rows > 0) {
+            echo json_encode(["success" => false, "message" => "Phone number already exists"]);
+            exit;
+        }
+        $check_phone->close();
+        
+        $user_updates[] = "phone_number = ?";
+        $user_vals[] = $input['phone_number'];
+        $user_types .= 's';
+    }
+
+    if (isset($input['user_name']) && !empty($input['user_name'])) {
+        $user_updates[] = "user_name = ?";
+        $user_vals[] = $input['user_name'];
+        $user_types .= 's';
+    }
+
+    // Execute users table update if needed
+    if (!empty($user_updates)) {
+        $user_updates[] = "updated_at = NOW()";
+        $user_sql = "UPDATE users SET " . implode(', ', $user_updates) . " WHERE id = ?";
+        $user_vals[] = $user_id;
+        $user_types .= 'i';
+        
+        $user_stmt = $conn->prepare($user_sql);
+        $user_stmt->bind_param($user_types, ...$user_vals);
+        $user_stmt->execute();
+        $user_stmt->close();
+    }
+
+    // Allowed Fields for institute_profiles table
     $allowed_fields = [
         'institute_name', 'registration_number', 'institute_logo',
         'institute_type', 'website', 'description', 'address',
@@ -175,6 +250,7 @@ try {
             $stmt = $conn->prepare($sql);
             $stmt->bind_param($types, ...$vals);
             $stmt->execute();
+            $stmt->close();
         }
 
     }
