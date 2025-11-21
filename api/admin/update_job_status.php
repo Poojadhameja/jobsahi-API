@@ -43,11 +43,26 @@ try {
     if ($stmt->execute()) {
         if ($stmt->affected_rows > 0) {
             // Return updated job details
-            $selectStmt = $conn->prepare("SELECT id as job_id, admin_action FROM jobs WHERE id = ?");
+            $selectStmt = $conn->prepare("SELECT id as job_id, admin_action, title, location FROM jobs WHERE id = ?");
             $selectStmt->bind_param("i", $job_id);
             $selectStmt->execute();
             $result = $selectStmt->get_result();
             $updatedJob = $result->fetch_assoc();
+
+            // ✅ Send notification to all students when job is approved
+            if ($admin_action === 'approved') {
+                require_once '../helpers/notification_helper.php';
+                $notification_result = NotificationHelper::notifyNewJobPosted(
+                    $updatedJob['title'],
+                    $updatedJob['job_id'],
+                    $updatedJob['location'] ?? ''
+                );
+                
+                // Log notification result (optional)
+                if (!$notification_result['success']) {
+                    error_log("Failed to send new job notification: " . $notification_result['message']);
+                }
+            }
 
             echo json_encode([
                 "status" => true,

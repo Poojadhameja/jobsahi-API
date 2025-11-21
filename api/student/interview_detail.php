@@ -2,7 +2,7 @@
 // interview_detail.php - Get Interview by ID with Panel (with admin_action logic)
 require_once '../cors.php';
 
-// ✅ Authenticate (allow all roles but restrict visibility later)
+// ✅ Authenticate (only admin and student allowed)
 $decoded = authenticateJWT(['admin', 'student']);  
 $user_role = strtolower($decoded['role']);  // role from JWT payload
 
@@ -31,7 +31,7 @@ if ($interview_id <= 0) {
  Role-based Filtering Logic
 ===================================================
 - Admin  → can see all interviews (pending/approved/rejected)
-- Recruiter, Institute, Student → only see interviews with admin_action = 'approved'
+- Student → only see own interviews with admin_action = 'approved'
 ===================================================
 */
 

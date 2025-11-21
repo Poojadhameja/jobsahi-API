@@ -33,13 +33,15 @@ $DB_PASS = $_ENV['DB_PASSWORD'] ?? '';
 
 echo "📦 DB: $DB_NAME @ $DB_HOST:$DB_PORT\n";
 
-// ✅ SQL dump
+// ✅ SQL dump (optional - only used if file exists)
 $SQL_FILE = __DIR__ . '/sql/database.sql';
-if (!file_exists($SQL_FILE)) {
-    echo "❌ SQL file not found: $SQL_FILE\n";
-    exit(1);
+$shouldRecreateDB = file_exists($SQL_FILE);
+
+if ($shouldRecreateDB) {
+    echo "✅ SQL file found: $SQL_FILE (will recreate database)\n";
+} else {
+    echo "⚠️  SQL file not found: $SQL_FILE (skipping database recreation, using existing DB)\n";
 }
-echo "✅ SQL file found: $SQL_FILE\n";
 
 // ✅ connect to MySQL
 try {
@@ -48,23 +50,28 @@ try {
     ]);
     echo "✅ MySQL connected.\n";
 
-    // drop + recreate DB
-    $pdo->exec("DROP DATABASE IF EXISTS `$DB_NAME`");
-    $pdo->exec("CREATE DATABASE `$DB_NAME` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci");
-    $pdo->exec("USE `$DB_NAME`");
-    echo "✅ Database recreated.\n";
+    // Only drop + recreate DB if SQL file exists
+    if ($shouldRecreateDB) {
+        $pdo->exec("DROP DATABASE IF EXISTS `$DB_NAME`");
+        $pdo->exec("CREATE DATABASE `$DB_NAME` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci");
+        echo "✅ Database recreated.\n";
 
-    // run SQL
-    // run SQL safely with foreign key checks disabled
-    $sql = file_get_contents($SQL_FILE);
-
-    try {
-        $pdo->exec("SET FOREIGN_KEY_CHECKS=0;");
-        $pdo->exec($sql);
-        $pdo->exec("SET FOREIGN_KEY_CHECKS=1;");
-        echo "🎉 Migration completed successfully!\n";
-    } catch (Throwable $err) {
-        echo "❌ SQL Error: " . $err->getMessage() . "\n";
+        // run SQL dump
+        $sql = file_get_contents($SQL_FILE);
+        $pdo->exec("USE `$DB_NAME`");
+        
+        try {
+            $pdo->exec("SET FOREIGN_KEY_CHECKS=0;");
+            $pdo->exec($sql);
+            $pdo->exec("SET FOREIGN_KEY_CHECKS=1;");
+            echo "✅ Database dump imported successfully!\n";
+        } catch (Throwable $err) {
+            echo "❌ SQL Error: " . $err->getMessage() . "\n";
+        }
+    } else {
+        // Connect to existing database
+        $pdo->exec("USE `$DB_NAME`");
+        echo "✅ Connected to existing database.\n";
     }
 } catch (Throwable $e) {
     echo "❌ ERROR: " . $e->getMessage() . "\n";
@@ -90,10 +97,21 @@ function run_sql_file(PDO $pdo, string $file) {
   $pdo->beginTransaction();
   try {
     $pdo->exec($sql);
-    $pdo->commit();
+    // Check if still in transaction (DDL statements auto-commit in MySQL)
+    if ($pdo->inTransaction()) {
+      $pdo->commit();
+    }
     echo "✅ ".basename($file)."\n";
   } catch (Throwable $e) {
-    $pdo->rollBack();
+    // Only rollback if we're still in a transaction
+    // DDL statements (CREATE/ALTER/DROP) auto-commit, so rollback won't work
+    if ($pdo->inTransaction()) {
+      try {
+        $pdo->rollBack();
+      } catch (Throwable $rollbackErr) {
+        // Ignore rollback errors - DDL statements may have already committed
+      }
+    }
     echo "❌ ".basename($file)." -> ".$e->getMessage()."\n";
     exit(1);
   }

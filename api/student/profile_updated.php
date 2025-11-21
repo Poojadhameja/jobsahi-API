@@ -2,8 +2,8 @@
 require_once '../cors.php';
 require_once '../db.php'; // ✅ DB connection
 
-// ✅ Authenticate JWT (allowed roles: admin, student, institute, recruiter)
-$current_user = authenticateJWT(['admin', 'student', 'institute', 'recruiter']);
+// ✅ Authenticate JWT (allowed roles: admin, student only)
+$current_user = authenticateJWT(['admin', 'student']);
 $user_role = strtolower($current_user['role']);
 $user_id = $current_user['user_id'];
 
@@ -21,27 +21,8 @@ if ($user_role === 'admin') {
         exit;
     }
 } 
-elseif (in_array($user_role, ['recruiter', 'institute'])) {
-    $student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : 0;
-
-    if ($student_id <= 0) {
-        echo json_encode(["message" => "Missing or invalid student_id for recruiter/institute", "status" => false]);
-        exit;
-    }
-
-    $stmt = $conn->prepare("SELECT id FROM student_profiles WHERE id = ? AND admin_action = 'approved' AND deleted_at IS NULL LIMIT 1");
-    $stmt->bind_param("i", $student_id);
-    $stmt->execute();
-    $stmt->bind_result($approved_student_id);
-    $stmt->fetch();
-    $stmt->close();
-
-    if (!$approved_student_id) {
-        echo json_encode(["message" => "Student profile not found or not approved", "status" => false]);
-        exit;
-    }
-}
-else {
+// ✅ For student role - can only update own profile
+elseif ($user_role === 'student') {
     $stmt = $conn->prepare("SELECT id FROM student_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
@@ -53,6 +34,10 @@ else {
         echo json_encode(["message" => "Profile not found for this student", "status" => false]);
         exit;
     }
+} else {
+    // ✅ Unauthorized role
+    echo json_encode(["message" => "Unauthorized: Only admin and student can update profiles", "status" => false]);
+    exit;
 }
 
 // ✅ Get JSON input
