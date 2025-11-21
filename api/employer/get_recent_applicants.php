@@ -3,46 +3,67 @@ require_once '../cors.php';
 require_once '../db.php';
 
 try {
-    // ✅ Authenticate recruiter/admin
+    // --------------------------------------------
+    // 🔐 AUTHENTICATION
+    // --------------------------------------------
     $decoded = authenticateJWT(['recruiter', 'admin']);
     $role = strtolower($decoded['role'] ?? '');
     $user_id = intval($decoded['user_id'] ?? 0);
 
     if (!$user_id) {
-        http_response_code(401);
-        echo json_encode(["message" => "Unauthorized", "status" => false]);
+        echo json_encode(["status" => false, "message" => "Unauthorized"]);
         exit;
     }
 
-    // 🔹 Only recruiters allowed
-    if ($role !== 'recruiter') {
-        http_response_code(403);
-        echo json_encode(["message" => "Access denied", "status" => false]);
-        exit;
+    // --------------------------------------------
+    // 🔍 FIND RECRUITER_PROFILE_ID (if recruiter)
+    // --------------------------------------------
+    $recruiter_profile_id = null;
+
+    if ($role === "recruiter") {
+        $stmt = $conn->prepare("
+            SELECT id 
+            FROM recruiter_profiles 
+            WHERE user_id = ? AND admin_action = 'approved'
+            LIMIT 1
+        ");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $rp = $stmt->get_result()->fetch_assoc();
+        $recruiter_profile_id = $rp['id'] ?? null;
+
+        if (!$recruiter_profile_id) {
+            echo json_encode(["status" => false, "message" => "Recruiter profile not found or not approved"]);
+            exit;
+        }
     }
 
-    // 🔹 Get recruiter_profile id (indexed)
-    $stmt_rec = $conn->prepare("
-        SELECT id 
-        FROM recruiter_profiles 
-        WHERE user_id = ? AND admin_action = 'approved'
-        LIMIT 1
-    ");
-    $stmt_rec->bind_param("i", $user_id);
-    $stmt_rec->execute();
-    $rec = $stmt_rec->get_result()->fetch_assoc();
-    $recruiter_profile_id = $rec['id'] ?? null;
+    // --------------------------------------------
+    // 🔎 SEARCH + PAGINATION
+    // --------------------------------------------
+    $search = isset($_GET['search']) ? trim($_GET['search']) : '';
+    $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 50;
+    $offset = isset($_GET['offset']) ? intval($_GET['offset']) : 0;
 
-    if (!$recruiter_profile_id) {
-        http_response_code(400);
-        echo json_encode(["message" => "Recruiter profile not found or not approved", "status" => false]);
-        exit;
+    // --------------------------------------------
+    // 🧠 BASE SQL — changes depending on role
+    // --------------------------------------------
+    $where = " WHERE 1 ";
+
+    if ($role === "recruiter") {
+        // 👇 Only recruiter’s own job applicants
+        $where .= " AND j.recruiter_id = $recruiter_profile_id ";
     }
 
-    /* ==========================================================
-        PART 1 — Recent 5 Applicants
-    ========================================================== */
-    $stmt_recent = $conn->prepare("
+    if ($search !== "") {
+        $safe = "%".$search."%";
+        $where .= " AND (u.user_name LIKE '$safe' OR j.title LIKE '$safe')";
+    }
+
+    // --------------------------------------------
+    // 📌 RECENT APPLICANTS (Only JOB OWNER)
+    // --------------------------------------------
+    $recent_sql = "
         SELECT 
             u.user_name AS candidate_name,
             j.title AS job_title,
@@ -52,48 +73,29 @@ try {
         JOIN jobs j ON j.id = a.job_id
         JOIN student_profiles sp ON sp.id = a.student_id
         JOIN users u ON u.id = sp.user_id
-        WHERE j.recruiter_id = ?
+        $where
         ORDER BY a.applied_at DESC
         LIMIT 5
-    ");
-    $stmt_recent->bind_param("i", $recruiter_profile_id);
-    $stmt_recent->execute();
-    $recent_applicants = $stmt_recent->get_result()->fetch_all(MYSQLI_ASSOC);
-
-    /* ==========================================================
-        PART 2 — All Applicants (with pagination + search)
-    ========================================================== */
-    $search = isset($_GET['search']) ? trim($_GET['search']) : '';
-    $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 50;
-    $offset = isset($_GET['offset']) ? intval($_GET['offset']) : 0;
-
-    $base_sql = "
-        FROM applications a
-        JOIN jobs j ON j.id = a.job_id
-        JOIN student_profiles s ON s.id = a.student_id
-        JOIN users u ON u.id = s.user_id
-        WHERE j.recruiter_id = ?
     ";
 
-    $params = [$recruiter_profile_id];
-    $types = "i";
+    $recent_applicants = $conn->query($recent_sql)->fetch_all(MYSQLI_ASSOC);
 
-    if ($search !== '') {
-        $base_sql .= " AND (u.user_name LIKE ? OR j.title LIKE ?)";
-        $safe_search = "%" . $search . "%";
-        $params[] = $safe_search;
-        $params[] = $safe_search;
-        $types .= "ss";
-    }
+    // --------------------------------------------
+    // 📌 COUNT TOTAL APPLICANTS
+    // --------------------------------------------
+    $count_sql = "SELECT COUNT(*) AS total
+                  FROM applications a
+                  JOIN jobs j ON j.id = a.job_id
+                  JOIN student_profiles s ON s.id = a.student_id
+                  JOIN users u ON u.id = s.user_id
+                  $where";
 
-    // TOTAL COUNT
-    $stmt_count = $conn->prepare("SELECT COUNT(*) AS total $base_sql");
-    $stmt_count->bind_param($types, ...$params);
-    $stmt_count->execute();
-    $total = $stmt_count->get_result()->fetch_assoc()['total'] ?? 0;
+    $total = $conn->query($count_sql)->fetch_assoc()['total'] ?? 0;
 
-    // MAIN APPLICANTS QUERY
-    $sql_all = "
+    // --------------------------------------------
+    // 📌 MAIN FETCH QUERY
+    // --------------------------------------------
+    $main_sql = "
         SELECT 
             a.id AS application_id,
             a.status,
@@ -105,7 +107,7 @@ try {
             s.skills,
             s.bio,
             s.resume,
-            s.socials,         -- ⭐ NEW SOCIALS JSON
+            s.socials,
             s.location AS candidate_location,
             s.experience AS experience_years,
 
@@ -118,64 +120,52 @@ try {
             j.title AS job_title,
             j.location AS job_location,
             j.job_type
-        $base_sql
+
+        FROM applications a
+        JOIN jobs j ON j.id = a.job_id
+        JOIN student_profiles s ON s.id = a.student_id
+        JOIN users u ON u.id = s.user_id
+        $where
         ORDER BY a.applied_at DESC
-        LIMIT ? OFFSET ?
+        LIMIT $limit OFFSET $offset
     ";
 
-    $params[] = $limit;
-    $params[] = $offset;
-    $types .= "ii";
+    $result = $conn->query($main_sql);
 
-    $stmt_all = $conn->prepare($sql_all);
-    $stmt_all->bind_param($types, ...$params);
-    $stmt_all->execute();
-    $result_all = $stmt_all->get_result();
-
-    // URL setup
+    // --------------------------------------------
+    // 📌 NORMALIZING RESULT
+    // --------------------------------------------
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
     $host = $_SERVER['HTTP_HOST'];
-    $resume_folder = '/jobsahi-API/api/uploads/resume/';
+    $resume_folder = "/jobsahi-API/api/uploads/resume/";
 
     $all_applicants = [];
 
-    while ($row = $result_all->fetch_assoc()) {
+    while ($row = $result->fetch_assoc()) {
 
-        /* ------------------------------
-            Decode SKILLS
-        ------------------------------ */
+        // SKILLS
         $skills = [];
         if (!empty($row['skills'])) {
             $decoded = json_decode($row['skills'], true);
-            $skills = is_array($decoded) ? $decoded : explode(',', $row['skills']);
+            $skills = is_array($decoded) ? $decoded : explode(",", $row['skills']);
         }
 
-        /* ------------------------------
-            Decode SOCIALS JSON
-        ------------------------------ */
-        $socials = [];
-        if (!empty($row['socials'])) {
-            $decodedSocials = json_decode($row['socials'], true);
-            if (json_last_error() === JSON_ERROR_NONE && is_array($decodedSocials)) {
-                $socials = $decodedSocials;
-            }
-        }
-
-        /* ------------------------------
-            Resume file URL
-        ------------------------------ */
+        // RESUME URL
         $resume_url = null;
         if (!empty($row['resume'])) {
-            $clean_resume = str_replace(["\\", "/uploads/resume/", "./", "../"], "", $row['resume']);
-            $resume_local = __DIR__ . '/../uploads/resume/' . $clean_resume;
-            if (file_exists($resume_local)) {
-                $resume_url = $protocol . $host . $resume_folder . $clean_resume;
+            $clean = basename($row['resume']);
+            if (file_exists(__DIR__."/../uploads/resume/".$clean)) {
+               $resume_url = $protocol.$host.$resume_folder.$clean;
             }
         }
 
-        /* ------------------------------
-            FINAL STRUCTURED OUTPUT
-        ------------------------------ */
+        // SOCIAL LINKS
+        $social_links = [];
+        if (!empty($row['socials'])) {
+            $decoded_socials = json_decode($row['socials'], true);
+            if (is_array($decoded_socials)) $social_links = $decoded_socials;
+        }
+
         $all_applicants[] = [
             "application_id" => (int)$row['application_id'],
             "student_id"     => (int)$row['student_id'],
@@ -188,25 +178,25 @@ try {
             "education"      => $row['education'] ?: "N/A",
             "skills"         => $skills,
 
-            "socials"        => $socials,  // ⭐ Correct JSON Array
-
-            "applied_for"    => $row['job_title'],
+            "bio"            => $row['bio'] ?: "—",
             "status"         => ucfirst($row['status']),
             "verified"       => (bool)$row['is_verified'],
 
             "location"       => $row['candidate_location'] ?: $row['job_location'],
             "experience"     => $row['experience_years'] ?: "N/A",
             "job_type"       => ucfirst($row['job_type']),
-            "bio"            => $row['bio'] ?: "—",
+            "applied_for"    => $row['job_title'],
 
-            "applied_date"   => $row['applied_date'] ?: null,
+            "applied_date"   => $row['applied_date'],
             "resume_url"     => $resume_url,
-
+            "social_links"   => $social_links,
             "cover_letter"   => $row['cover_letter'] ?: "—"
         ];
     }
 
-    // FINAL RESPONSE
+    // --------------------------------------------
+    // 📌 FINAL RESPONSE
+    // --------------------------------------------
     echo json_encode([
         "status" => true,
         "message" => "Applicants fetched successfully",
@@ -216,13 +206,13 @@ try {
             "fetched" => count($all_applicants),
             "data" => $all_applicants
         ]
-    ], JSON_UNESCAPED_UNICODE);
+    ]);
 
 } catch (Throwable $e) {
-    http_response_code(500);
+
     echo json_encode([
         "status" => false,
-        "message" => "Server error: " . $e->getMessage()
+        "message" => "Server error: ".$e->getMessage()
     ]);
 }
 

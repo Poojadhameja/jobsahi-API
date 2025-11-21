@@ -36,7 +36,7 @@ try {
     $stmt = $conn->prepare("
         SELECT COUNT(DISTINCT sp.user_id) AS placement_ready
         FROM student_profiles sp
-        INNER INNER JOIN applications a ON a.student_id = sp.id
+        INNER JOIN applications a ON a.student_id = sp.id
         WHERE a.status IN ('shortlisted','selected') 
           AND a.deleted_at IS NULL
     ");
@@ -44,12 +44,12 @@ try {
     $summary['placement_ready'] = $stmt->get_result()->fetch_assoc()['placement_ready'] ?? 0;
     $stmt->close();
 
-    // Successfully placed
+    // Successfully placed (selected)
     $stmt = $conn->prepare("
         SELECT COUNT(DISTINCT sp.user_id) AS placed
         FROM student_profiles sp
         INNER JOIN applications a ON a.student_id = sp.id
-        WHERE a.status = 'selected'
+        WHERE a.status = 'selected' 
           AND a.deleted_at IS NULL
     ");
     $stmt->execute();
@@ -72,7 +72,7 @@ try {
             sp.education,
             sp.resume,
             sp.certificates,
-            sp.socials,       -- ✔ NEW JSON COLUMN
+            sp.socials,   -- 🔥 NEW (correct field)
             sp.dob,
             sp.gender,
             sp.job_type,
@@ -93,7 +93,7 @@ try {
     $stmt->execute();
     $result = $stmt->get_result();
 
-    // File URL setup
+    // File URL base
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
     $host = $_SERVER['HTTP_HOST'];
     $resume_folder = '/jobsahi-API/api/uploads/resume/';
@@ -104,20 +104,22 @@ try {
 
     while ($row = $result->fetch_assoc()) {
 
-        // File URLs
+        // Resume URL
         $resume_url = !empty($row['resume']) ? $protocol . $host . $resume_folder . basename($row['resume']) : null;
-        $certificate_url = !empty($row['certificates']) ? $protocol . $host . $certificate_folder . basename($row['certificates']) : null;
 
-        // Decode socials JSON
+        // Certificate URL
+        $certificate_url = !empty($row['certificates']) ? 
+            $protocol . $host . $certificate_folder . basename($row['certificates']) : null;
+
+        // Decode socials
         $socials = [];
         if (!empty($row['socials'])) {
             $decoded = json_decode($row['socials'], true);
-            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            if (is_array($decoded)) {
                 $socials = $decoded;
             }
         }
 
-        // Final grouping
         $students[$row['profile_id']] = [
             'user_info' => [
                 'user_id' => $row['user_id'],
@@ -126,14 +128,13 @@ try {
                 'phone_number' => $row['phone_number'],
                 'status' => ucfirst($row['user_status'] ?? 'Inactive'),
             ],
-
             'profile_info' => [
                 'profile_id' => $row['profile_id'],
                 'skills' => $row['skills'],
                 'education' => $row['education'],
                 'resume' => $resume_url,
                 'certificates' => $certificate_url,
-                'socials' => $socials,   // ✔ REPLACED portfolio/linkedin
+                'socials' => $socials,   // 🔥 FINAL FIXED FIELD
                 'dob' => $row['dob'],
                 'gender' => $row['gender'],
                 'job_type' => $row['job_type'],
@@ -161,22 +162,19 @@ try {
 
 
     /* =========================================================
-        3️⃣ Fetch Applied Jobs
+        3️⃣ Applied Jobs
     ========================================================= */
     if (!empty($student_profile_ids)) {
-
         $ids = implode(",", $student_profile_ids);
 
         $jobStmt = $conn->prepare("
             SELECT 
                 a.student_id,
                 j.title AS job_title,
-                rp.company_name AS company_name,
                 a.status AS placement_status,
                 a.job_selected
             FROM applications a
             INNER JOIN jobs j ON j.id = a.job_id
-            LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
             WHERE a.student_id IN ($ids)
               AND a.deleted_at IS NULL
         ");
@@ -187,16 +185,17 @@ try {
 
             $students[$job['student_id']]['applied_jobs'][] = [
                 "job_title" => $job['job_title'],
-                "company_name" => $job['company_name'],
                 "status" => $job['placement_status'],
                 "job_selected" => $job['job_selected']
             ];
 
             if ($job['placement_status'] == 'selected') {
                 $students[$job['student_id']]['placement_status'] = "Selected";
-            } elseif ($job['placement_status'] == 'shortlisted') {
+            } 
+            elseif ($job['placement_status'] == 'shortlisted') {
                 $students[$job['student_id']]['placement_status'] = "Shortlisted";
-            } elseif ($job['placement_status'] == 'applied') {
+            } 
+            elseif ($job['placement_status'] == 'applied') {
                 $students[$job['student_id']]['placement_status'] = "Applied";
             }
         }
@@ -206,7 +205,7 @@ try {
 
 
     /* =========================================================
-        4️⃣ Fetch Enrolled Courses (avoids duplicates)
+        4️⃣ Enrolled Courses (NO duplicates)
     ========================================================= */
     $courseStmt = $conn->prepare("
         SELECT 
@@ -230,9 +229,7 @@ try {
 
         if (!isset($students[$sid])) continue;
 
-        if (!isset($studentCourses[$sid])) {
-            $studentCourses[$sid] = [];
-        }
+        if (!isset($studentCourses[$sid])) $studentCourses[$sid] = [];
 
         if (isset($studentCourses[$sid][$cid])) continue;
 
@@ -259,12 +256,10 @@ try {
     ], JSON_PRETTY_PRINT);
 
 } catch (Exception $e) {
-
     echo json_encode([
         "status" => false,
         "message" => "Error: " . $e->getMessage()
     ]);
-
 }
 
 $conn->close();
