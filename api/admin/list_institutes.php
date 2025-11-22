@@ -16,16 +16,17 @@ try {
 
             ip.id as institute_id,
             ip.institute_name,
+            ip.registration_number,      -- ⭐ ADDED
             ip.institute_type,
             ip.institute_logo,
             ip.website,
-            ip.description,
+            ip.description,              -- ⭐ ALREADY THERE
             ip.address,
-            ip.postal_code,
-            ip.contact_person,
-            ip.contact_designation,
+            ip.postal_code,              -- ⭐ ADDED
+            ip.contact_person,           -- ⭐ ADDED
+            ip.contact_designation,      -- ⭐ ADDED
             ip.accreditation,
-            ip.established_year,
+            ip.established_year,         -- ⭐ ADDED
             ip.admin_action,
             ip.created_at as profile_created_at,
             ip.modified_at as profile_modified_at,
@@ -60,11 +61,11 @@ try {
                 title, 
                 description,
                 duration,
-                category_id,
+                category_id,           -- ⭐ ADDED (your DB shows this)
                 tagged_skills,
-                batch_limit,
+                batch_limit,           -- ⭐ ADDED
                 status,
-                instructor_name,
+                instructor_name,       -- ⭐ ADDED
                 mode,
                 certification_allowed
             FROM courses
@@ -82,11 +83,11 @@ try {
                 "title" => $c["title"],
                 "description" => $c["description"],
                 "duration" => $c["duration"],
-                "category_id" => $c["category_id"],
+                "category_id" => $c["category_id"],      // ⭐ ADDED
                 "tagged_skills" => $c["tagged_skills"],
-                "batch_limit" => $c["batch_limit"],
+                "batch_limit" => $c["batch_limit"],      // ⭐ ADDED
                 "status" => $c["status"],
-                "instructor_name" => $c["instructor_name"],
+                "instructor_name" => $c["instructor_name"],  // ⭐ ADDED
                 "mode" => $c["mode"],
                 "certification_allowed" => $c["certification_allowed"]
             ];
@@ -109,30 +110,35 @@ try {
             }
         }
 
-            $institutes[] = [
-                'user_info' => [
-                    'user_id' => $row['user_id'],
-                    'user_name' => $row['user_name'],
-                    'email' => $row['email'],
-                    'phone_number' => $row['phone_number'],
-                ],
-                'profile_info' => [
-                    'institute_id' => $row['institute_id'],
-                    'institute_name' => $row['institute_name'],
-                    'institute_type' => $row['institute_type'],
-                    'institute_logo' => $row['institute_logo'],
-                    'website' => $row['website'],
-                    'description' => $row['description'],
-                    'address' => $row['address'],
-                    'accreditation' => $row['accreditation'],
-                    'established_year' => $row['established_year'],
-                    'admin_action' => $row['admin_action'],
-                    'created_at' => $row['profile_created_at'],
-                    'modified_at' => $row['profile_modified_at'],
-                    'deleted_at' => $row['profile_deleted_at']
-                ]
-            ];
-        }
+        $institutes[] = [
+            'user_info' => [
+                'user_id' => $row['user_id'],
+                'user_name' => $row['user_name'],
+                'email' => $row['email'],
+                'phone_number' => $row['phone_number'],
+            ],
+            'profile_info' => [
+                'institute_id' => $row['institute_id'],
+                'institute_name' => $row['institute_name'],
+                'registration_number' => $row['registration_number'],    // ⭐ ADDED
+                'institute_type' => $row['institute_type'],
+                'institute_logo' => $row['institute_logo'],
+                'website' => $row['website'],
+                'description' => $row['description'],                    // ⭐ REQUIRED & present
+                'address' => $row['address'],
+                'postal_code' => $row['postal_code'],                    // ⭐ ADDED
+                'contact_person' => $row['contact_person'],              // ⭐ ADDED
+                'contact_designation' => $row['contact_designation'],    // ⭐ ADDED
+                'accreditation' => $row['accreditation'],
+                'established_year' => $row['established_year'],          // ⭐ ADDED
+                'admin_action' => $row['admin_action'],
+                'created_at' => $row['profile_created_at'],
+                'modified_at' => $row['profile_modified_at'],
+                'deleted_at' => $row['profile_deleted_at']
+            ],
+            'courses' => $courses
+        ];
+    }
 
     echo json_encode([
         "status" => true,
@@ -150,5 +156,4 @@ try {
 }
 
 $conn->close();
-
 ?>
