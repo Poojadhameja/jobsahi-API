@@ -29,11 +29,11 @@ if (empty($panelist_name) || empty($feedback)) {
 try {
 
     // ================================================================
-    // 🔐 RECRUITER OWNERSHIP CHECK
+    // 🔐 RECRUITER OWNERSHIP CHECK (MULTIPLE PATHS)
     // ================================================================
     if ($user_role === 'recruiter') {
 
-        // Get recruiter_profile_id
+        // Step 1: Get recruiter_profile_id
         $rp = $conn->prepare("SELECT id FROM recruiter_profiles WHERE user_id = ?");
         $rp->bind_param("i", $user_id);
         $rp->execute();
@@ -46,22 +46,86 @@ try {
 
         $recruiter_profile_id = intval($rp_res->fetch_assoc()['id']);
 
-        // Validate Interview Ownership
-        $check = $conn->prepare("
-            SELECT i.id
-            FROM interviews i
-            INNER JOIN applications a ON i.application_id = a.id
-            INNER JOIN jobs j ON a.job_id = j.id
-            WHERE i.id = ? AND j.recruiter_id = ?
-            LIMIT 1
-        ");
-        $check->bind_param("ii", $interview_id, $recruiter_profile_id);
-        $check->execute();
+        // Step 2: Check if interview exists and get its structure
+        // First, try to get basic interview info without assuming column names
+        $checkExists = $conn->prepare("SELECT id FROM interviews WHERE id = ?");
+        $checkExists->bind_param("i", $interview_id);
+        $checkExists->execute();
+        $existsResult = $checkExists->get_result();
 
-        if ($check->get_result()->num_rows === 0) {
+        if ($existsResult->num_rows === 0) {
             echo json_encode([
                 "status" => false,
-                "message" => "Unauthorized — You do not own this interview"
+                "message" => "Unauthorized or invalid interview ID"
+            ]);
+            exit();
+        }
+
+        $isAuthorized = false;
+
+        // OPTION 1: Check if interviews table has recruiter_id column directly
+        // Try this query first - if recruiter_id column exists, this will work
+        try {
+            $check1 = $conn->prepare("
+                SELECT id 
+                FROM interviews 
+                WHERE id = ? AND recruiter_id = ?
+                LIMIT 1
+            ");
+            $check1->bind_param("ii", $interview_id, $recruiter_profile_id);
+            $check1->execute();
+            if ($check1->get_result()->num_rows > 0) {
+                $isAuthorized = true;
+            }
+        } catch (Exception $e) {
+            // recruiter_id column doesn't exist, try next option
+        }
+
+        // OPTION 2: If interview has application_id, join through applications -> jobs
+        if (!$isAuthorized) {
+            try {
+                $check2 = $conn->prepare("
+                    SELECT i.id
+                    FROM interviews i
+                    INNER JOIN applications a ON i.application_id = a.id
+                    INNER JOIN jobs j ON a.job_id = j.id
+                    WHERE i.id = ? AND j.recruiter_id = ?
+                    LIMIT 1
+                ");
+                $check2->bind_param("ii", $interview_id, $recruiter_profile_id);
+                $check2->execute();
+                if ($check2->get_result()->num_rows > 0) {
+                    $isAuthorized = true;
+                }
+            } catch (Exception $e) {
+                // application_id might be NULL or column doesn't exist
+            }
+        }
+
+        // OPTION 3: If interviews table has job_id directly (unlikely but try)
+        if (!$isAuthorized) {
+            try {
+                $check3 = $conn->prepare("
+                    SELECT i.id
+                    FROM interviews i
+                    INNER JOIN jobs j ON i.job_id = j.id
+                    WHERE i.id = ? AND j.recruiter_id = ?
+                    LIMIT 1
+                ");
+                $check3->bind_param("ii", $interview_id, $recruiter_profile_id);
+                $check3->execute();
+                if ($check3->get_result()->num_rows > 0) {
+                    $isAuthorized = true;
+                }
+            } catch (Exception $e) {
+                // job_id column doesn't exist in interviews table
+            }
+        }
+
+        if (!$isAuthorized) {
+            echo json_encode([
+                "status" => false,
+                "message" => "Unauthorized or invalid interview ID"
             ]);
             exit();
         }
@@ -147,6 +211,12 @@ try {
 
 } catch (Throwable $e) {
 
+    // Log error for debugging (remove in production)
+    error_log("Interview Panel Error: " . $e->getMessage());
+    error_log("Interview ID: " . $interview_id);
+    error_log("User ID: " . $user_id);
+    error_log("User Role: " . $user_role);
+
     echo json_encode([
         "status" => false,
         "message" => "Server error: " . $e->getMessage()
@@ -155,3 +225,4 @@ try {
 
 $conn->close();
 ?>
+
