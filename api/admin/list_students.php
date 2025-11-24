@@ -5,7 +5,32 @@ require_once '../db.php';
 
 // Authenticate
 $decoded = authenticateJWT(['admin', 'institute']);
-$admin_id = $decoded['user_id'] ?? null;
+$role = strtolower($decoded['role'] ?? '');
+$user_id = intval($decoded['user_id'] ?? 0);
+
+/* =========================================================
+   🔥 NEW FIX — GET CORRECT INSTITUTE ID
+========================================================= */
+$institute_id = 0;
+
+if ($role === 'institute') {
+    $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if ($row = $res->fetch_assoc()) {
+        $institute_id = intval($row['id']);
+    }
+    $stmt->close();
+
+    if ($institute_id <= 0) {
+        echo json_encode([
+            "status" => false,
+            "message" => "Invalid institute account. Institute ID not found."
+        ]);
+        exit;
+    }
+}
 
 try {
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
@@ -13,6 +38,7 @@ try {
     /* =========================================================
         📊 1️⃣ Dashboard Summary Counts
     ========================================================= */
+
     $summary = [
         "total_students" => 0,
         "verified_profiles" => 0,
@@ -20,14 +46,34 @@ try {
         "successfully_placed" => 0
     ];
 
+    /* ---------------------------
+       Admin = All students
+       Institute = Only their students
+    ---------------------------- */
+
+    $filter_sql = "";
+    if ($role === 'institute') {
+        $filter_sql = " AND sp.institute_id = $institute_id ";
+    }
+
     // Total students
-    $stmt = $conn->prepare("SELECT COUNT(*) AS total FROM users WHERE role='student'");
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) AS total 
+        FROM users u 
+        LEFT JOIN student_profiles sp ON sp.user_id = u.id
+        WHERE u.role='student' $filter_sql
+    ");
     $stmt->execute();
     $summary['total_students'] = $stmt->get_result()->fetch_assoc()['total'] ?? 0;
     $stmt->close();
 
     // Verified profiles
-    $stmt = $conn->prepare("SELECT COUNT(*) AS verified FROM users WHERE role='student' AND is_verified = 1");
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) AS verified 
+        FROM users u 
+        LEFT JOIN student_profiles sp ON sp.user_id = u.id
+        WHERE u.role='student' AND u.is_verified = 1 $filter_sql
+    ");
     $stmt->execute();
     $summary['verified_profiles'] = $stmt->get_result()->fetch_assoc()['verified'] ?? 0;
     $stmt->close();
@@ -37,25 +83,26 @@ try {
         SELECT COUNT(DISTINCT sp.user_id) AS placement_ready
         FROM student_profiles sp
         INNER JOIN applications a ON a.student_id = sp.id
-        WHERE a.status IN ('shortlisted','selected') 
+        WHERE a.status IN ('shortlisted','selected')
           AND a.deleted_at IS NULL
+          $filter_sql
     ");
     $stmt->execute();
     $summary['placement_ready'] = $stmt->get_result()->fetch_assoc()['placement_ready'] ?? 0;
     $stmt->close();
 
-    // Successfully placed (selected)
+    // Successfully placed
     $stmt = $conn->prepare("
         SELECT COUNT(DISTINCT sp.user_id) AS placed
         FROM student_profiles sp
         INNER JOIN applications a ON a.student_id = sp.id
-        WHERE a.status = 'selected' 
+        WHERE a.status = 'selected'
           AND a.deleted_at IS NULL
+          $filter_sql
     ");
     $stmt->execute();
     $summary['successfully_placed'] = $stmt->get_result()->fetch_assoc()['placed'] ?? 0;
     $stmt->close();
-
 
     /* =========================================================
         2️⃣ Fetch Student Basic Details
@@ -72,7 +119,7 @@ try {
             sp.education,
             sp.resume,
             sp.certificates,
-            sp.socials,   -- 🔥 NEW (correct field)
+            sp.socials,
             sp.dob,
             sp.gender,
             sp.job_type,
@@ -88,6 +135,7 @@ try {
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
         WHERE u.role = 'student'
+        $filter_sql
         ORDER BY u.id DESC
     ");
     $stmt->execute();
@@ -104,20 +152,18 @@ try {
 
     while ($row = $result->fetch_assoc()) {
 
-        // Resume URL
-        $resume_url = !empty($row['resume']) ? $protocol . $host . $resume_folder . basename($row['resume']) : null;
+        $resume_url = !empty($row['resume'])
+            ? $protocol . $host . $resume_folder . basename($row['resume'])
+            : null;
 
-        // Certificate URL
-        $certificate_url = !empty($row['certificates']) ? 
-            $protocol . $host . $certificate_folder . basename($row['certificates']) : null;
+        $certificate_url = !empty($row['certificates'])
+            ? $protocol . $host . $certificate_folder . basename($row['certificates'])
+            : null;
 
-        // Decode socials
         $socials = [];
         if (!empty($row['socials'])) {
-            $decoded = json_decode($row['socials'], true);
-            if (is_array($decoded)) {
-                $socials = $decoded;
-            }
+            $decoded_social = json_decode($row['socials'], true);
+            if (is_array($decoded_social)) $socials = $decoded_social;
         }
 
         $students[$row['profile_id']] = [
@@ -134,7 +180,7 @@ try {
                 'education' => $row['education'],
                 'resume' => $resume_url,
                 'certificates' => $certificate_url,
-                'socials' => $socials,   // 🔥 FINAL FIXED FIELD
+                'socials' => $socials,
                 'dob' => $row['dob'],
                 'gender' => $row['gender'],
                 'job_type' => $row['job_type'],
@@ -148,7 +194,6 @@ try {
                 'modified_at' => $row['profile_modified_at'],
                 'deleted_at' => $row['profile_deleted_at']
             ],
-
             'courses' => [],
             'applied_jobs' => [],
             'placement_status' => "Not Applied"
@@ -191,11 +236,9 @@ try {
 
             if ($job['placement_status'] == 'selected') {
                 $students[$job['student_id']]['placement_status'] = "Selected";
-            } 
-            elseif ($job['placement_status'] == 'shortlisted') {
+            } elseif ($job['placement_status'] == 'shortlisted') {
                 $students[$job['student_id']]['placement_status'] = "Shortlisted";
-            } 
-            elseif ($job['placement_status'] == 'applied') {
+            } elseif ($job['placement_status'] == 'applied') {
                 $students[$job['student_id']]['placement_status'] = "Applied";
             }
         }
@@ -203,9 +246,8 @@ try {
         $jobStmt->close();
     }
 
-
     /* =========================================================
-        4️⃣ Enrolled Courses (NO duplicates)
+        4️⃣ Enrolled Courses
     ========================================================= */
     $courseStmt = $conn->prepare("
         SELECT 
@@ -223,7 +265,6 @@ try {
     $studentCourses = [];
 
     while ($cr = $courseRes->fetch_assoc()) {
-
         $sid = (int)$cr['student_id'];
         $cid = (int)$cr['course_id'];
 

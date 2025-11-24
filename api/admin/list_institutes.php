@@ -27,7 +27,6 @@ try {
             ip.contact_designation,      -- ⭐ ADDED
             ip.accreditation,
             ip.established_year,         -- ⭐ ADDED
-            ip.admin_action,
             ip.created_at as profile_created_at,
             ip.modified_at as profile_modified_at,
             ip.deleted_at as profile_deleted_at
@@ -131,7 +130,6 @@ try {
                 'contact_designation' => $row['contact_designation'],    // ⭐ ADDED
                 'accreditation' => $row['accreditation'],
                 'established_year' => $row['established_year'],          // ⭐ ADDED
-                'admin_action' => $row['admin_action'],
                 'created_at' => $row['profile_created_at'],
                 'modified_at' => $row['profile_modified_at'],
                 'deleted_at' => $row['profile_deleted_at']

@@ -8,7 +8,16 @@ try {
 
     $user_role = strtolower($user['role'] ?? 'student');
     $user_id   = intval($user['user_id'] ?? ($user['id'] ?? 0));
-    $institute_id = intval($user['institute_id'] ?? 0);
+
+    // ---------------------------------------------------------
+    // 🔥 FIX: Institute ID must always be user_id from JWT
+    // ---------------------------------------------------------
+    if ($user_role === 'institute') {
+        $institute_id = $user_id;   // FIXED
+    } else {
+        $institute_id = intval($user['institute_id'] ?? 0);
+    }
+    // ---------------------------------------------------------
 
     // ✅ Base query
     $sql = "
@@ -43,7 +52,7 @@ try {
 
     // ✅ Role-based filters
     if ($user_role === 'admin') {
-        // Admin sees all courses (no filter)
+        // Admin sees all courses
     } elseif ($user_role === 'institute') {
         // Institute sees only its own courses
         if ($institute_id > 0) {
@@ -52,7 +61,7 @@ try {
             $types .= "i";
         }
     } else {
-        // Student sees only approved
+        // Student sees only approved courses
         $sql .= " AND c.admin_action = ?";
         $params[] = 'approved';
         $types .= "s";
@@ -89,10 +98,13 @@ try {
 
     $courses = [];
     while ($row = $result->fetch_assoc()) {
+
         if ($user_role === 'student') unset($row['admin_action']);
+
         $row['certification_allowed'] = (bool)$row['certification_allowed'];
         $row['fee'] = (float)$row['fee'];
         $row['category_name'] = $row['category_name'] ?? 'Technical';
+
         $courses[] = $row;
     }
 

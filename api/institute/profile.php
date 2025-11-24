@@ -24,7 +24,7 @@ try {
     $institute_id = isset($_GET['institute_id']) ? intval($_GET['institute_id']) : 0;
 
     if ($user_role === 'admin' && $institute_id > 0) {
-        // Fetch specific institute
+        // Admin fetch specific institute
         $sql = "SELECT p.*, u.email, u.user_name, u.phone_number 
                 FROM institute_profiles p
                 INNER JOIN users u ON p.user_id = u.id
@@ -32,22 +32,24 @@ try {
                 ORDER BY p.id DESC";
         $stmt = $conn->prepare($sql);
         $stmt->bind_param('i', $institute_id);
+
     } elseif ($user_role === 'admin') {
-        // Admin fetch all (pending + approved)
+        // Admin fetch all profiles (previously pending + approved)
+        // 🔥 admin_action removed — now simply fetch all non-deleted profiles
         $sql = "SELECT p.*, u.email, u.user_name, u.phone_number 
                 FROM institute_profiles p
                 INNER JOIN users u ON p.user_id = u.id
                 WHERE p.deleted_at IS NULL
-                AND (p.admin_action = 'pending' OR p.admin_action = 'approved')
                 ORDER BY p.id DESC";
         $stmt = $conn->prepare($sql);
+
     } else {
-        // Institute fetch only their own APPROVED profile
+        // Institute fetch only their own profile (previously only approved)
+        // 🔥 admin_action removed — logic unchanged; now returns latest profile
         $sql = "SELECT p.*, u.email, u.user_name, u.phone_number 
                 FROM institute_profiles p
                 INNER JOIN users u ON p.user_id = u.id
                 WHERE p.user_id = ? 
-                AND p.admin_action = 'approved' 
                 AND p.deleted_at IS NULL
                 ORDER BY p.id DESC LIMIT 1";
         $stmt = $conn->prepare($sql);
@@ -106,7 +108,7 @@ try {
             ],
 
             "status" => [
-                "admin_action" => $row['admin_action'],
+                // 🔥 admin_action removed completely
                 "created_at"   => $row['created_at'],
                 "modified_at"  => $row['modified_at']
             ]
@@ -121,8 +123,8 @@ try {
             "total_count"  => count($profiles),
             "user_role"    => $user_role,
             "filters"      => [
-                "admin_action" => ($user_role === 'admin') ? ['pending', 'approved'] : ['approved'],
-                "deleted_at"   => "NULL"
+                // 🔥 admin_action removed
+                "deleted_at" => "NULL"
             ]
         ],
         "meta" => [
