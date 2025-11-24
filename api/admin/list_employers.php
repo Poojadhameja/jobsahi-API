@@ -26,13 +26,13 @@ try {
     $stmt->close();
 
     // ✅ Pending Approvals
-    $stmt = $conn->prepare("SELECT COUNT(*) AS pending FROM recruiter_profiles WHERE admin_action = 'pending'");
+    $stmt = $conn->prepare("SELECT COUNT(*) AS pending FROM recruiter_profiles");
     $stmt->execute();
     $summary['pending_approvals'] = $stmt->get_result()->fetch_assoc()['pending'] ?? 0;
     $stmt->close();
 
     // ✅ Active Jobs
-    $stmt = $conn->prepare("SELECT COUNT(*) AS active_jobs FROM jobs WHERE status = 'open' AND admin_action = 'approved'");
+    $stmt = $conn->prepare("SELECT COUNT(*) AS active_jobs FROM jobs WHERE status = 'open'");
     $stmt->execute();
     $summary['active_jobs'] = $stmt->get_result()->fetch_assoc()['active_jobs'] ?? 0;
     $stmt->close();
@@ -68,8 +68,7 @@ try {
             rp.website,
             rp.location,
             rp.created_at,
-            rp.modified_at,
-            rp.admin_action
+            rp.modified_at
         FROM users u
         LEFT JOIN recruiter_profiles rp ON u.id = rp.user_id
         WHERE u.role = 'recruiter'
@@ -89,7 +88,6 @@ try {
 
     while ($row = $result->fetch_assoc()) {
         // ✅ Status Mapping
-        $status = strtolower($row['admin_action'] ?? 'pending');
 
         // ✅ Company logo full URL logic
         $company_logo = $row['company_logo'] ?? "";
@@ -116,8 +114,7 @@ try {
                 "website" => $row['website'] ?? "",
                 "location" => $row['location'] ?? "",
                 "applied_date" => $row['created_at'],
-                "last_modified" => $row['modified_at'],
-                "status" => ucfirst($status)
+                "last_modified" => $row['modified_at']
             ]
         ];
     }

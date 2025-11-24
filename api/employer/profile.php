@@ -31,7 +31,6 @@ try {
                 FROM recruiter_profiles rp
                 INNER JOIN users u ON rp.user_id = u.id
                 WHERE rp.deleted_at IS NULL
-                AND (rp.admin_action = 'pending' OR rp.admin_action = 'approved')
                 ORDER BY rp.id DESC";
         $stmt = $conn->prepare($sql);
     } else {
@@ -39,7 +38,7 @@ try {
         $sql = "SELECT rp.*, u.user_name, u.email, u.phone_number 
                 FROM recruiter_profiles rp
                 INNER JOIN users u ON rp.user_id = u.id
-                WHERE rp.user_id = ? AND rp.admin_action = 'approved' AND rp.deleted_at IS NULL
+                WHERE rp.user_id = ? AND rp.deleted_at IS NULL
                 ORDER BY rp.id DESC LIMIT 1";
         $stmt = $conn->prepare($sql);
         $stmt->bind_param('i', $user_id);
@@ -98,7 +97,6 @@ try {
             ],
 
             "status" => [
-                "admin_action" => $row['admin_action'] ?? "pending",
                 "created_at"   => $row['created_at'] ?? null,
                 "modified_at"  => $row['modified_at'] ?? null
             ]
@@ -116,7 +114,6 @@ try {
             "total_count" => count($profiles),
             "user_role" => $user_role,
             "filters_applied" => [
-                "admin_action" => ($user_role === 'admin') ? ['pending', 'approved'] : ['approved'],
                 "deleted_at" => "NULL"
             ]
         ],
