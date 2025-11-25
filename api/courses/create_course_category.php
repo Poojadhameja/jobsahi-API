@@ -37,28 +37,7 @@ try {
     }
 
     // -----------------------------------------
-    // 🟦 STEP 3: Duplicate Check
-    // -----------------------------------------
-    $check = $conn->prepare("
-        SELECT id 
-        FROM course_category 
-        WHERE category_name = ? 
-        LIMIT 1
-    ");
-    $check->bind_param("s", $category_name);
-    $check->execute();
-    $result = $check->get_result();
-
-    if ($result->num_rows > 0) {
-        echo json_encode([
-            "success" => false,
-            "message" => "Category already exists"
-        ]);
-        exit;
-    }
-
-    // -----------------------------------------
-    // 🟦 STEP 4: Insert Category
+    // 🟦 STEP 3: INSERT DIRECTLY (duplicate allowed)
     // -----------------------------------------
     $stmt = $conn->prepare("
         INSERT INTO course_category (category_name, created_at) 
