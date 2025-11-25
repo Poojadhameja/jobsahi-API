@@ -6,17 +6,29 @@ require_once '../db.php';
 // ✅ Authenticate JWT
 $decoded  = authenticateJWT(['admin', 'recruiter', 'institute', 'student']);
 $userRole = strtolower($decoded['role'] ?? '');
+$loginInstituteId = intval($decoded['user_id'] ?? 0);   // ✅ FIXED FOR INSTITUTE LOGIN
 
 try {
     // CHECK IF "id" QUERY PARAM EXISTS
     $templateId = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
     // -------------------------------------------------------
-    // ROLE BASED CONDITION
+    // ROLE BASED CONDITION  (ONLY THIS PART UPDATED)
     // -------------------------------------------------------
-    $roleFilter = ($userRole === 'admin')
-        ? "is_active = 1"
-        : "is_active = 1 AND admin_action = 'approved'";
+
+    if ($userRole === 'admin') {
+        // Admin sees everything (active or inactive)
+        $roleFilter = "is_active = 1";
+
+    } elseif ($userRole === 'institute') {
+        // Institute sees only its own templates + approved
+        // 🔥 FIX: When switching JWT, only that institute's templates will load
+        $roleFilter = "is_active = 1 AND admin_action = 'approved' AND institute_id = $loginInstituteId";
+
+    } else {
+        // Recruiter/Student: only approved active templates
+        $roleFilter = "is_active = 1 AND admin_action = 'approved'";
+    }
 
     // -------------------------------------------------------
     // BASE SQL (COMMON)
@@ -54,7 +66,6 @@ try {
         $host = $_SERVER['HTTP_HOST'];
         $basePath = '/jobsahi-API/api/uploads/institute_certificate_templates/';
 
-        // MEDIA HELPER
         function getMediaUrl($fileName, $protocol, $host, $basePath) {
             if (empty($fileName)) return null;
 
@@ -115,7 +126,6 @@ try {
     $host = $_SERVER['HTTP_HOST'];
     $basePath = '/jobsahi-API/api/uploads/institute_certificate_templates/';
 
-    // MEDIA HELPER
     function getMediaUrlList($fileName, $protocol, $host, $basePath) {
         if (empty($fileName)) return null;
 

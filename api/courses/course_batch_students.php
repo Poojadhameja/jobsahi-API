@@ -4,42 +4,98 @@ require_once '../cors.php';
 require_once '../db.php';
 
 try {
-    // ✅ Authenticate (admin or institute)
+    // ----------------------------------------------------
+    // ✅ Authenticate JWT (admin or institute)
+    // ----------------------------------------------------
     $decoded = authenticateJWT(['admin', 'institute']);
-    $role = strtolower($decoded['role']);
-    $user_id = intval($decoded['user_id']);
+    $role = strtolower($decoded['role'] ?? '');
+    $user_id = intval($decoded['user_id'] ?? ($decoded['id'] ?? 0));
 
-    // ✅ Optional filters
+    // ----------------------------------------------------
+    // ✅ Determine institute_id (valid for institute login)
+    // ----------------------------------------------------
+    $institute_id = 0;
+
+    if ($role === 'institute') {
+        $stmt = $conn->prepare("
+            SELECT id 
+            FROM institute_profiles 
+            WHERE user_id = ? LIMIT 1
+        ");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        if ($row = $res->fetch_assoc()) {
+            $institute_id = intval($row['id']);
+        }
+        $stmt->close();
+
+        if ($institute_id <= 0) {
+            echo json_encode([
+                "status" => false,
+                "message" => "Invalid institute login. No institute profile found."
+            ]);
+            exit;
+        }
+    }
+
+    // ----------------------------------------------------
+    // Optional filters
+    // ----------------------------------------------------
     $course_id = isset($_GET['course_id']) ? intval($_GET['course_id']) : 0;
     $batch_id  = isset($_GET['batch_id']) ? intval($_GET['batch_id']) : 0;
 
-    // ✅ Get all approved courses
-    $course_query = "SELECT id, title FROM courses WHERE admin_action = 'approved'";
+    // ----------------------------------------------------
+    // FINAL CONDITION FOR INSTITUTE FILTER
+    // ----------------------------------------------------
+    $INSTITUTE_FILTER = ($role === 'institute') 
+        ? " AND institute_id = $institute_id " 
+        : "";
+
+    // ----------------------------------------------------
+    // Fetch courses (ONLY approved + institute filter)
+    // ----------------------------------------------------
+    $course_query = "
+        SELECT id, title 
+        FROM courses 
+        WHERE admin_action = 'approved'
+        $INSTITUTE_FILTER
+    ";
+
     if ($course_id > 0) {
-        $course_query .= " AND id = $course_id";
+        $course_query .= " AND id = $course_id ";
     }
 
     $course_result = $conn->query($course_query);
     $response = [];
 
     while ($course = $course_result->fetch_assoc()) {
+
         $courseData = [
             "course_id" => intval($course['id']),
             "course_name" => $course['title'],
             "batches" => []
         ];
 
-        // ✅ Fetch approved batches of this course
-        $batch_query = "SELECT id, name, batch_time_slot, start_date, end_date 
-                        FROM batches 
-                        WHERE course_id = {$course['id']} AND admin_action = 'approved'";
+        // ----------------------------------------------------
+        // Fetch batches (ONLY approved + institute filter)
+        // ----------------------------------------------------
+        $batch_query = "
+            SELECT id, name, batch_time_slot, start_date, end_date 
+            FROM batches 
+            WHERE course_id = {$course['id']} 
+              AND admin_action = 'approved'
+              $INSTITUTE_FILTER
+        ";
+
         if ($batch_id > 0) {
-            $batch_query .= " AND id = $batch_id";
+            $batch_query .= " AND id = $batch_id ";
         }
 
         $batch_result = $conn->query($batch_query);
 
         while ($batch = $batch_result->fetch_assoc()) {
+
             $batchData = [
                 "batch_id" => intval($batch['id']),
                 "batch_name" => $batch['name'],
@@ -49,7 +105,9 @@ try {
                 "students" => []
             ];
 
-            // ✅ Fetch students enrolled in this batch & course
+            // ----------------------------------------------------
+            // Fetch students (only students of this institute)
+            // ----------------------------------------------------
             $student_query = "
                 SELECT 
                     sp.id AS student_id,
@@ -64,7 +122,9 @@ try {
                   AND sce.course_id = {$course['id']}
                   AND sb.admin_action = 'approved'
                   AND sce.admin_action = 'approved'
+                  $INSTITUTE_FILTER
             ";
+
             $student_result = $conn->query($student_query);
 
             while ($student = $student_result->fetch_assoc()) {

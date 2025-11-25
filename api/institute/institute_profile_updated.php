@@ -131,11 +131,11 @@ try {
     ===================================================== */
 
     if (!empty($input['institute_name'])) {
-        $input['user_name'] = $input['institute_name'];   // auto sync
+        $input['user_name'] = $input['institute_name'];
     }
 
     if (!empty($input['user_name'])) {
-        $input['institute_name'] = $input['user_name'];   // auto sync
+        $input['institute_name'] = $input['user_name'];
     }
 
     // ================================
@@ -200,8 +200,6 @@ try {
         'contact_person', 'contact_designation',
         'accreditation', 'established_year'
     ];
-
-    if ($user_role === 'admin') $allowed_fields[] = 'admin_action';
 
     if ($method === 'PUT') {
         $updates = [];
@@ -278,7 +276,6 @@ try {
                 "contact_designation"=> $profile['contact_designation']
             ],
             "status" => [
-                "admin_action" => $profile['admin_action'],
                 "created_at"   => $profile['created_at'],
                 "modified_at"  => $profile['modified_at']
             ]

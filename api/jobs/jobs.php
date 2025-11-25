@@ -12,7 +12,9 @@ if (!$userRole) {
     exit;
 }
 
-// Student profile detection
+// ------------------------------------------------------------------
+//  STUDENT PROFILE DETECTION
+// ------------------------------------------------------------------
 $student_profile_id = null;
 if ($userRole === 'student') {
 
@@ -29,6 +31,31 @@ if ($userRole === 'student') {
         $st->close();
     }
 }
+
+// ------------------------------------------------------------------
+//  RECRUITER PROFILE FIX (ONLY THIS WAS ADDED) ⭐
+// ------------------------------------------------------------------
+$recruiter_profile_id = null;
+
+if ($userRole === 'recruiter') {
+
+    $user_id = intval($decoded['user_id'] ?? ($decoded['id'] ?? 0));
+
+    if ($user_id > 0) {
+        $st2 = $conn->prepare("SELECT id FROM recruiter_profiles WHERE user_id = ? LIMIT 1");
+        $st2->bind_param("i", $user_id);
+        $st2->execute();
+        $res2 = $st2->get_result();
+
+        if ($res2->num_rows > 0) {
+            $recruiter_profile_id = intval($res2->fetch_assoc()['id']);
+        }
+
+        $st2->close();
+    }
+}
+
+// ------------------------------------------------------------------
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     echo json_encode(["message" => "Only GET allowed", "status" => false]);
@@ -63,7 +90,6 @@ if ($job_id > 0) {
             ci.additional_contact,
             (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS views,
 
-            -- ⭐ FIXED ADMIN STATUS LOGIC
             (
                 SELECT 
                     CASE
@@ -135,8 +161,6 @@ $filters = [];
 $params = [];
 $types = "";
 
-// ❌ Removed admin_action logic COMPLETELY (as requested)
-
 // Keyword filter
 if (!empty($_GET['keyword'])) {
     $filters[] = "(j.title LIKE ? OR j.description LIKE ?)";
@@ -202,7 +226,6 @@ $sql = "
         rp.company_name,
         (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS views,
 
-        -- ⭐ FIXED ADMIN STATUS LOGIC
         (
             SELECT 
                 CASE
@@ -216,7 +239,7 @@ $sql = "
         ) AS admin_status
 ";
 
-// Student special flags
+// Student flags
 if ($userRole === 'student' && $student_profile_id) {
     $sql .= ",
         CASE WHEN EXISTS (
@@ -237,8 +260,18 @@ $sql .= "
     LEFT JOIN recruiter_profiles rp ON rp.id = j.recruiter_id
 ";
 
+// -------------------------------------------------------------
+// SAFE FILTER HANDLING + RECRUITER RESTRICTION ⭐
+// -------------------------------------------------------------
 if (!empty($filters)) {
     $sql .= " WHERE " . implode(" AND ", $filters);
+} else {
+    $sql .= " WHERE 1";
+}
+
+// Recruiter-only filter (main FIX)
+if ($userRole === 'recruiter' && $recruiter_profile_id) {
+    $sql .= " AND j.recruiter_id = $recruiter_profile_id";
 }
 
 $sql .= " ORDER BY j.created_at DESC";

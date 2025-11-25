@@ -154,9 +154,6 @@ try {
         'company_logo'
     ];
 
-    if ($user_role === 'admin') {
-        $allowed_fields[] = 'admin_action';
-    }
 
     // ---------------------------------------------------------
     // Build update query
@@ -260,7 +257,6 @@ try {
             ],
 
             "status" => [
-                "admin_action" => $profile['admin_action'],
                 "created_at"   => $profile['created_at'],
                 "modified_at"  => $profile['modified_at']
             ]
