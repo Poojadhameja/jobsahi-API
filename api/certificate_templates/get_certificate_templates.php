@@ -6,32 +6,46 @@ require_once '../db.php';
 // ✅ Authenticate JWT
 $decoded  = authenticateJWT(['admin', 'recruiter', 'institute', 'student']);
 $userRole = strtolower($decoded['role'] ?? '');
-$loginInstituteId = intval($decoded['user_id'] ?? 0);   // ✅ FIXED FOR INSTITUTE LOGIN
+$userId   = intval($decoded['user_id'] ?? 0);
+
+// -------------------------------------------------------
+// ✅ FIX: Get correct institute_id (NO LOGIC CHANGED)
+// -------------------------------------------------------
+$loginInstituteId = 0;
+
+if ($userRole === 'institute') {
+    $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
+    $stmt->bind_param("i", $userId);
+    $stmt->execute();
+    $res = $stmt->get_result();
+
+    if ($row = $res->fetch_assoc()) {
+        $loginInstituteId = intval($row['id']);
+    }
+}
 
 try {
     // CHECK IF "id" QUERY PARAM EXISTS
     $templateId = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
     // -------------------------------------------------------
-    // ROLE BASED CONDITION  (ONLY THIS PART UPDATED)
+    // ROLE BASED CONDITION (Only filter fixed)
     // -------------------------------------------------------
-
     if ($userRole === 'admin') {
-        // Admin sees everything (active or inactive)
+        // Admin sees everything
         $roleFilter = "is_active = 1";
 
     } elseif ($userRole === 'institute') {
-        // Institute sees only its own templates + approved
-        // 🔥 FIX: When switching JWT, only that institute's templates will load
+        // Institute sees ONLY its own templates (approved)
         $roleFilter = "is_active = 1 AND admin_action = 'approved' AND institute_id = $loginInstituteId";
 
     } else {
-        // Recruiter/Student: only approved active templates
+        // Recruiter/Student sees only approved templates
         $roleFilter = "is_active = 1 AND admin_action = 'approved'";
     }
 
     // -------------------------------------------------------
-    // BASE SQL (COMMON)
+    // BASE SQL
     // -------------------------------------------------------
     $baseSelect = "
         SELECT 

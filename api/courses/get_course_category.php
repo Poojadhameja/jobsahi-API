@@ -9,36 +9,13 @@ try {
     $user_id = $decoded['user_id'];
     $user_role = strtolower($decoded['role']);
 
-    // 🔥 NEW FIX: Detect institute_id from JWT if institute login
-    $institute_id = 0;
-    if ($user_role === 'institute') {
-        $institute_id = intval($decoded['institute_id']); 
-    }
-
     // ✅ Check if 'id' is passed in query string
     $category_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
     if ($category_id > 0) {
-
-        // 🔥 NEW FIX: apply institute filter if role = institute
-        if ($user_role === 'institute') {
-            $stmt = $conn->prepare("
-                SELECT id, category_name, created_at 
-                FROM course_category 
-                WHERE id = ? AND institute_id = ?
-            ");
-            $stmt->bind_param("ii", $category_id, $institute_id);
-
-        } else {
-            // Admin sees all
-            $stmt = $conn->prepare("
-                SELECT id, category_name, created_at 
-                FROM course_category 
-                WHERE id = ?
-            ");
-            $stmt->bind_param("i", $category_id);
-        }
-
+        // ✅ Fetch specific category by ID
+        $stmt = $conn->prepare("SELECT id, category_name, created_at FROM course_category WHERE id = ?");
+        $stmt->bind_param("i", $category_id);
         $stmt->execute();
         $result = $stmt->get_result();
 
@@ -61,24 +38,8 @@ try {
         }
 
     } else {
-
-        // 🔥 NEW FIX: institute can only fetch its own categories
-        if ($user_role === 'institute') {
-            $sql = "
-                SELECT id, category_name, created_at 
-                FROM course_category 
-                WHERE institute_id = $institute_id
-                ORDER BY id ASC
-            ";
-        } else {
-            // Admin gets all
-            $sql = "
-                SELECT id, category_name, created_at 
-                FROM course_category 
-                ORDER BY id ASC
-            ";
-        }
-
+        // ✅ Fetch all categories
+        $sql = "SELECT id, category_name, created_at FROM course_category ORDER BY id ASC";
         $result = $conn->query($sql);
 
         if ($result && $result->num_rows > 0) {
