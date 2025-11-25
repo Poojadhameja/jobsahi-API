@@ -98,6 +98,7 @@ try {
             "reason"       => $row['reason'],
             "severity"     => $severity,
             "status"       => $status,
+            "admin_action" => $row['admin_action'],
             "created_at"   => $row['created_at']
         ];
     }

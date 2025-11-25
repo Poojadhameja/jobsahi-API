@@ -7,40 +7,57 @@ require_once '../db.php';
 $decoded = authenticateJWT(['admin']);
 
 try {
-    $job_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+    // Get flag_id from URL parameter (primary key of job_flags table)
+    $flag_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
-    if ($job_id <= 0) {
-        echo json_encode(["status" => false, "message" => "Invalid job ID"]);
+    if ($flag_id <= 0) {
+        echo json_encode(["status" => false, "message" => "Invalid flag ID"]);
         exit();
     }
+
+    // Get admin_action from request body (PUT request)
+    $input = json_decode(file_get_contents('php://input'), true);
+    $admin_action = isset($input['admin_action']) ? trim($input['admin_action']) : 'approved';
+    
+    // Validate admin_action value
+    $allowed_actions = ['approved', 'pending', 'flagged'];
+    if (!in_array(strtolower($admin_action), $allowed_actions)) {
+        $admin_action = 'approved'; // Default to approved if invalid
+    }
+    
+    // Get reason from request body
+    $reason = isset($input['reason']) ? trim($input['reason']) : '';
 
     // Check if flag exists
     $check = $conn->prepare("
         SELECT id, job_id, reviewed, admin_action 
         FROM job_flags 
-        WHERE job_id = ? LIMIT 1
+        WHERE id = ? LIMIT 1
     ");
-    $check->bind_param("i", $job_id);
+    $check->bind_param("i", $flag_id);
     $check->execute();
     $res = $check->get_result();
 
     if ($res->num_rows === 0) {
-        echo json_encode(["status" => false, "message" => "No flag found for this job"]);
+        echo json_encode(["status" => false, "message" => "No flag found with this ID"]);
         exit();
     }
 
     $flag = $res->fetch_assoc();
-    $flag_id = intval($flag['id']);
+    $job_id = intval($flag['job_id']);
+
+    // Determine reviewed status based on admin_action
+    $reviewed = ($admin_action === 'approved') ? 1 : 0;
 
     /* ----------------------------------------
        STEP 1: UPDATE job_flags table
     ---------------------------------------- */
     $updateFlag = $conn->prepare("
         UPDATE job_flags 
-        SET reviewed = 1, admin_action = 'approved' 
+        SET reviewed = ?, admin_action = ?, reason = ?
         WHERE id = ?
     ");
-    $updateFlag->bind_param("i", $flag_id);
+    $updateFlag->bind_param("issi", $reviewed, $admin_action, $reason, $flag_id);
     $updateFlag->execute();
 
 
@@ -49,10 +66,10 @@ try {
     ---------------------------------------- */
     $updateJob = $conn->prepare("
         UPDATE jobs 
-        SET admin_action = 'approved'
+        SET admin_action = ?
         WHERE id = ?
     ");
-    $updateJob->bind_param("i", $job_id);
+    $updateJob->bind_param("si", $admin_action, $job_id);
     $updateJob->execute();
 
 
@@ -82,9 +99,21 @@ try {
     /* ----------------------------------------
        RESPONSE
     ---------------------------------------- */
+    // Dynamic message based on admin_action
+    $message = "Job flag updated successfully";
+    if ($admin_action === 'approved') {
+        $message = "Job flag resolved & job approved successfully";
+    } else if ($admin_action === 'pending') {
+        $message = "Job re-flagged successfully";
+    } else if ($admin_action === 'flagged') {
+        $message = "Job flagged successfully";
+    }
+
     echo json_encode([
         "status" => true,
-        "message" => "Job flag resolved & job approved successfully",
+        "message" => $message,
+        "flag_id" => $flag_id,
+        "admin_action" => $admin_action,
         "flag" => $finalFlag,
         "job" => $finalJob
     ]);
