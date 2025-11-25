@@ -32,12 +32,15 @@ if ($job_id <= 0) {
     exit;
 }
 
-// ✅ Set visibility condition
-$visibilityCondition = ($user_role === 'admin') 
-    ? "j.admin_action IN ('pending', 'approved')" 
-    : "j.admin_action = 'approved'";
+// ❌ REMOVE admin_action from visibility
+$visibilityCondition = "j.status = 'open'";
 
-// ✅ Main Query (added recruiter_company_info join + job_category join)
+// (Admin sees open or closed)
+if ($user_role === 'admin') {
+    $visibilityCondition = "j.status IN ('open','closed')";
+}
+
+// ✅ Main Query (admin_action removed)
 $sql = "SELECT 
             j.id,
             j.recruiter_id,
@@ -54,25 +57,20 @@ $sql = "SELECT
             j.is_remote,
             j.no_of_vacancies,
             j.status,
-            j.admin_action,
             j.created_at,
 
-            -- Category info
             jc.category_name,
 
-            -- Recruiter information
             rp.company_name,
             rp.company_logo,
             rp.industry,
             rp.website,
             rp.location AS company_location,
 
-            -- ✅ Contact info from recruiter_company_info
             rci.person_name,
             rci.phone,
             rci.additional_contact,
 
-            -- Job statistics
             (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS total_views,
             (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id) AS total_applications,
             (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id AND a.status = 'applied') AS pending_applications,
@@ -82,21 +80,14 @@ $sql = "SELECT
 
 if ($user_role === 'student' && $student_profile_id) {
     $sql .= ",
-            CASE 
-                WHEN EXISTS (
-                    SELECT 1 FROM saved_jobs sj 
-                    WHERE sj.job_id = j.id AND sj.student_id = ?
-                ) THEN 1 
-                ELSE 0 
-            END as is_saved,
-            CASE 
-                WHEN EXISTS (
-                    SELECT 1 FROM applications a 
-                    WHERE a.job_id = j.id AND a.student_id = ?
-                    AND (a.deleted_at IS NULL OR a.deleted_at = '0000-00-00 00:00:00')
-                ) THEN 1 
-                ELSE 0 
-            END as is_applied";
+        CASE WHEN EXISTS (
+            SELECT 1 FROM saved_jobs sj WHERE sj.job_id = j.id AND sj.student_id = ?
+        ) THEN 1 ELSE 0 END as is_saved,
+
+        CASE WHEN EXISTS (
+            SELECT 1 FROM applications a 
+            WHERE a.job_id = j.id AND a.student_id = ?
+        ) THEN 1 ELSE 0 END as is_applied";
 }
 
 $sql .= " FROM jobs j
@@ -106,24 +97,17 @@ $sql .= " FROM jobs j
         WHERE j.id = ? AND $visibilityCondition";
 
 $stmt = mysqli_prepare($conn, $sql);
-if (!$stmt) {
-    echo json_encode(["message" => "Query error: " . mysqli_error($conn), "status" => false]);
-    mysqli_close($conn);
-    exit;
-}
 
 if ($user_role === 'student' && $student_profile_id) {
-    // Bind student_id twice: once for is_saved, once for is_applied
     mysqli_stmt_bind_param($stmt, "iii", $student_profile_id, $student_profile_id, $job_id);
 } else {
     mysqli_stmt_bind_param($stmt, "i", $job_id);
 }
+
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 
 if (mysqli_num_rows($result) === 0) {
-    mysqli_stmt_close($stmt);
-    mysqli_close($conn);
     echo json_encode(["message" => "Job not found or not accessible", "status" => false]);
     exit;
 }
@@ -131,29 +115,26 @@ if (mysqli_num_rows($result) === 0) {
 $job = mysqli_fetch_assoc($result);
 mysqli_stmt_close($stmt);
 
-// ✅ Add full URL for company_logo
+// Add full company logo URL
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
 $host = $_SERVER['HTTP_HOST'];
 $logo_base = '/jobsahi-API/api/uploads/recruiter_logo/';
 
 if (!empty($job['company_logo'])) {
-    $clean_logo = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $job['company_logo']);
-    $logo_local = __DIR__ . '/../uploads/recruiter_logo/' . $clean_logo;
-    if (file_exists($logo_local)) {
-        $job['company_logo'] = $protocol . $host . $logo_base . $clean_logo;
-    }
+    $clean = basename($job['company_logo']);
+    $job['company_logo'] = $protocol . $host . $logo_base . $clean;
 }
 
-// ✅ Format Response
+// Format Response
 $formatted_job = [
     'job_info' => [
         'id' => intval($job['id']),
         'title' => $job['title'],
         'category_id' => intval($job['category_id']),
-        'category_name' => $job['category_name'] ?? '',
+        'category_name' => $job['category_name'],
         'description' => $job['description'],
         'location' => $job['location'],
-        'skills_required' => !empty($job['skills_required']) ? array_map('trim', explode(',', $job['skills_required'])) : [],
+        'skills_required' => array_map('trim', explode(',', $job['skills_required'])),
         'salary_min' => floatval($job['salary_min']),
         'salary_max' => floatval($job['salary_max']),
         'job_type' => $job['job_type'],
@@ -162,24 +143,22 @@ $formatted_job = [
         'is_remote' => (bool)$job['is_remote'],
         'no_of_vacancies' => intval($job['no_of_vacancies']),
         'status' => $job['status'],
-        'admin_action' => $job['admin_action'],
         'created_at' => $job['created_at'],
 
-        'person_name' => $job['person_name'] ?? '',
-        'phone' => $job['phone'] ?? '',
-        'additional_contact' => $job['additional_contact'] ?? '',
-        
-        // ✅ Student-specific flags (return as 1 or 0 like jobs.php for consistency)
-        'is_saved' => isset($job['is_saved']) ? (int)$job['is_saved'] : 0,
-        'is_applied' => isset($job['is_applied']) ? (int)$job['is_applied'] : 0,
+        'person_name' => $job['person_name'],
+        'phone' => $job['phone'],
+        'additional_contact' => $job['additional_contact'],
+
+        'is_saved' => $job['is_saved'] ?? 0,
+        'is_applied' => $job['is_applied'] ?? 0
     ],
     'company_info' => [
         'recruiter_id' => intval($job['recruiter_id']),
         'company_name' => $job['company_name'],
-        'company_logo' => $job['company_logo'], // ✅ Now full URL
+        'company_logo' => $job['company_logo'],
         'industry' => $job['industry'],
         'website' => $job['website'],
-        'location' => $job['company_location']
+        'location' => $job['company_location'],
     ],
     'statistics' => [
         'total_views' => intval($job['total_views']),
@@ -191,50 +170,8 @@ $formatted_job = [
     ]
 ];
 
-// ✅ Similar jobs (unchanged)
-if (isset($_GET['include_similar']) && $_GET['include_similar'] === 'true') {
-    $similarVisibilityCondition = $visibilityCondition;
-    $similar_sql = "SELECT 
-                        j.id,
-                        j.title,
-                        j.location,
-                        j.salary_min,
-                        j.salary_max,
-                        j.job_type,
-                        rp.company_name
-                    FROM jobs j
-                    LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
-                    WHERE j.id != ? 
-                    AND j.status = 'open'
-                    AND $similarVisibilityCondition
-                    AND (j.location = ? OR j.job_type = ?)
-                    ORDER BY j.created_at DESC
-                    LIMIT 5";
-    $similar_stmt = mysqli_prepare($conn, $similar_sql);
-    if ($similar_stmt) {
-        mysqli_stmt_bind_param($similar_stmt, "iss", $job_id, $job['location'], $job['job_type']);
-        mysqli_stmt_execute($similar_stmt);
-        $similar_result = mysqli_stmt_get_result($similar_stmt);
-        $similar_jobs = [];
-        while ($row = mysqli_fetch_assoc($similar_result)) {
-            $similar_jobs[] = [
-                'id' => intval($row['id']),
-                'title' => $row['title'],
-                'location' => $row['location'],
-                'salary_min' => floatval($row['salary_min']),
-                'salary_max' => floatval($row['salary_max']),
-                'job_type' => $row['job_type'],
-                'company_name' => $row['company_name']
-            ];
-        }
-        $formatted_job['similar_jobs'] = $similar_jobs;
-        mysqli_stmt_close($similar_stmt);
-    }
-}
-
 mysqli_close($conn);
 
-// ✅ Final response
 echo json_encode([
     "message" => "Job details fetched successfully",
     "status" => true,
