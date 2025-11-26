@@ -45,7 +45,7 @@ try {
     }
 
     // ---------------------------------------------------------
-    // ⚠️ FIX APPLIED HERE — FILTER STUDENTS BY INSTITUTE
+    // 🔍 MAIN QUERY – STUDENT + COURSE + LATEST BATCH ASSIGNMENT
     // ---------------------------------------------------------
     $sql = "
         SELECT 
@@ -55,28 +55,50 @@ try {
             u.phone_number AS phone,
             sp.trade,
             sp.education,
+
             e.course_id,
             c.title AS course_title,
             e.enrollment_date,
             e.status AS enrollment_status,
+
             b.id AS batch_id,
             b.name AS batch_name,
             b.start_date,
             b.end_date
         FROM student_profiles sp
-        INNER JOIN users u ON sp.user_id = u.id
+        INNER JOIN users u 
+            ON sp.user_id = u.id
 
+        -- 🔹 Course enrollments (same as before)
         LEFT JOIN student_course_enrollments e 
             ON sp.id = e.student_id
-            AND (e.admin_action = 'approved' OR e.admin_action = 'pending' OR e.admin_action IS NULL)
+           AND (e.admin_action = 'approved' 
+             OR e.admin_action = 'pending' 
+             OR e.admin_action IS NULL)
 
+        -- 🔹 Courses (filtered by institute for institute role)
         LEFT JOIN courses c 
             ON e.course_id = c.id
-            " . ($role === 'institute' ? "AND c.institute_id = ?" : "") . "
+           " . ($role === 'institute' ? "AND c.institute_id = ?" : "") . "
 
+        -- 🔹 LATEST batch assignment per student (from student_batches)
+        LEFT JOIN student_batches sb
+            ON sb.student_id = sp.id
+           AND sb.admin_action = 'approved'
+           AND sb.id = (
+                SELECT sb2.id 
+                FROM student_batches sb2 
+                WHERE sb2.student_id = sp.id 
+                  AND sb2.admin_action = 'approved'
+                ORDER BY sb2.id DESC
+                LIMIT 1
+           )
+
+        -- 🔹 Actual batch details (linked to course)
         LEFT JOIN batches b 
-            ON b.course_id = c.id 
-            AND b.admin_action = 'approved'
+            ON b.id = sb.batch_id 
+           AND b.admin_action = 'approved'
+           " . ($role === 'institute' ? "AND b.course_id = c.id" : "") . "
 
         WHERE sp.deleted_at IS NULL 
           AND u.status = 'active'
@@ -110,45 +132,55 @@ try {
         $sid = $row['student_id'];
         $cid = $row['course_id'] ?? 0;
 
+        // Avoid duplicate same student+course rows
         if (isset($seenCourses[$sid][$cid])) continue;
         $seenCourses[$sid][$cid] = true;
 
         $statusVal = strtolower(trim($row['enrollment_status'] ?? 'enrolled'));
-        if ($statusVal === 'enrolled') $activeCount++;
-        elseif ($statusVal === 'completed') $completedCount++;
+        if ($statusVal === 'enrolled') {
+            $activeCount++;
+        } elseif ($statusVal === 'completed') {
+            $completedCount++;
+        }
 
         $students[] = [
-            "student_id" => $sid,
-            "name" => $row['student_name'],
-            "email" => $row['email'],
-            "phone" => $row['phone'],
-            "trade" => $row['trade'],
-            "education" => $row['education'],
-            "course_id" => $row['course_id'],
-            "course" => $row['course_title'] ?? 'Not Assigned',
-            "batch_id" => $row['batch_id'],
-            "batch" => $row['batch_name'] ?? 'Not Assigned',
-            "status" => ucfirst($row['enrollment_status'] ?? 'Enrolled'),
+            "student_id"      => $sid,
+            "name"            => $row['student_name'],
+            "email"           => $row['email'],
+            "phone"           => $row['phone'],
+            "trade"           => $row['trade'],
+            "education"       => $row['education'],
+            "course_id"       => $row['course_id'],
+            "course"          => $row['course_title'] ?? 'Not Assigned',
+            "batch_id"        => $row['batch_id'],
+            "batch"           => $row['batch_name'] ?? 'Not Assigned',
+            "status"          => ucfirst($row['enrollment_status'] ?? 'Enrolled'),
             "enrollment_date" => $row['enrollment_date'] ?? null,
-            "start_date" => $row['start_date'] ?? null,
-            "end_date" => $row['end_date'] ?? null
+            "start_date"      => $row['start_date'] ?? null,
+            "end_date"        => $row['end_date'] ?? null
         ];
     }
 
-    // Count total courses
+    // ---------------------------------------------------------
+    // 🔢 Count total courses
+    // ---------------------------------------------------------
     if ($role === 'institute') {
         $stmtC = $conn->prepare("
             SELECT COUNT(*) AS total_courses 
             FROM courses 
             WHERE institute_id = ?
-              AND (admin_action = 'approved' OR admin_action = 'pending' OR admin_action IS NULL)
+              AND (admin_action = 'approved' 
+               OR admin_action = 'pending' 
+               OR admin_action IS NULL)
         ");
         $stmtC->bind_param("i", $institute_id);
     } else {
         $stmtC = $conn->prepare("
             SELECT COUNT(*) AS total_courses 
             FROM courses 
-            WHERE admin_action = 'approved' OR admin_action = 'pending' OR admin_action IS NULL
+            WHERE admin_action = 'approved' 
+               OR admin_action = 'pending' 
+               OR admin_action IS NULL
         ");
     }
 
@@ -157,14 +189,14 @@ try {
     $totalCourses = ($resC->fetch_assoc())['total_courses'] ?? 0;
 
     echo json_encode([
-        "status" => true,
+        "status"  => true,
         "message" => "Student summary fetched successfully.",
-        "role" => $role,
+        "role"    => $role,
         "summary" => [
-            "total_students" => count(array_unique(array_column($students, 'student_id'))),
-            "active_students" => $activeCount,
-            "completed_students" => $completedCount,
-            "total_courses" => $totalCourses
+            "total_students"    => count(array_unique(array_column($students, 'student_id'))),
+            "active_students"   => $activeCount,
+            "completed_students"=> $completedCount,
+            "total_courses"     => $totalCourses
         ],
         "data" => $students
     ], JSON_PRETTY_PRINT);
