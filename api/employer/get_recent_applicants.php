@@ -16,7 +16,7 @@ try {
     }
 
     // --------------------------------------------
-    // 🔍 FIND RECRUITER_PROFILE_ID (if recruiter)
+    // 🔍 FIND RECRUITER_PROFILE_ID (FIXED: removed admin_action)
     // --------------------------------------------
     $recruiter_profile_id = null;
 
@@ -24,7 +24,7 @@ try {
         $stmt = $conn->prepare("
             SELECT id 
             FROM recruiter_profiles 
-            WHERE user_id = ? AND admin_action = 'approved'
+            WHERE user_id = ?
             LIMIT 1
         ");
         $stmt->bind_param("i", $user_id);
@@ -33,7 +33,7 @@ try {
         $recruiter_profile_id = $rp['id'] ?? null;
 
         if (!$recruiter_profile_id) {
-            echo json_encode(["status" => false, "message" => "Recruiter profile not found or not approved"]);
+            echo json_encode(["status" => false, "message" => "Recruiter profile not found"]);
             exit;
         }
     }
@@ -61,7 +61,7 @@ try {
     }
 
     // --------------------------------------------
-    // 📌 RECENT APPLICANTS (Only JOB OWNER)
+    // 📌 RECENT APPLICANTS
     // --------------------------------------------
     $recent_sql = "
         SELECT 
@@ -155,7 +155,7 @@ try {
         if (!empty($row['resume'])) {
             $clean = basename($row['resume']);
             if (file_exists(__DIR__."/../uploads/resume/".$clean)) {
-               $resume_url = $protocol.$host.$resume_folder.$clean;
+                $resume_url = $protocol.$host.$resume_folder.$clean;
             }
         }
 

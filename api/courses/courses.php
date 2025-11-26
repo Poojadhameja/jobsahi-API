@@ -30,7 +30,7 @@ try {
 
 
     // ---------------------------------------------------------
-    // BASE QUERY (UNCHANGED)
+    // BASE QUERY (admin_action removed)
     // ---------------------------------------------------------
     $sql = "
         SELECT 
@@ -51,7 +51,6 @@ try {
             c.module_description,
             c.media,
             c.fee,
-            c.admin_action,
             c.created_at,
             c.updated_at
         FROM courses AS c
@@ -64,10 +63,10 @@ try {
 
 
     // ---------------------------------------------------------
-    // ROLE FILTERS (NO CHANGE)
+    // ROLE FILTERS (admin_action removed)
     // ---------------------------------------------------------
     if ($user_role === 'admin') {
-        // Admin sees all
+        // Admin sees all — no filter
     } 
     elseif ($user_role === 'institute') {
         if ($institute_id > 0) {
@@ -77,22 +76,14 @@ try {
         }
     } 
     else {
-        // Student sees only approved courses
-        $sql .= " AND c.admin_action = ?";
-        $params[] = 'approved';
-        $types .= "s";
+        // Student — earlier filter removed (admin_action removed)
+        // Students now see all courses
     }
 
 
     // ---------------------------------------------------------
-    // OPTIONAL FILTERS (UNCHANGED)
+    // OPTIONAL FILTERS (admin_action removed)
     // ---------------------------------------------------------
-    if (!empty($_GET['status']) && in_array($_GET['status'], ['pending', 'approved', 'rejected'])) {
-        $sql .= " AND c.admin_action = ?";
-        $params[] = $_GET['status'];
-        $types .= "s";
-    }
-
     if (!empty($_GET['category'])) {
         $sql .= " AND cc.category_name LIKE ?";
         $params[] = "%" . $_GET['category'] . "%";
@@ -122,21 +113,18 @@ try {
 
 
     // ---------------------------------------------------------
-    // FORMAT OUTPUT + REMOVE admin_action + ADD media_url
+    // FORMAT OUTPUT + ADD media_url
     // ---------------------------------------------------------
     $BASE_URL = "http://localhost/jobsahi-API/api/uploads/institute_course_image/";
 
     $courses = [];
     while ($row = $result->fetch_assoc()) {
 
-        // REMOVE admin_action ALWAYS (for all roles)
-        unset($row['admin_action']);
-
         $row['certification_allowed'] = (bool)$row['certification_allowed'];
         $row['fee'] = (float)$row['fee'];
         $row['category_name'] = $row['category_name'] ?? 'Technical';
 
-        // MEDIA URL
+        // MEDIA URL FIX
         if (!empty($row['media'])) {
             if (strpos($row['media'], 'uploads/') !== false) {
                 $row['media_url'] = $BASE_URL . $row['media'];
@@ -161,7 +149,6 @@ try {
         "user_role" => $user_role,
         "courses" => $courses
     ], JSON_PRETTY_PRINT);
-
 
 } catch (Exception $e) {
 

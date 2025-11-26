@@ -79,8 +79,6 @@ $name = mysqli_real_escape_string($conn, trim($data['name']));
 $email = mysqli_real_escape_string($conn, trim($data['email']));
 $phone = isset($data['phone']) && !empty($data['phone']) ? mysqli_real_escape_string($conn, trim($data['phone'])) : null;
 
-// ✅ admin_action field - always set to 'approved' by default
-$admin_action = 'approved';
 
 // ✅ Validate institute_id exists
 $check_institute_sql = "SELECT id FROM institute_profiles WHERE id = ?";
@@ -128,8 +126,8 @@ if (mysqli_num_rows($email_result) > 0) {
 mysqli_stmt_close($check_stmt);
 
 // ✅ Insert faculty user (without password)
-$insert_sql = "INSERT INTO faculty_users (institute_id, name, email, phone, admin_action) 
-               VALUES (?, ?, ?, ?, ?)";
+$insert_sql = "INSERT INTO faculty_users (institute_id, name, email, phone) 
+               VALUES (?, ?, ?, ?)";
 $insert_stmt = mysqli_prepare($conn, $insert_sql);
 
 if (!$insert_stmt) {
@@ -140,19 +138,18 @@ if (!$insert_stmt) {
     exit;
 }
 
-mysqli_stmt_bind_param($insert_stmt, "issss", 
+mysqli_stmt_bind_param($insert_stmt, "isss", 
     $institute_id, 
     $name, 
     $email, 
-    $phone, 
-    $admin_action
+    $phone
 );
 
 if (mysqli_stmt_execute($insert_stmt)) {
     $faculty_id = mysqli_insert_id($conn);
     
     // ✅ Fetch created faculty user
-    $get_sql = "SELECT id, institute_id, name, email, phone, admin_action 
+    $get_sql = "SELECT id, institute_id, name, email, phone 
                 FROM faculty_users WHERE id = ?";
     $get_stmt = mysqli_prepare($conn, $get_sql);
     mysqli_stmt_bind_param($get_stmt, "i", $faculty_id);
