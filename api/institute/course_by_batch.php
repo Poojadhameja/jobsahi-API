@@ -42,7 +42,7 @@ try {
     if ($course_id === 0) {
 
         $courseQuery = "
-            SELECT id AS course_id, title AS course_title, instructor_name, duration, fee, admin_action
+            SELECT id AS course_id, title AS course_title, instructor_name, duration, fee, admin_action, certification_allowed
             FROM courses
             WHERE admin_action = 'approved'
             ".($role === 'institute' ? " AND institute_id = ?" : "")."
@@ -120,7 +120,8 @@ try {
                 "active_batches"   => $active_batches,
                 "overall_progress" => $overall_progress,
                 "total_students"   => $total_students,
-                "admin_action"     => $course['admin_action']
+                "admin_action"     => $course['admin_action'],
+                "certification_allowed" => (intval($course['certification_allowed']) === 1) ? "yes" : "no"
             ];
         }
 
@@ -141,7 +142,7 @@ try {
 
         $courseQuery = "
             SELECT id AS course_id, title AS course_title, instructor_name,
-                   duration, description, fee, admin_action
+                   duration, description, fee, admin_action, certification_allowed
             FROM courses
             WHERE id = ? AND admin_action = 'approved'
             ".($role === 'institute' ? " AND institute_id = ?" : "")."
@@ -165,6 +166,9 @@ try {
         }
 
         $course = $courseRes->fetch_assoc();
+        
+        // Convert certification_allowed to yes/no
+        $course['certification_allowed'] = (intval($course['certification_allowed']) === 1) ? "yes" : "no";
 
         // ================================
         // FETCH BATCHES (WITH STUDENTS)
