@@ -19,8 +19,8 @@ try {
         exit;
     }
 
-    // 🔹 Get recruiter_profile id
-    $sql_rec = "SELECT id FROM recruiter_profiles WHERE user_id = ? AND admin_action = 'approved'";
+    // 🔹 Get recruiter_profile id (REMOVED admin_action condition)
+    $sql_rec = "SELECT id FROM recruiter_profiles WHERE user_id = ?";
     $stmt_rec = $conn->prepare($sql_rec);
     $stmt_rec->bind_param("i", $user_id);
     $stmt_rec->execute();
@@ -29,7 +29,7 @@ try {
 
     if (!$recruiter_profile_id) {
         http_response_code(400);
-        echo json_encode(["message" => "Recruiter profile not found or not approved", "status" => false]);
+        echo json_encode(["message" => "Recruiter profile not found", "status" => false]);
         exit;
     }
 
@@ -41,14 +41,13 @@ try {
             i.mode AS interview_mode,
             i.location AS interview_location,
             DATE_FORMAT(i.scheduled_at, '%h:%i %p') AS interview_time,
-DATE(i.scheduled_at) AS interview_date
+            DATE(i.scheduled_at) AS interview_date
         FROM interviews i
         INNER JOIN applications a ON a.id = i.application_id
         INNER JOIN jobs j ON j.id = a.job_id
         INNER JOIN student_profiles sp ON sp.id = a.student_id
         INNER JOIN users u ON u.id = sp.user_id
         WHERE j.recruiter_id = ?
-          AND i.admin_action = 'approved'
           AND i.status = 'scheduled'
         ORDER BY i.scheduled_at DESC";
 
@@ -64,7 +63,7 @@ DATE(i.scheduled_at) AS interview_date
             "mode" => ucfirst($row['interview_mode']),
             "location" => $row['interview_location'],
             "time" => $row['interview_time'],
-             "scheduled_at" => $row['interview_date'] // ✅ added full date
+            "scheduled_at" => $row['interview_date']
         ];
         http_response_code(200);
         echo json_encode(["candidate_interview_details" => $data, "status" => true]);

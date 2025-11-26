@@ -18,8 +18,8 @@ if ($user_role !== 'recruiter') {
     exit;
 }
 
-// ✅ Get recruiter_id
-$stmt = $conn->prepare("SELECT id FROM recruiter_profiles WHERE user_id = ? AND admin_action = 'approved' LIMIT 1");
+// ✅ Get recruiter_id (🔴 admin_action removed)
+$stmt = $conn->prepare("SELECT id FROM recruiter_profiles WHERE user_id = ? LIMIT 1");
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $stmt->bind_result($recruiter_id);
@@ -27,7 +27,7 @@ $stmt->fetch();
 $stmt->close();
 
 if (!$recruiter_id) {
-    echo json_encode(["message" => "Recruiter profile not found or not approved", "status" => false]);
+    echo json_encode(["message" => "Recruiter profile not found", "status" => false]);
     exit;
 }
 
@@ -51,9 +51,10 @@ $experience_required = $input['experience_required'] ?? '';
 $application_deadline = $input['application_deadline'] ?? null;
 $is_remote = $input['is_remote'] ?? 0;
 $no_of_vacancies = $input['no_of_vacancies'] ?? 1;
-$vacancyStatus = $input['vacancyStatus'] ?? 'open';
 $status = $input['status'] ?? 'open';
-$admin_action = 'pending';
+
+// ❌ Removed admin_action
+// $admin_action = 'pending';
 
 // Recruiter info
 $person_name = $input['person_name'] ?? '';
@@ -81,54 +82,55 @@ try {
         $cat_insert->close();
     }
 
-    // 2️⃣ Insert into jobs (without company_info_id first)
+    // 2️⃣ Insert into jobs (admin_action removed)
     $job_sql = "INSERT INTO jobs (
-    recruiter_id, category_id, title, description, location, skills_required,
-    salary_min, salary_max, job_type, experience_required, application_deadline,
-    is_remote, no_of_vacancies, status, admin_action
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        recruiter_id, category_id, title, description, location, skills_required,
+        salary_min, salary_max, job_type, experience_required, application_deadline,
+        is_remote, no_of_vacancies, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-$job_stmt = $conn->prepare($job_sql);
-$job_stmt->bind_param(
-    "iissssddsssiiss",
-    $recruiter_id,
-    $category_id,
-    $title,
-    $description,
-    $location,
-    $skills_required,
-    $salary_min,
-    $salary_max,
-    $job_type,
-    $experience_required,
-    $application_deadline,
-    $is_remote,
-    $no_of_vacancies,
-    $status,
-    $admin_action
-);
+    $job_stmt = $conn->prepare($job_sql);
+    $job_stmt->bind_param(
+        "iissssddssssii",
+        $recruiter_id,
+        $category_id,
+        $title,
+        $description,
+        $location,
+        $skills_required,
+        $salary_min,
+        $salary_max,
+        $job_type,
+        $experience_required,
+        $application_deadline,
+        $is_remote,
+        $no_of_vacancies,
+        $status
+    );
 
     $job_stmt->execute();
     $job_id = $job_stmt->insert_id;
     $job_stmt->close();
 
     // 3️⃣ Insert company info
-    $company_sql = "INSERT INTO recruiter_company_info (job_id, recruiter_id, person_name, phone, additional_contact, created_at)
-                    VALUES (?, ?, ?, ?, ?, NOW())";
+    $company_sql = "INSERT INTO recruiter_company_info 
+        (job_id, recruiter_id, person_name, phone, additional_contact, created_at)
+        VALUES (?, ?, ?, ?, ?, NOW())";
+
     $company_stmt = $conn->prepare($company_sql);
     $company_stmt->bind_param("iisss", $job_id, $recruiter_id, $person_name, $phone, $additional_contact);
     $company_stmt->execute();
     $company_info_id = $company_stmt->insert_id;
     $company_stmt->close();
 
-    // 4️⃣ Update the job record with company_info_id
+    // 4️⃣ Update job with company_info_id
     $update_sql = "UPDATE jobs SET company_info_id = ? WHERE id = ?";
     $update_stmt = $conn->prepare($update_sql);
     $update_stmt->bind_param("ii", $company_info_id, $job_id);
     $update_stmt->execute();
     $update_stmt->close();
 
-    // ✅ Commit transaction
+    // Commit transaction
     $conn->commit();
 
     echo json_encode([

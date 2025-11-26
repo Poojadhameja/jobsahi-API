@@ -1,25 +1,37 @@
-<?php
+<?php 
 require_once '../cors.php';
 require_once '../db.php';
 
 try {
-    // ✅ Authenticate JWT
-    $user = authenticateJWT(['admin', 'institute', 'student']);
-
-    $user_role = strtolower($user['role'] ?? 'student');
-    $user_id   = intval($user['user_id'] ?? ($user['id'] ?? 0));
 
     // ---------------------------------------------------------
-    // 🔥 FIX: Institute ID must always be user_id from JWT
+    // 🔥 FINAL FIX — CORRECT JWT + INSTITUTE ID DETECTION
     // ---------------------------------------------------------
+    $decoded = authenticateJWT(['admin', 'institute', 'student']);
+
+    $user_role = strtolower($decoded['role'] ?? 'student');
+    $user_id   = intval($decoded['user_id'] ?? ($decoded['id'] ?? 0));
+
+    // If logged in as institute → fetch actual institute_id from DB
     if ($user_role === 'institute') {
-        $institute_id = $user_id;   // FIXED
+        $stmtX = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
+        $stmtX->bind_param("i", $user_id);
+        $stmtX->execute();
+        $resX = $stmtX->get_result()->fetch_assoc();
+        $stmtX->close();
+
+        $institute_id = intval($resX['id'] ?? 0);
+
     } else {
-        $institute_id = intval($user['institute_id'] ?? 0);
+        // For admin/student → use whatever JWT contains (unchanged)
+        $institute_id = intval($decoded['institute_id'] ?? 0);
     }
     // ---------------------------------------------------------
 
-    // ✅ Base query
+
+    // ---------------------------------------------------------
+    // BASE QUERY (admin_action removed)
+    // ---------------------------------------------------------
     $sql = "
         SELECT 
             c.id,
@@ -39,7 +51,6 @@ try {
             c.module_description,
             c.media,
             c.fee,
-            c.admin_action,
             c.created_at,
             c.updated_at
         FROM courses AS c
@@ -50,30 +61,29 @@ try {
     $params = [];
     $types = "";
 
-    // ✅ Role-based filters
+
+    // ---------------------------------------------------------
+    // ROLE FILTERS (admin_action removed)
+    // ---------------------------------------------------------
     if ($user_role === 'admin') {
-        // Admin sees all courses
-    } elseif ($user_role === 'institute') {
-        // Institute sees only its own courses
+        // Admin sees all — no filter
+    } 
+    elseif ($user_role === 'institute') {
         if ($institute_id > 0) {
             $sql .= " AND c.institute_id = ?";
             $params[] = $institute_id;
             $types .= "i";
         }
-    } else {
-        // Student sees only approved courses
-        $sql .= " AND c.admin_action = ?";
-        $params[] = 'approved';
-        $types .= "s";
+    } 
+    else {
+        // Student — earlier filter removed (admin_action removed)
+        // Students now see all courses
     }
 
-    // ✅ Optional filters
-    if (!empty($_GET['status']) && in_array($_GET['status'], ['pending', 'approved', 'rejected'])) {
-        $sql .= " AND c.admin_action = ?";
-        $params[] = $_GET['status'];
-        $types .= "s";
-    }
 
+    // ---------------------------------------------------------
+    // OPTIONAL FILTERS (admin_action removed)
+    // ---------------------------------------------------------
     if (!empty($_GET['category'])) {
         $sql .= " AND cc.category_name LIKE ?";
         $params[] = "%" . $_GET['category'] . "%";
@@ -89,25 +99,49 @@ try {
 
     $sql .= " ORDER BY c.id DESC";
 
+
+    // ---------------------------------------------------------
+    // EXECUTE QUERY
+    // ---------------------------------------------------------
     $stmt = $conn->prepare($sql);
     if (!$stmt) throw new Exception("Prepare failed: " . $conn->error);
 
     if (!empty($params)) $stmt->bind_param($types, ...$params);
+
     $stmt->execute();
     $result = $stmt->get_result();
 
+
+    // ---------------------------------------------------------
+    // FORMAT OUTPUT + ADD media_url
+    // ---------------------------------------------------------
+    $BASE_URL = "http://localhost/jobsahi-API/api/uploads/institute_course_image/";
+
     $courses = [];
     while ($row = $result->fetch_assoc()) {
-
-        if ($user_role === 'student') unset($row['admin_action']);
 
         $row['certification_allowed'] = (bool)$row['certification_allowed'];
         $row['fee'] = (float)$row['fee'];
         $row['category_name'] = $row['category_name'] ?? 'Technical';
 
+        // MEDIA URL FIX
+        if (!empty($row['media'])) {
+            if (strpos($row['media'], 'uploads/') !== false) {
+                $row['media_url'] = $BASE_URL . $row['media'];
+            } else {
+                $row['media_url'] = $BASE_URL . "uploads/" . $row['media'];
+            }
+        } else {
+            $row['media_url'] = "";
+        }
+
         $courses[] = $row;
     }
 
+
+    // ---------------------------------------------------------
+    // FINAL RESPONSE
+    // ---------------------------------------------------------
     echo json_encode([
         "status" => true,
         "message" => "Courses retrieved successfully",
@@ -117,10 +151,13 @@ try {
     ], JSON_PRETTY_PRINT);
 
 } catch (Exception $e) {
+
     echo json_encode([
         "status" => false,
         "message" => "Error: " . $e->getMessage(),
         "courses" => []
     ], JSON_PRETTY_PRINT);
+
 }
+
 ?>

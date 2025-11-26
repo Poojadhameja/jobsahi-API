@@ -137,7 +137,6 @@ if (!$existing) {
 $template_name = trim($input['template_name'] ?? $existing['template_name']);
 $description   = trim($input['description'] ?? $existing['description']);
 $is_active     = intval($input['is_active'] ?? $existing['is_active']);
-$admin_action  = trim($input['admin_action'] ?? $existing['admin_action']);
 
 // -------------------------------------------------------------
 // MEDIA UPLOAD — SAME AS CREATE API
@@ -205,20 +204,18 @@ $stmt = $conn->prepare("
         signature = ?, 
         description = ?, 
         is_active = ?, 
-        admin_action = ?, 
         modified_at = NOW()
     WHERE id = ? AND institute_id = ?
 ");
 
 $stmt->bind_param(
-    "sssssisii",
+    "sssssisi",
     $template_name,
     $updated['logo'],
     $updated['seal'],
     $updated['signature'],
     $description,
     $is_active,
-    $admin_action,
     $template_id,
     $institute_id
 );
@@ -236,7 +233,6 @@ echo json_encode([
     "template_name" => $template_name,
     "description"   => $description,
     "is_active"     => (bool)$is_active,
-    "admin_action"  => $admin_action,
     "logo"          => $updated['logo'],
     "seal"          => $updated['seal'],
     "signature"     => $updated['signature']

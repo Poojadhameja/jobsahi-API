@@ -1,111 +1,119 @@
 <?php
-// get_course_category.php - Fetch all or single course category
+// get_course_category.php - Fetch categories, institute-wise usage filter
 require_once '../cors.php';
 require_once '../db.php';
 
 try {
-    // ✅ Authenticate JWT (Admin + Institute)
+    // Authenticate user
     $decoded = authenticateJWT(['admin', 'institute']);
-    $user_id = $decoded['user_id'];
     $user_role = strtolower($decoded['role']);
+    $user_id   = intval($decoded['user_id']);
 
-    // 🔥 NEW FIX: Detect institute_id from JWT if institute login
+    // -------------------------
+    // => Get institute_id (if institute)
+    // -------------------------
     $institute_id = 0;
+
     if ($user_role === 'institute') {
-        $institute_id = intval($decoded['institute_id']); 
+        $stmt = $conn->prepare("
+            SELECT id 
+            FROM institute_profiles 
+            WHERE user_id = ? 
+            LIMIT 1
+        ");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        if ($row = $res->fetch_assoc()) {
+            $institute_id = intval($row['id']);
+        }
+        $stmt->close();
     }
 
-    // ✅ Check if 'id' is passed in query string
+    // Single category fetch
     $category_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
+    // =======================================================
+    // FETCH SINGLE CATEGORY (Admin → direct | Institute → filter by usage)
+    // =======================================================
     if ($category_id > 0) {
 
-        // 🔥 NEW FIX: apply institute filter if role = institute
-        if ($user_role === 'institute') {
-            $stmt = $conn->prepare("
-                SELECT id, category_name, created_at 
-                FROM course_category 
-                WHERE id = ? AND institute_id = ?
-            ");
-            $stmt->bind_param("ii", $category_id, $institute_id);
-
-        } else {
-            // Admin sees all
-            $stmt = $conn->prepare("
+        if ($user_role === 'admin') {
+            $sql = "
                 SELECT id, category_name, created_at 
                 FROM course_category 
                 WHERE id = ?
-            ");
+            ";
+            $stmt = $conn->prepare($sql);
             $stmt->bind_param("i", $category_id);
+
+        } else {
+            // Institute — show only if USED by this institute
+            $sql = "
+                SELECT DISTINCT cc.id, cc.category_name, cc.created_at
+                FROM course_category cc
+                JOIN courses c ON c.category_id = cc.id
+                WHERE cc.id = ? AND c.institute_id = ?
+            ";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("ii", $category_id, $institute_id);
         }
 
         $stmt->execute();
         $result = $stmt->get_result();
 
-        if ($result->num_rows > 0) {
-            $category = $result->fetch_assoc();
-            echo json_encode([
-                "status" => true,
-                "message" => "Course category fetched successfully",
-                "category" => [
-                    "id" => intval($category['id']),
-                    "category_name" => $category['category_name'],
-                    "created_at" => $category['created_at']
-                ]
-            ]);
-        } else {
+        if ($result->num_rows === 0) {
             echo json_encode([
                 "status" => false,
-                "message" => "Course category not found"
+                "message" => "Category not found for this institute"
             ]);
+            exit;
         }
+
+        echo json_encode([
+            "status" => true,
+            "message" => "Category fetched successfully",
+            "category" => $result->fetch_assoc()
+        ]);
+        exit;
+    }
+
+
+    // =======================================================
+    // FETCH ALL CATEGORIES (Admin → all | Institute → only used ones)
+    // =======================================================
+
+    if ($user_role === 'admin') {
+
+        $sql = "SELECT id, category_name, created_at FROM course_category ORDER BY id ASC";
 
     } else {
 
-        // 🔥 NEW FIX: institute can only fetch its own categories
-        if ($user_role === 'institute') {
-            $sql = "
-                SELECT id, category_name, created_at 
-                FROM course_category 
-                WHERE institute_id = $institute_id
-                ORDER BY id ASC
-            ";
-        } else {
-            // Admin gets all
-            $sql = "
-                SELECT id, category_name, created_at 
-                FROM course_category 
-                ORDER BY id ASC
-            ";
-        }
-
-        $result = $conn->query($sql);
-
-        if ($result && $result->num_rows > 0) {
-            $categories = [];
-            while ($row = $result->fetch_assoc()) {
-                $categories[] = [
-                    "id" => intval($row['id']),
-                    "category_name" => $row['category_name'],
-                    "created_at" => $row['created_at']
-                ];
-            }
-
-            echo json_encode([
-                "status" => true,
-                "message" => "Course categories fetched successfully",
-                "categories" => $categories
-            ]);
-        } else {
-            echo json_encode([
-                "status" => false,
-                "message" => "No course categories found",
-                "categories" => []
-            ]);
-        }
+        // Institute → only categories USED in its courses
+        $sql = "
+            SELECT DISTINCT cc.id, cc.category_name, cc.created_at
+            FROM course_category cc
+            JOIN courses c ON c.category_id = cc.id
+            WHERE c.institute_id = {$institute_id}
+            ORDER BY cc.id ASC
+        ";
     }
 
+    $result = $conn->query($sql);
+    $categories = [];
+
+    while ($row = $result->fetch_assoc()) {
+        $categories[] = $row;
+    }
+
+    echo json_encode([
+        "status" => true,
+        "message" => "Categories fetched successfully",
+        "categories" => $categories
+    ]);
+
 } catch (Exception $e) {
+
     echo json_encode([
         "status" => false,
         "message" => "Error: " . $e->getMessage()

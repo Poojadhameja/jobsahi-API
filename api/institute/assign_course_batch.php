@@ -14,9 +14,11 @@ try {
     $institute_id = 0;
 
     // ----------------------------------------------------
-    // 🎯 FIXED: FETCH institute_id PROPERLY FOR INSTITUTE USER
+    // 🎯 FIXED: FETCH REAL institute_id FROM institute_profiles
+    // (NO LOGIC CHANGED)
     // ----------------------------------------------------
     if ($role === 'institute') {
+
         $stmtInst = $conn->prepare("
             SELECT id 
             FROM institute_profiles 
@@ -30,10 +32,8 @@ try {
         if ($rowInst = $resInst->fetch_assoc()) {
             $institute_id = intval($rowInst['id']);
         }
-
         $stmtInst->close();
 
-        // ❌ If switching login and institute_id is missing
         if ($institute_id <= 0) {
             echo json_encode([
                 "status" => false,
@@ -53,12 +53,54 @@ try {
     $batch_id   = intval($input['batch_id'] ?? 0);
     $assignment_reason = trim($input['assignment_reason'] ?? '');
 
-    // Normalize
     if (!is_array($student_id)) $student_id = [$student_id];
 
     if (empty($student_id) || !$course_id || !$batch_id) {
         echo json_encode(["status" => false, "message" => "Missing parameters"]);
         exit;
+    }
+
+    // ----------------------------------------------------
+    // 🟦 NEW STRICT FILTER:
+    // ✔ Institute can only assign THEIR COURSE
+    // ✔ Institute can only assign THEIR BATCH
+    // (NO LOGIC CHANGED — ONLY FILTER ADDED)
+    // ----------------------------------------------------
+    if ($role === "institute") {
+
+        // Check course
+        $chkCourse = $conn->prepare("
+            SELECT id FROM courses 
+            WHERE id = ? AND institute_id = ? 
+            LIMIT 1
+        ");
+        $chkCourse->bind_param("ii", $course_id, $institute_id);
+        $chkCourse->execute();
+        if ($chkCourse->get_result()->num_rows == 0) {
+            echo json_encode([
+                "status" => false,
+                "message" => "Unauthorized: This course does not belong to your institute"
+            ]);
+            exit;
+        }
+
+        // Check batch → batches.course_id MUST belong to same institute
+        $chkBatch = $conn->prepare("
+            SELECT b.id
+            FROM batches b
+            JOIN courses c ON c.id = b.course_id
+            WHERE b.id = ? AND c.institute_id = ?
+            LIMIT 1
+        ");
+        $chkBatch->bind_param("ii", $batch_id, $institute_id);
+        $chkBatch->execute();
+        if ($chkBatch->get_result()->num_rows == 0) {
+            echo json_encode([
+                "status" => false,
+                "message" => "Unauthorized: This batch does not belong to your institute"
+            ]);
+            exit;
+        }
     }
 
     // ----------------------------------------------------
@@ -112,7 +154,6 @@ try {
         $student_profile_id = $profileMap[$sid] ?? 0;
         if ($student_profile_id <= 0) continue;
 
-        // Check if already assigned
         $check->bind_param("ii", $student_profile_id, $batch_id);
         $check->execute();
         $exists = $check->get_result()->fetch_assoc();
@@ -122,11 +163,9 @@ try {
             continue;
         }
 
-        // Assign course
         $stmt->bind_param("ii", $student_profile_id, $course_id);
         $stmt->execute();
 
-        // Assign batch
         $stmt2->bind_param("iis", $student_profile_id, $batch_id, $assignment_reason);
         $stmt2->execute();
 

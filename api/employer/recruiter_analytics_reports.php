@@ -106,7 +106,7 @@ try {
     $total_jobs = $getValue("
         SELECT COUNT(id)
         FROM jobs
-        WHERE recruiter_id = ? AND admin_action = 'approved'
+        WHERE recruiter_id = ?
     ");
 
     // ✅ Total Applications Received

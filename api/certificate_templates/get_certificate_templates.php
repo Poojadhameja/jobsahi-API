@@ -1,175 +1,164 @@
 <?php
-// certificate_templates.php - List + Get by ID, with role-based admin_action
+// get_certificate_templates.php - List + Fetch by ID (Institute / Admin Valid Only)
 require_once '../cors.php';
 require_once '../db.php';
 
-// ✅ Authenticate JWT
-$decoded  = authenticateJWT(['admin', 'recruiter', 'institute', 'student']);
+// ----------------------------------------------
+// 🔐 AUTHENTICATE JWT
+// ----------------------------------------------
+$decoded  = authenticateJWT(['admin', 'institute']);
 $userRole = strtolower($decoded['role'] ?? '');
-$loginInstituteId = intval($decoded['user_id'] ?? 0);   // ✅ FIXED FOR INSTITUTE LOGIN
+$userId   = intval($decoded['user_id'] ?? 0);
 
-try {
-    // CHECK IF "id" QUERY PARAM EXISTS
-    $templateId = isset($_GET['id']) ? intval($_GET['id']) : 0;
+// ----------------------------------------------
+// 🎯 FIX: GET institute_id PROPERLY
+// ----------------------------------------------
+$institute_id = 0;
 
-    // -------------------------------------------------------
-    // ROLE BASED CONDITION  (ONLY THIS PART UPDATED)
-    // -------------------------------------------------------
+if ($userRole === 'institute') {
+    $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
+    $stmt->bind_param("i", $userId);
+    $stmt->execute();
+    $profile = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
 
-    if ($userRole === 'admin') {
-        // Admin sees everything (active or inactive)
-        $roleFilter = "is_active = 1";
-
-    } elseif ($userRole === 'institute') {
-        // Institute sees only its own templates + approved
-        // 🔥 FIX: When switching JWT, only that institute's templates will load
-        $roleFilter = "is_active = 1 AND admin_action = 'approved' AND institute_id = $loginInstituteId";
-
-    } else {
-        // Recruiter/Student: only approved active templates
-        $roleFilter = "is_active = 1 AND admin_action = 'approved'";
-    }
-
-    // -------------------------------------------------------
-    // BASE SQL (COMMON)
-    // -------------------------------------------------------
-    $baseSelect = "
-        SELECT 
-            id,
-            institute_id,
-            template_name,
-            logo,
-            seal,
-            signature,
-            description,
-            is_active,
-            created_at,
-            modified_at,
-            deleted_at,
-            admin_action
-        FROM certificate_templates
-    ";
-
-    // -------------------------------------------------------
-    // 1️⃣ IF ID PROVIDED → FETCH SINGLE TEMPLATE
-    // -------------------------------------------------------
-    if ($templateId > 0) {
-        $sql = $baseSelect . " WHERE id = ? AND $roleFilter LIMIT 1";
-
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("i", $templateId);
-        $stmt->execute();
-        $result = $stmt->get_result();
-
-        // MEDIA CONFIG
-        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
-        $host = $_SERVER['HTTP_HOST'];
-        $basePath = '/jobsahi-API/api/uploads/institute_certificate_templates/';
-
-        function getMediaUrl($fileName, $protocol, $host, $basePath) {
-            if (empty($fileName)) return null;
-
-            $clean = str_replace(["\\", "/uploads/institute_certificate_templates/", "./", "../"], "", $fileName);
-            $localPath = __DIR__ . '/../uploads/institute_certificate_templates/' . $clean;
-
-            return file_exists($localPath)
-                ? $protocol . $host . $basePath . $clean
-                : null;
-        }
-
-        if ($row = $result->fetch_assoc()) {
-            $data = [
-                'id'            => $row['id'],
-                'institute_id'  => $row['institute_id'],
-                'template_name' => $row['template_name'],
-                'description'   => $row['description'],
-                'is_active'     => (bool)$row['is_active'],
-                'created_at'    => $row['created_at'],
-                'modified_at'   => $row['modified_at'],
-                'deleted_at'    => $row['deleted_at'],
-                'admin_action'  => $row['admin_action'],
-
-                // MEDIA
-                'logo'      => getMediaUrl($row['logo'], $protocol, $host, $basePath),
-                'seal'      => getMediaUrl($row['seal'], $protocol, $host, $basePath),
-                'signature' => getMediaUrl($row['signature'], $protocol, $host, $basePath),
-            ];
-
-            echo json_encode([
-                "status"  => true,
-                "message" => "Certificate template found",
-                "data"    => $data
-            ]);
-            exit;
-        }
-
-        echo json_encode([
-            "status"  => false,
-            "message" => "Template not found"
-        ]);
+    if (!$profile) {
+        echo json_encode(["status" => false, "message" => "Institute profile not found"]);
         exit;
     }
 
-    // -------------------------------------------------------
-    // 2️⃣ IF NO ID → RETURN ALL TEMPLATES
-    // -------------------------------------------------------
-    $sql = $baseSelect . " WHERE $roleFilter ORDER BY created_at DESC";
-
-    $stmt = $conn->prepare($sql);
-    $stmt->execute();
-    $result = $stmt->get_result();
-
-    $templates = [];
-
-    // MEDIA CONFIG
-    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
-    $host = $_SERVER['HTTP_HOST'];
-    $basePath = '/jobsahi-API/api/uploads/institute_certificate_templates/';
-
-    function getMediaUrlList($fileName, $protocol, $host, $basePath) {
-        if (empty($fileName)) return null;
-
-        $clean = str_replace(["\\", "/uploads/institute_certificate_templates/", "./", "../"], "", $fileName);
-        $localPath = __DIR__ . '/../uploads/institute_certificate_templates/' . $clean;
-
-        return file_exists($localPath)
-            ? $protocol . $host . $basePath . $clean
-            : null;
-    }
-
-    while ($row = $result->fetch_assoc()) {
-        $templates[] = [
-            'id'            => $row['id'],
-            'institute_id'  => $row['institute_id'],
-            'template_name' => $row['template_name'],
-            'description'   => $row['description'],
-            'is_active'     => (bool)$row['is_active'],
-            'created_at'    => $row['created_at'],
-            'modified_at'   => $row['modified_at'],
-            'deleted_at'    => $row['deleted_at'],
-            'admin_action'  => $row['admin_action'],
-
-            // MEDIA URLS
-            'logo'      => getMediaUrlList($row['logo'], $protocol, $host, $basePath),
-            'seal'      => getMediaUrlList($row['seal'], $protocol, $host, $basePath),
-            'signature' => getMediaUrlList($row['signature'], $protocol, $host, $basePath),
-        ];
-    }
-
-    echo json_encode([
-        "status"  => true,
-        "message" => "Certificate templates retrieved successfully",
-        "count"   => count($templates),
-        "data"    => $templates
-    ]);
-
-    $stmt->close();
-    $conn->close();
-
-} catch (Exception $e) {
-    echo json_encode([
-        "status"  => false,
-        "message" => "Error: " . $e->getMessage()
-    ]);
+    $institute_id = intval($profile['id']);
 }
+
+// ----------------------------------------------
+// 📌 ALLOW SINGLE TEMPLATE FETCH BY ID
+// ----------------------------------------------
+$templateId = isset($_GET['id']) ? intval($_GET['id']) : 0;
+
+// BASE SQL WITHOUT admin_action
+$baseSelect = "
+    SELECT 
+        id,
+        institute_id,
+        template_name,
+        logo,
+        seal,
+        signature,
+        description,
+        is_active,
+        created_at,
+        modified_at,
+        deleted_at
+    FROM certificate_templates
+";
+
+// ----------------------------------------------
+// 🌐 Helper to generate media URL
+// ----------------------------------------------
+function mediaURL($file) {
+    if (!$file) return null;
+
+    $file = str_replace([
+        "../", "./", 
+        "/uploads/institute_certificate_templates/"
+    ], "", $file);
+
+    $fullPath = __DIR__ . '/../uploads/institute_certificate_templates/' . $file;
+
+    if (!file_exists($fullPath)) return null;
+
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+    $host     = $_SERVER['HTTP_HOST'];
+
+    return $protocol . $host . "/jobsahi-API/api/uploads/institute_certificate_templates/" . $file;
+}
+
+// ----------------------------------------------
+// 1️⃣ FETCH SINGLE TEMPLATE
+// ----------------------------------------------
+if ($templateId > 0) {
+
+    if ($userRole === 'admin') {
+        $sql = $baseSelect . " WHERE id = ? LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $templateId);
+
+    } elseif ($userRole === 'institute') {
+        $sql = $baseSelect . " WHERE id = ? AND institute_id = ? LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("ii", $templateId, $institute_id);
+    }
+
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$row) {
+        echo json_encode(["status" => false, "message" => "Template not found"]);
+        exit;
+    }
+
+    echo json_encode([
+        "status" => true,
+        "message" => "Certificate template found",
+        "data" => [
+            "id"            => $row["id"],
+            "institute_id"  => $row["institute_id"],
+            "template_name" => $row["template_name"],
+            "description"   => $row["description"],
+            "is_active"     => (bool)$row["is_active"],
+
+            // Media
+            "logo"      => mediaURL($row["logo"]),
+            "seal"      => mediaURL($row["seal"]),
+            "signature" => mediaURL($row["signature"]),
+        ]
+    ]);
+    exit;
+}
+
+// ----------------------------------------------
+// 2️⃣ FETCH ALL TEMPLATES
+// ----------------------------------------------
+if ($userRole === 'admin') {
+    $sql = $baseSelect . " WHERE deleted_at IS NULL ORDER BY created_at DESC";
+    $stmt = $conn->prepare($sql);
+
+} elseif ($userRole === 'institute') {
+    $sql = $baseSelect . " WHERE deleted_at IS NULL AND institute_id = ? ORDER BY created_at DESC";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $institute_id);
+}
+
+$stmt->execute();
+$result = $stmt->get_result();
+
+$templates = [];
+
+while ($row = $result->fetch_assoc()) {
+    $templates[] = [
+        "id"            => $row["id"],
+        "institute_id"  => $row["institute_id"],
+        "template_name" => $row["template_name"],
+        "description"   => $row["description"],
+        "is_active"     => (bool)$row["is_active"],
+        "created_at"    => $row["created_at"],
+        "modified_at"   => $row["modified_at"],
+
+        // Media
+        "logo"      => mediaURL($row["logo"]),
+        "seal"      => mediaURL($row["seal"]),
+        "signature" => mediaURL($row["signature"]),
+    ];
+}
+
+$stmt->close();
+$conn->close();
+
+echo json_encode([
+    "status" => true,
+    "message" => "Certificate templates fetched successfully",
+    "count" => count($templates),
+    "data"  => $templates
+]);
 ?>

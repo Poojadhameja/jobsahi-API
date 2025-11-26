@@ -5,190 +5,180 @@ require_once '../cors.php';
 // ✅ Authenticate and allow only "admin" and "institute"
 $decoded = authenticateJWT(['admin','institute']); 
 
-// ✅ Extract user_id and role from token
+// Extract user_id and role
 $user_id = $decoded['user_id'];
 $user_role = $decoded['role'];
 
-// DB connection
 require_once '../db.php';
 
-// ✅ Determine institute_id based on user role
+// ===============================================
+// 🔍 DETERMINE institute_id BASED ON ROLE
+// ===============================================
 $user_institute_id = null;
 
 if ($user_role === 'admin') {
-    $fetch_institute_sql = "SELECT id FROM institute_profiles WHERE id = ?";
-    $fetch_stmt = mysqli_prepare($conn, $fetch_institute_sql);
-    mysqli_stmt_bind_param($fetch_stmt, "i", $user_id);
-    mysqli_stmt_execute($fetch_stmt);
-    $fetch_result = mysqli_stmt_get_result($fetch_stmt);
-    
-    if ($row = mysqli_fetch_assoc($fetch_result)) {
+    $fetch_sql = "SELECT id FROM institute_profiles WHERE id = ?";
+    $stmt = mysqli_prepare($conn, $fetch_sql);
+    mysqli_stmt_bind_param($stmt, "i", $user_id);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    if ($row = mysqli_fetch_assoc($res)) {
         $user_institute_id = $row['id'];
     }
-    mysqli_stmt_close($fetch_stmt);
-} elseif ($user_role === 'institute') {
-    $fetch_institute_sql = "SELECT id FROM institute_profiles WHERE user_id = ?";
-    $fetch_stmt = mysqli_prepare($conn, $fetch_institute_sql);
-    mysqli_stmt_bind_param($fetch_stmt, "i", $user_id);
-    mysqli_stmt_execute($fetch_stmt);
-    $fetch_result = mysqli_stmt_get_result($fetch_stmt);
-    
-    if ($row = mysqli_fetch_assoc($fetch_result)) {
+    mysqli_stmt_close($stmt);
+}
+
+elseif ($user_role === 'institute') {
+    $fetch_sql = "SELECT id FROM institute_profiles WHERE user_id = ?";
+    $stmt = mysqli_prepare($conn, $fetch_sql);
+    mysqli_stmt_bind_param($stmt, "i", $user_id);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    if ($row = mysqli_fetch_assoc($res)) {
         $user_institute_id = $row['id'];
     }
-    mysqli_stmt_close($fetch_stmt);
-    
+    mysqli_stmt_close($stmt);
+
     if ($user_institute_id === null) {
         echo json_encode([
-            "message" => "Institute ID not found for the user",
-            "status" => false
+            "status" => false,
+            "message" => "Institute ID not found"
         ]);
         exit;
     }
 }
 
-// ✅ Get JSON input
-$json = file_get_contents('php://input');
-$data = json_decode($json, true);
+// ===============================================
+// 📥 READ INPUT
+// ===============================================
+$data = json_decode(file_get_contents('php://input'), true);
 
-// ✅ Validate required faculty_id
+// Validate faculty_id
 if (empty($data['id'])) {
     echo json_encode([
-        "message" => "Faculty ID is required",
-        "status" => false
+        "status" => false,
+        "message" => "Faculty ID is required"
     ]);
     exit;
 }
 
 $faculty_id = intval($data['id']);
 
-// Check if faculty user exists
-$check_faculty_sql = "SELECT institute_id FROM faculty_users WHERE id = ?";
-$check_faculty_stmt = mysqli_prepare($conn, $check_faculty_sql);
-mysqli_stmt_bind_param($check_faculty_stmt, "i", $faculty_id);
-mysqli_stmt_execute($check_faculty_stmt);
-$faculty_result = mysqli_stmt_get_result($check_faculty_stmt);
+// ===============================================
+// ✔ CHECK FACULTY EXISTS
+// ===============================================
+$check_sql = "SELECT institute_id FROM faculty_users WHERE id = ?";
+$stmt = mysqli_prepare($conn, $check_sql);
+mysqli_stmt_bind_param($stmt, "i", $faculty_id);
+mysqli_stmt_execute($stmt);
+$res = mysqli_stmt_get_result($stmt);
 
-if (mysqli_num_rows($faculty_result) === 0) {
+if (mysqli_num_rows($res) === 0) {
     echo json_encode([
-        "message" => "Faculty user not found with ID: $faculty_id",
-        "status" => false
+        "status" => false,
+        "message" => "Faculty user not found"
     ]);
     exit;
 }
 
-$faculty_row = mysqli_fetch_assoc($faculty_result);
-$faculty_institute_id = $faculty_row['institute_id'];
-mysqli_stmt_close($check_faculty_stmt);
+$row = mysqli_fetch_assoc($res);
+$faculty_institute_id = $row['institute_id'];
+mysqli_stmt_close($stmt);
 
-// institute can update only own faculty
+// Institute can update only own faculty
 if ($user_role === 'institute' && $faculty_institute_id !== $user_institute_id) {
     echo json_encode([
-        "message" => "You do not have permission to update this faculty user",
-        "status" => false
+        "status" => false,
+        "message" => "You cannot update this faculty"
     ]);
     exit;
 }
 
-// --------------------------------------------------------
-// BUILD UPDATE QUERY
-// --------------------------------------------------------
+// ===============================================
+// 🔧 BUILD UPDATE QUERY (NO admin_action)
+// ===============================================
 $update_fields = [];
 $params = [];
 $types = "";
 
-// institute_id (admin only)
+// admin only: change institute_id
 if (isset($data['institute_id']) && $user_role === 'admin') {
-    $institute_id = intval($data['institute_id']);
     $update_fields[] = "institute_id = ?";
-    $params[] = $institute_id;
+    $params[] = intval($data['institute_id']);
     $types .= "i";
 }
 
 // name
-if (isset($data['name']) && trim($data['name']) !== "") {
-    $name = trim($data['name']);
+if (!empty(trim($data['name'] ?? ""))) {
     $update_fields[] = "name = ?";
-    $params[] = $name;
+    $params[] = trim($data['name']);
     $types .= "s";
 }
 
 // email
-if (isset($data['email']) && trim($data['email']) !== "") {
-    $email = trim($data['email']);
+if (!empty(trim($data['email'] ?? ""))) {
     $update_fields[] = "email = ?";
-    $params[] = $email;
+    $params[] = trim($data['email']);
     $types .= "s";
 }
 
 // phone
 if (isset($data['phone'])) {
-    $phone = trim($data['phone']);
     $update_fields[] = "phone = ?";
-    $params[] = $phone;
+    $params[] = trim($data['phone']);
     $types .= "s";
 }
 
-// --------------------------------------------------------
-// ⭐ UPDATED: NOW BOTH ADMIN + INSTITUTE CAN CHANGE ROLE
-// --------------------------------------------------------
+// role — both admin + institute can update
 if (isset($data['role'])) {
     $role = trim($data['role']);
-
-    // Allowed roles — you can add more if needed
-    if (!in_array($role, ['admin', 'faculty'])) {
-    echo json_encode([
-        "message" => "Invalid role value",
-        "status" => false
-    ]);
-    exit;
-}
-
+    if (!in_array($role, ['admin','faculty'])) {
+        echo json_encode(["status" => false, "message" => "Invalid role"]);
+        exit;
+    }
     $update_fields[] = "role = ?";
     $params[] = $role;
     $types .= "s";
 }
 
-// admin_action (admin only)
-if (isset($data['admin_action']) && $user_role === 'admin') {
-    $admin_action = trim($data['admin_action']);
-    $update_fields[] = "admin_action = ?";
-    $params[] = $admin_action;
-    $types .= "s";
-}
+// ❌ REMOVED: admin_action logic completely
 
 if (empty($update_fields)) {
     echo json_encode([
-        "message" => "No fields to update",
-        "status" => false
+        "status" => false,
+        "message" => "No fields to update"
     ]);
     exit;
 }
 
-$update_sql = "UPDATE faculty_users SET " . implode(', ', $update_fields) . " WHERE id = ?";
+$update_sql = "UPDATE faculty_users SET ".implode(', ', $update_fields)." WHERE id = ?";
 $params[] = $faculty_id;
 $types .= "i";
 
-$update_stmt = mysqli_prepare($conn, $update_sql);
-mysqli_stmt_bind_param($update_stmt, $types, ...$params);
-mysqli_stmt_execute($update_stmt);
+$stmt = mysqli_prepare($conn, $update_sql);
+mysqli_stmt_bind_param($stmt, $types, ...$params);
+mysqli_stmt_execute($stmt);
+mysqli_stmt_close($stmt);
 
-// --------------------------------------------------------
-// FETCH UPDATED DATA
-// --------------------------------------------------------
-$get_sql = "SELECT id, institute_id, name, email, phone, role, admin_action 
-            FROM faculty_users WHERE id = ?";
-$get_stmt = mysqli_prepare($conn, $get_sql);
-mysqli_stmt_bind_param($get_stmt, "i", $faculty_id);
-mysqli_stmt_execute($get_stmt);
-$updated = mysqli_fetch_assoc(mysqli_stmt_get_result($get_stmt));
+// ===============================================
+// 🔄 FETCH UPDATED DATA (WITHOUT admin_action)
+// ===============================================
+$get_sql = "
+    SELECT id, institute_id, name, email, phone, role
+    FROM faculty_users 
+    WHERE id = ?
+";
+$stmt = mysqli_prepare($conn, $get_sql);
+mysqli_stmt_bind_param($stmt, "i", $faculty_id);
+mysqli_stmt_execute($stmt);
+$updated = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
 
-// --------------------------------------------------------
-// FINAL RESPONSE FORMAT EXACT AS YOU WANT
-// --------------------------------------------------------
+// ===============================================
+// ✅ FINAL RESPONSE
+// ===============================================
 echo json_encode([
-    "message" => "Faculty user updated successfully",
     "status" => true,
+    "message" => "Faculty user updated successfully",
     "data" => $updated,
     "timestamp" => date('Y-m-d H:i:s')
 ]);

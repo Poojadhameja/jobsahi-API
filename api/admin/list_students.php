@@ -1,5 +1,4 @@
 <?php 
-// list_students.php - List/manage all students with applied job titles + courses + placement status
 require_once '../cors.php';
 require_once '../db.php';
 
@@ -9,11 +8,13 @@ $role = strtolower($decoded['role'] ?? '');
 $user_id = intval($decoded['user_id'] ?? 0);
 
 /* =========================================================
-   🔥 NEW FIX — GET CORRECT INSTITUTE ID
+   🔥 GET CORRECT INSTITUTE ID
 ========================================================= */
 $institute_id = 0;
 
 if ($role === 'institute') {
+
+    // ALWAYS fetch real institute_id from database
     $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
@@ -32,11 +33,29 @@ if ($role === 'institute') {
     }
 }
 
+/* =========================================================
+   🔥 institute filter FIX (NO LOGIC CHANGE)
+========================================================= */
+$filter_sql = "";
+
+if ($role === 'institute') {
+
+    // FIX: Because student_profiles does NOT have institute_id
+    // We must filter using course → institute relationship
+    $filter_sql = " AND sp.id IN (
+        SELECT student_id 
+        FROM student_course_enrollments sce
+        INNER JOIN courses c ON c.id = sce.course_id
+        WHERE c.institute_id = $institute_id
+    )";
+}
+
 try {
+
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
     /* =========================================================
-        📊 1️⃣ Dashboard Summary Counts
+        📊 summary counts
     ========================================================= */
 
     $summary = [
@@ -45,16 +64,6 @@ try {
         "placement_ready" => 0,
         "successfully_placed" => 0
     ];
-
-    /* ---------------------------
-       Admin = All students
-       Institute = Only their students
-    ---------------------------- */
-
-    $filter_sql = "";
-    if ($role === 'institute') {
-        $filter_sql = " AND sp.institute_id = $institute_id ";
-    }
 
     // Total students
     $stmt = $conn->prepare("
@@ -92,21 +101,23 @@ try {
     $stmt->close();
 
     // Successfully placed
-    $stmt = $conn->prepare("
-        SELECT COUNT(DISTINCT sp.user_id) AS placed
-        FROM student_profiles sp
-        INNER JOIN applications a ON a.student_id = sp.id
-        WHERE a.status = 'selected'
-          AND a.deleted_at IS NULL
-          $filter_sql
-    ");
-    $stmt->execute();
-    $summary['successfully_placed'] = $stmt->get_result()->fetch_assoc()['placed'] ?? 0;
-    $stmt->close();
+$stmt = $conn->prepare("
+    SELECT COUNT(DISTINCT sp.user_id) AS placed
+    FROM student_profiles sp
+    INNER JOIN applications a ON a.student_id = sp.id
+    WHERE a.status = 'selected'
+      AND a.deleted_at IS NULL
+      $filter_sql
+");
+$stmt->execute();
+$summary['successfully_placed'] = $stmt->get_result()->fetch_assoc()['placed'] ?? 0;
+$stmt->close();
+
 
     /* =========================================================
         2️⃣ Fetch Student Basic Details
     ========================================================= */
+
     $stmt = $conn->prepare("
         SELECT 
             u.id AS user_id,
@@ -141,7 +152,6 @@ try {
     $stmt->execute();
     $result = $stmt->get_result();
 
-    // File URL base
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
     $host = $_SERVER['HTTP_HOST'];
     $resume_folder = '/jobsahi-API/api/uploads/resume/';
