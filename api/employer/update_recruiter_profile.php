@@ -186,6 +186,7 @@ try {
     $stmt = $conn->prepare($sql);
     $stmt->bind_param($types, ...$update_values);
     $stmt->execute();
+    $stmt->close();
 
     /* ******************************************************
        🔥 AUTO-SYNC LOGIC ADDED (NO OTHER CODE CHANGED)
@@ -200,6 +201,59 @@ try {
         $sync->bind_param("si", $newName, $user_id);
         $sync->execute();
         $sync->close();
+    }
+
+    // 🔥 UPDATE EMAIL AND PHONE_NUMBER IN USERS TABLE
+    $user_updates = [];
+    $user_values = [];
+    $user_types = '';
+
+    // Update email if provided
+    if (isset($input['email']) && !empty(trim($input['email']))) {
+        $email = trim($input['email']);
+        
+        // Validate email format
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            echo json_encode(["success" => false, "message" => "Invalid email format"]);
+            exit;
+        }
+
+        // Check if email already exists for another user
+        $check_email = $conn->prepare("SELECT id FROM users WHERE email = ? AND id != ? LIMIT 1");
+        $check_email->bind_param("si", $email, $user_id);
+        $check_email->execute();
+        $check_email->store_result();
+        if ($check_email->num_rows > 0) {
+            echo json_encode(["success" => false, "message" => "Email already exists"]);
+            exit;
+        }
+        $check_email->close();
+
+        $user_updates[] = "email = ?";
+        $user_values[] = $email;
+        $user_types .= 's';
+    }
+
+    // Update phone_number if provided
+    if (isset($input['phone_number']) && !empty(trim($input['phone_number']))) {
+        $phone_number = trim($input['phone_number']);
+        
+        $user_updates[] = "phone_number = ?";
+        $user_values[] = $phone_number;
+        $user_types .= 's';
+    }
+
+    // Update users table if there are fields to update
+    if (!empty($user_updates)) {
+        $user_updates[] = "updated_at = NOW()";
+        $sql_user = "UPDATE users SET " . implode(', ', $user_updates) . " WHERE id = ?";
+        $user_values[] = $user_id;
+        $user_types .= 'i';
+
+        $user_stmt = $conn->prepare($sql_user);
+        $user_stmt->bind_param($user_types, ...$user_values);
+        $user_stmt->execute();
+        $user_stmt->close();
     }
 
     // If POST (insert) and user_name exists → auto insert into company_name (only if not given)

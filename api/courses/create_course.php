@@ -36,7 +36,6 @@ $category_input = trim($data['category'] ?? '');
 $tagged_skills  = trim($data['tagged_skills'] ?? '');
 $batch_limit    = intval($data['batch_limit'] ?? 0);
 $status         = trim($data['status'] ?? 'active');
-$instructor_name = trim($data['instructor_name'] ?? '');
 $mode           = trim($data['mode'] ?? 'offline');
 $certification_allowed = !empty($data['certification_allowed']) ? 1 : 0;
 $module_title   = trim($data['module_title'] ?? '');
@@ -45,7 +44,7 @@ $fee            = floatval($data['fee'] ?? 0);
 $admin_action   = 'pending';
 
 // ✅ Validate required fields
-if (empty($title) || empty($description) || empty($duration) || empty($instructor_name) || $fee <= 0) {
+if (empty($title) || empty($description) || empty($duration) || $fee <= 0) {
     echo json_encode(["status" => false, "message" => "Required fields missing"]);
     exit();
 }
@@ -152,15 +151,15 @@ if ($result && $result->num_rows > 0) {
 $stmt = $conn->prepare("
     INSERT INTO courses (
         institute_id, title, description, duration, category_id,
-        tagged_skills, batch_limit, status, instructor_name, mode,
+        tagged_skills, batch_limit, status, mode,
         certification_allowed, module_title, module_description,
         media, fee, admin_action, created_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
 ");
 
 $stmt->bind_param(
-    "isssisisssisssds",
+    "isssisississsds",
     $institute_id,
     $title,
     $description,
@@ -169,7 +168,6 @@ $stmt->bind_param(
     $tagged_skills,
     $batch_limit,
     $status,
-    $instructor_name,
     $mode,
     $certification_allowed,
     $module_title,
