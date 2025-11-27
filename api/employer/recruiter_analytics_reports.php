@@ -34,15 +34,14 @@ try {
     // --------------------------------------------------------------------
     $applications_sql = "
         SELECT 
-            COALESCE(jc.category_name, 'Uncategorized') AS department,
+            COALESCE(j.title, 'Uncategorized') AS department,
             COUNT(a.id) AS applied,
             SUM(a.status IN ('shortlisted','selected')) AS shortlisted,
             SUM(a.status = 'selected') AS hired
         FROM applications a
         INNER JOIN jobs j ON a.job_id = j.id
-        LEFT JOIN job_category jc ON j.category_id = jc.id
         WHERE j.recruiter_id = ?
-        GROUP BY jc.category_name
+        GROUP BY j.title
         ORDER BY applied DESC
     ";
 
