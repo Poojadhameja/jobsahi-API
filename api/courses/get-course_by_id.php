@@ -67,10 +67,13 @@ try {
             c.fee,
             c.instructor_name,   -- 🔥 IMPORTANT
             c.created_at,
-            c.updated_at
+            c.updated_at,
+            ip.institute_name
         FROM courses AS c
         LEFT JOIN course_category AS cc 
             ON c.category_id = cc.id 
+        LEFT JOIN institute_profiles AS ip 
+            ON c.institute_id = ip.id
         WHERE c.id = ?
     ";
 
