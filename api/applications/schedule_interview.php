@@ -56,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         while ($row = $result->fetch_assoc()) {
             $data[] = [
                 "interviewId"   => intval($row['interview_id']), // ✅ added field
+                "application_id" => intval($row['application_id']),
                 "candidateName" => $row['candidateName'],
                 "candidateId"   => intval($row['candidateId']),
                 "date"          => date('Y-m-d', strtotime($row['date'])),
@@ -219,6 +220,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Return existing interview details
             $responseData = [
                 "interviewId"   => $existing_interview_id,
+                "application_id" => $application_id,
                 "candidateName" => $candidate_name,
                 "candidateId"   => $student_id,
                 "date"          => date('Y-m-d', strtotime($existing_interview['scheduled_at'])),
@@ -320,6 +322,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // ✅ Step 6: Build response
         $responseData = [
             "interviewId"   => $interview_id,
+            "application_id" => $application_id,
             "candidateName" => $candidate_name,
             "candidateId"   => $student_id,
             "date"          => date('Y-m-d', strtotime($scheduled_at)),
