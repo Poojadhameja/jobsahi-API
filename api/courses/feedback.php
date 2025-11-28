@@ -69,27 +69,68 @@ if ($method === 'POST') {
         exit();
     }
 
-    // ✅ Insert feedback
-    $sql = "INSERT INTO course_feedback (course_id, student_id, rating, feedback, admin_action, created_at)
-            VALUES (?, ?, ?, ?, ?, NOW())";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("iiiss", $course_id, $student_id, $rating, $feedback, $admin_action);
+    // ✅ Check if feedback already exists for this student + course
+    $check_sql = "SELECT id FROM course_feedback WHERE student_id = ? AND course_id = ? LIMIT 1";
+    $check_stmt = $conn->prepare($check_sql);
+    $check_stmt->bind_param("ii", $student_id, $course_id);
+    $check_stmt->execute();
+    $check_result = $check_stmt->get_result();
+    $existing_feedback = $check_result->fetch_assoc();
+    $check_stmt->close();
 
-    if ($stmt->execute()) {
-        http_response_code(201);
-        echo json_encode([
-            "status" => true,
-            "message" => "Feedback submitted successfully",
-            "admin_action" => $admin_action
-        ]);
+    // ✅ If feedback exists, UPDATE it; otherwise INSERT new
+    if ($existing_feedback) {
+        // Update existing feedback (preserve original created_at)
+        $feedback_id = intval($existing_feedback['id']);
+        $update_sql = "UPDATE course_feedback 
+                       SET rating = ?, feedback = ?, admin_action = ? 
+                       WHERE id = ?";
+        $update_stmt = $conn->prepare($update_sql);
+        $update_stmt->bind_param("issi", $rating, $feedback, $admin_action, $feedback_id);
+
+        if ($update_stmt->execute()) {
+            http_response_code(200);
+            echo json_encode([
+                "status" => true,
+                "message" => "Feedback updated successfully",
+                "feedback_id" => $feedback_id,
+                "is_updated" => true,
+                "admin_action" => $admin_action
+            ]);
+        } else {
+            http_response_code(500);
+            echo json_encode([
+                "status" => false,
+                "message" => "Database error: " . $update_stmt->error
+            ]);
+        }
+        $update_stmt->close();
     } else {
-        http_response_code(500);
-        echo json_encode([
-            "status" => false,
-            "message" => "Database error: " . $stmt->error
-        ]);
+        // Insert new feedback
+        $insert_sql = "INSERT INTO course_feedback (course_id, student_id, rating, feedback, admin_action, created_at)
+                       VALUES (?, ?, ?, ?, ?, NOW())";
+        $insert_stmt = $conn->prepare($insert_sql);
+        $insert_stmt->bind_param("iiiss", $course_id, $student_id, $rating, $feedback, $admin_action);
+
+        if ($insert_stmt->execute()) {
+            $feedback_id = $insert_stmt->insert_id;
+            http_response_code(201);
+            echo json_encode([
+                "status" => true,
+                "message" => "Feedback submitted successfully",
+                "feedback_id" => $feedback_id,
+                "is_updated" => false,
+                "admin_action" => $admin_action
+            ]);
+        } else {
+            http_response_code(500);
+            echo json_encode([
+                "status" => false,
+                "message" => "Database error: " . $insert_stmt->error
+            ]);
+        }
+        $insert_stmt->close();
     }
-    $stmt->close();
 
 } elseif ($method === 'PUT') {
     // ✅ Update feedback by student or admin

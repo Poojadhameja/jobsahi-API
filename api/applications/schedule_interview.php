@@ -15,7 +15,38 @@ $user_role = $decoded['role'];
    ========================================================= */
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     try {
+        // ✅ Get recruiter_profile_id if recruiter role
+        $recruiter_profile_id = null;
+        if ($user_role === 'recruiter') {
+            $rec_profile_stmt = $conn->prepare("SELECT id FROM recruiter_profiles WHERE user_id = ?");
+            $rec_profile_stmt->bind_param("i", $user_id);
+            $rec_profile_stmt->execute();
+            $rec_result = $rec_profile_stmt->get_result();
+            
+            if ($rec_result->num_rows > 0) {
+                $rec_profile = $rec_result->fetch_assoc();
+                $recruiter_profile_id = intval($rec_profile['id']);
+            } else {
+                // If recruiter profile not found, return empty
+                echo json_encode([
+                    "status"  => "success",
+                    "message" => "No interviews found.",
+                    "data"    => []
+                ]);
+                exit;
+            }
+            $rec_profile_stmt->close();
+        }
+
         // ✅ Fetch only latest interview per student per job
+        // For recruiter: Only their interviews, For admin: All interviews
+        
+        // Build subquery - same filtering logic for consistency
+        $subquery_extra = "";
+        if ($user_role === 'recruiter' && $recruiter_profile_id) {
+            $subquery_extra = "INNER JOIN jobs j2 ON a.job_id = j2.id AND j2.recruiter_id = " . intval($recruiter_profile_id);
+        }
+        
         $sql = "
             SELECT 
                 i.id AS interview_id,
@@ -43,14 +74,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 SELECT a.student_id, a.job_id, MAX(i2.created_at) AS latest_created
                 FROM interviews i2
                 INNER JOIN applications a ON i2.application_id = a.id
+                " . ($subquery_extra ? $subquery_extra . " " : "") . "
                 GROUP BY a.student_id, a.job_id
             ) latest ON latest.student_id = a.student_id 
                      AND latest.job_id = a.job_id 
                      AND latest.latest_created = i.created_at
+            WHERE 1=1
+            " . ($user_role === 'recruiter' && $recruiter_profile_id ? "AND j.recruiter_id = ?" : "") . "
             ORDER BY i.created_at DESC
         ";
 
-        $result = $conn->query($sql);
+        if ($user_role === 'recruiter' && $recruiter_profile_id) {
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("i", $recruiter_profile_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+        } else {
+            $stmt = null;
+            $result = $conn->query($sql);
+        }
         $data = [];
 
         while ($row = $result->fetch_assoc()) {
@@ -77,6 +119,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             "message" => "Interviews fetched successfully.",
             "data"    => $data
         ]);
+        
+        if ($stmt) {
+            $stmt->close();
+        }
     } catch (Exception $e) {
         echo json_encode([
             "status"  => "error",

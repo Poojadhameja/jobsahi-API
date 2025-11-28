@@ -28,6 +28,25 @@ try {
             echo json_encode(["status" => true, "message" => "No records found", "data" => []]);
             exit();
         }
+        $rp->close();
+    }
+
+    // ✅ Get student_profile_id if student role
+    $student_profile_id = null;
+    if ($user_role === 'student') {
+        $sp = $conn->prepare("SELECT id FROM student_profiles WHERE user_id = ? LIMIT 1");
+        $sp->bind_param("i", $user_id);
+        $sp->execute();
+        $sp_res = $sp->get_result();
+        
+        if ($sp_res->num_rows > 0) {
+            $student_profile_id = intval($sp_res->fetch_assoc()['id']);
+        } else {
+            // If student profile not found, return empty
+            echo json_encode(["status" => true, "message" => "No records found", "data" => []]);
+            exit();
+        }
+        $sp->close();
     }
 
     // ✅ Build query with prepared statements
@@ -43,6 +62,7 @@ try {
         FROM interview_panel ip
         JOIN interviews i ON ip.interview_id = i.id
         WHERE 1 = 1
+          AND (i.deleted_at IS NULL OR i.deleted_at = '0000-00-00 00:00:00')
     ";
 
     $params = [];
@@ -63,13 +83,16 @@ try {
     // ✅ Restrict recruiter view (only their interviews)
     if ($user_role === 'recruiter' && $recruiter_profile_id) {
         // Get authorized interview IDs via applications -> jobs path
-        // Note: interviews table does NOT have recruiter_id column
+        // Only interviews for jobs owned by this recruiter
         $authCheck = $conn->prepare("
             SELECT DISTINCT i.id
             FROM interviews i
             INNER JOIN applications a ON i.application_id = a.id
             INNER JOIN jobs j ON a.job_id = j.id
-            WHERE j.recruiter_id = ? AND i.application_id IS NOT NULL
+            WHERE j.recruiter_id = ? 
+              AND i.application_id IS NOT NULL
+              AND (i.deleted_at IS NULL OR i.deleted_at = '0000-00-00 00:00:00')
+              AND (a.deleted_at IS NULL OR a.deleted_at = '0000-00-00 00:00:00')
         ");
         $authCheck->bind_param("i", $recruiter_profile_id);
         $authCheck->execute();
@@ -79,6 +102,39 @@ try {
         while ($row = $authResult->fetch_assoc()) {
             $authorizedInterviewIds[] = intval($row['id']);
         }
+        $authCheck->close();
+        
+        if (empty($authorizedInterviewIds)) {
+            // No authorized interviews, return empty
+            echo json_encode(["status" => true, "message" => "No records found", "data" => []]);
+            exit();
+        }
+        
+        // Add IN clause for authorized interview IDs
+        $placeholders = implode(',', array_fill(0, count($authorizedInterviewIds), '?'));
+        $sql .= " AND ip.interview_id IN ($placeholders)";
+        $params = array_merge($params, $authorizedInterviewIds);
+        $types .= str_repeat("i", count($authorizedInterviewIds));
+    }
+
+    // ✅ Restrict student view (only their own interviews)
+    if ($user_role === 'student' && $student_profile_id) {
+        // Get authorized interview IDs via applications -> student path
+        $authCheck = $conn->prepare("
+            SELECT DISTINCT i.id
+            FROM interviews i
+            INNER JOIN applications a ON i.application_id = a.id
+            WHERE a.student_id = ? AND i.application_id IS NOT NULL
+        ");
+        $authCheck->bind_param("i", $student_profile_id);
+        $authCheck->execute();
+        $authResult = $authCheck->get_result();
+        
+        $authorizedInterviewIds = [];
+        while ($row = $authResult->fetch_assoc()) {
+            $authorizedInterviewIds[] = intval($row['id']);
+        }
+        $authCheck->close();
         
         if (empty($authorizedInterviewIds)) {
             // No authorized interviews, return empty
@@ -114,6 +170,11 @@ try {
         echo json_encode(["status" => true, "message" => "No records found", "data" => []]);
     } else {
         echo json_encode(["status" => true, "message" => "Data fetched successfully", "data" => $panelists]);
+    }
+    
+    // Close statement if it was prepared
+    if (isset($stmt) && $stmt) {
+        $stmt->close();
     }
 
 } catch (Throwable $e) {

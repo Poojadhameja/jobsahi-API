@@ -115,7 +115,7 @@ try {
 
 
     // ---------------------------------------------------------
-    // FORMAT OUTPUT + ADD media_url
+    // FORMAT OUTPUT + ADD media_url + FEEDBACK DATA
     // ---------------------------------------------------------
     $BASE_URL = "http://localhost/jobsahi-API/api/uploads/institute_course_image/";
 
@@ -137,9 +137,65 @@ try {
             $row['media_url'] = "";
         }
 
+        // ✅ GET FEEDBACK STATISTICS FOR THIS COURSE
+        $course_id = intval($row['id']);
+        
+        // Get average rating and total feedback count (all feedbacks - no admin_action filter)
+        $feedback_sql = "
+            SELECT 
+                AVG(rating) AS avg_rating,
+                COUNT(id) AS total_feedback_count
+            FROM course_feedback
+            WHERE course_id = ?
+        ";
+        
+        $feedback_stmt = $conn->prepare($feedback_sql);
+        $feedback_stmt->bind_param("i", $course_id);
+        $feedback_stmt->execute();
+        $feedback_result = $feedback_stmt->get_result();
+        $feedback_data = $feedback_result->fetch_assoc();
+        $feedback_stmt->close();
+        
+        // Add feedback statistics to course data
+        $row['average_rating'] = $feedback_data['avg_rating'] !== null 
+            ? round((float)$feedback_data['avg_rating'], 2) 
+            : 0.00;
+        $row['total_feedback_count'] = intval($feedback_data['total_feedback_count'] ?? 0);
+        
+        // Get rating distribution (1-5 stars)
+        $rating_dist_sql = "
+            SELECT rating, COUNT(*) AS count
+            FROM course_feedback
+            WHERE course_id = ?
+            GROUP BY rating
+            ORDER BY rating DESC
+        ";
+        
+        $rating_dist_stmt = $conn->prepare($rating_dist_sql);
+        $rating_dist_stmt->bind_param("i", $course_id);
+        $rating_dist_stmt->execute();
+        $rating_dist_result = $rating_dist_stmt->get_result();
+        
+        $rating_distribution = [
+            '5' => 0,
+            '4' => 0,
+            '3' => 0,
+            '2' => 0,
+            '1' => 0
+        ];
+        
+        while ($rating_row = $rating_dist_result->fetch_assoc()) {
+            $rating_distribution[strval($rating_row['rating'])] = intval($rating_row['count']);
+        }
+        $rating_dist_stmt->close();
+        
+        $row['rating_distribution'] = $rating_distribution;
+
         $courses[] = $row;
     }
 
+    // Close main statement
+    $stmt->close();
 
     // ---------------------------------------------------------
     // FINAL RESPONSE

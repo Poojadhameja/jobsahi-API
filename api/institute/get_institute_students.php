@@ -47,6 +47,9 @@ try {
     // ---------------------------------------------------------
     // 🔍 MAIN QUERY – STUDENT + COURSE + LATEST BATCH ASSIGNMENT
     // ---------------------------------------------------------
+    
+    // For institute: Only show students enrolled in their courses
+    // For admin: Show all students
     $sql = "
         SELECT 
             sp.id AS student_id,
@@ -58,6 +61,7 @@ try {
 
             e.course_id,
             c.title AS course_title,
+            c.institute_id,
             e.enrollment_date,
             e.status AS enrollment_status,
 
@@ -69,17 +73,16 @@ try {
         INNER JOIN users u 
             ON sp.user_id = u.id
 
-        -- 🔹 Course enrollments (same as before)
+        -- 🔹 Course enrollments
         LEFT JOIN student_course_enrollments e 
             ON sp.id = e.student_id
            AND (e.admin_action = 'approved' 
              OR e.admin_action = 'pending' 
              OR e.admin_action IS NULL)
 
-        -- 🔹 Courses (filtered by institute for institute role)
+        -- 🔹 Courses
         LEFT JOIN courses c 
             ON e.course_id = c.id
-           " . ($role === 'institute' ? "AND c.institute_id = ?" : "") . "
 
         -- 🔹 LATEST batch assignment per student (from student_batches)
         LEFT JOIN student_batches sb
@@ -98,11 +101,11 @@ try {
         LEFT JOIN batches b 
             ON b.id = sb.batch_id 
            AND b.admin_action = 'approved'
-           " . ($role === 'institute' ? "AND b.course_id = c.id" : "") . "
+           AND b.course_id = c.id
 
         WHERE sp.deleted_at IS NULL 
           AND u.status = 'active'
-          " . ($role === 'institute' ? "AND c.institute_id IS NOT NULL" : "") . "
+          " . ($role === 'institute' ? "AND c.institute_id = ?" : "") . "
 
         ORDER BY u.user_name ASC, c.title ASC
     ";
@@ -124,9 +127,12 @@ try {
 
     while ($row = $result->fetch_assoc()) {
 
-        if ($role === 'institute' && $row['course_id'] === null) {
-            // Student not linked to this institute at all
-            continue;
+        // For institute role: Skip students not enrolled in their courses
+        if ($role === 'institute') {
+            // Skip if course_id is null or institute_id doesn't match
+            if ($row['course_id'] === null || $row['institute_id'] != $institute_id) {
+                continue;
+            }
         }
 
         $sid = $row['student_id'];

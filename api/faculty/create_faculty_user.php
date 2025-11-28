@@ -125,6 +125,26 @@ if (mysqli_num_rows($email_result) > 0) {
 }
 mysqli_stmt_close($check_stmt);
 
+// ✅ Check if phone number already exists (only if phone is provided)
+if (!empty($phone)) {
+    $check_phone_sql = "SELECT id FROM faculty_users WHERE phone = ?";
+    $check_phone_stmt = mysqli_prepare($conn, $check_phone_sql);
+    mysqli_stmt_bind_param($check_phone_stmt, "s", $phone);
+    mysqli_stmt_execute($check_phone_stmt);
+    $phone_result = mysqli_stmt_get_result($check_phone_stmt);
+
+    if (mysqli_num_rows($phone_result) > 0) {
+        echo json_encode([
+            "message" => "Phone number already exists",
+            "status" => false
+        ]);
+        mysqli_stmt_close($check_phone_stmt);
+        mysqli_close($conn);
+        exit;
+    }
+    mysqli_stmt_close($check_phone_stmt);
+}
+
 // ✅ Insert faculty user (without password)
 $insert_sql = "INSERT INTO faculty_users (institute_id, name, email, phone) 
                VALUES (?, ?, ?, ?)";

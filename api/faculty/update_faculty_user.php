@@ -95,6 +95,63 @@ if ($user_role === 'institute' && $faculty_institute_id !== $user_institute_id) 
 }
 
 // ===============================================
+// ✅ VALIDATE EMAIL UNIQUENESS (if updating email)
+// ===============================================
+if (!empty(trim($data['email'] ?? ""))) {
+    $email = trim($data['email']);
+    
+    // Validate email format
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        echo json_encode([
+            "status" => false,
+            "message" => "Invalid email format"
+        ]);
+        exit;
+    }
+    
+    // Check if email already exists (excluding current faculty)
+    $check_email_sql = "SELECT id FROM faculty_users WHERE email = ? AND id != ?";
+    $check_email_stmt = mysqli_prepare($conn, $check_email_sql);
+    mysqli_stmt_bind_param($check_email_stmt, "si", $email, $faculty_id);
+    mysqli_stmt_execute($check_email_stmt);
+    $email_result = mysqli_stmt_get_result($check_email_stmt);
+    
+    if (mysqli_num_rows($email_result) > 0) {
+        echo json_encode([
+            "status" => false,
+            "message" => "Email already exists"
+        ]);
+        mysqli_stmt_close($check_email_stmt);
+        exit;
+    }
+    mysqli_stmt_close($check_email_stmt);
+}
+
+// ===============================================
+// ✅ VALIDATE PHONE UNIQUENESS (if updating phone)
+// ===============================================
+if (isset($data['phone']) && !empty(trim($data['phone'] ?? ""))) {
+    $phone = trim($data['phone']);
+    
+    // Check if phone already exists (excluding current faculty)
+    $check_phone_sql = "SELECT id FROM faculty_users WHERE phone = ? AND id != ?";
+    $check_phone_stmt = mysqli_prepare($conn, $check_phone_sql);
+    mysqli_stmt_bind_param($check_phone_stmt, "si", $phone, $faculty_id);
+    mysqli_stmt_execute($check_phone_stmt);
+    $phone_result = mysqli_stmt_get_result($check_phone_stmt);
+    
+    if (mysqli_num_rows($phone_result) > 0) {
+        echo json_encode([
+            "status" => false,
+            "message" => "Phone number already exists"
+        ]);
+        mysqli_stmt_close($check_phone_stmt);
+        exit;
+    }
+    mysqli_stmt_close($check_phone_stmt);
+}
+
+// ===============================================
 // 🔧 BUILD UPDATE QUERY (NO admin_action)
 // ===============================================
 $update_fields = [];
