@@ -25,8 +25,8 @@ try {
     $summary['total_employers'] = $stmt->get_result()->fetch_assoc()['total'] ?? 0;
     $stmt->close();
 
-    // ✅ Pending Approvals
-    $stmt = $conn->prepare("SELECT COUNT(*) AS pending FROM recruiter_profiles");
+    // ✅ Pending Approvals (users where is_verified = 0)
+    $stmt = $conn->prepare("SELECT COUNT(*) AS pending FROM users WHERE role = 'recruiter' AND is_verified = 0");
     $stmt->execute();
     $summary['pending_approvals'] = $stmt->get_result()->fetch_assoc()['pending'] ?? 0;
     $stmt->close();
@@ -72,7 +72,7 @@ try {
         FROM users u
         LEFT JOIN recruiter_profiles rp ON u.id = rp.user_id
         WHERE u.role = 'recruiter'
-        ORDER BY rp.created_at DESC
+        ORDER BY u.created_at DESC
     ";
 
     $stmt = $conn->prepare($query);
@@ -87,7 +87,9 @@ try {
     $logo_base = '/jobsahi-API/api/uploads/recruiter_logo/';
 
     while ($row = $result->fetch_assoc()) {
-        // ✅ Status Mapping
+        // ✅ Derive admin_action from users.is_verified
+        $is_verified = intval($row['is_verified'] ?? 0);
+        $admin_action = ($is_verified === 1) ? 'approved' : 'pending';
 
         // ✅ Company logo full URL logic
         $company_logo = $row['company_logo'] ?? "";
@@ -105,7 +107,8 @@ try {
             "email" => $row['email'],
             "phone_number" => $row['phone_number'],
             "role" => $row['role'],
-            "is_verified" => intval($row['is_verified'] ?? 0),
+            "is_verified" => $is_verified,
+            "admin_action" => $admin_action, // ✅ Derived from is_verified
             "profile" => [
                 "profile_id" => intval($row['profile_id']),
                 "company_name" => $row['company_name'] ?? "",

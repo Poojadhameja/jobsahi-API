@@ -13,6 +13,7 @@ try {
             u.user_name,
             u.email,
             u.phone_number,
+            u.is_verified,
 
             ip.id as institute_id,
             ip.institute_name,
@@ -109,12 +110,18 @@ try {
             }
         }
 
+        // ✅ Derive admin_action from users.is_verified
+        $is_verified = intval($row['is_verified'] ?? 0);
+        $admin_action = ($is_verified === 1) ? 'approved' : 'pending';
+
         $institutes[] = [
             'user_info' => [
                 'user_id' => $row['user_id'],
                 'user_name' => $row['user_name'],
                 'email' => $row['email'],
                 'phone_number' => $row['phone_number'],
+                'is_verified' => $is_verified,
+                'admin_action' => $admin_action, // ✅ Derived from is_verified
             ],
             'profile_info' => [
                 'institute_id' => $row['institute_id'],

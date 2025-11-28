@@ -40,52 +40,53 @@ try {
     $batch_id  = isset($_GET['batch_id']) ? intval($_GET['batch_id']) : 0;
 
     // ----------------------------------------------------
-    // APPLY FILTER ONLY ON COURSES (REAL FIX)
+    // FETCH COURSES - Institute sees ALL their courses
     // ----------------------------------------------------
-    $COURSE_FILTER = ($role === 'institute') 
-        ? " AND c.institute_id = $institute_id "
-        : "";
-
-    // ----------------------------------------------------
-    // FETCH COURSES
-    // ----------------------------------------------------
-    $course_sql = "
-        SELECT c.id, c.title
-        FROM courses c
-        WHERE c.admin_action = 'approved'
-        $COURSE_FILTER
-    ";
-
-    if ($course_id > 0) {
-        $course_sql .= " AND c.id = $course_id ";
+    if ($role === 'institute') {
+        $course_sql = "SELECT id, title FROM courses WHERE institute_id = ?";
+        if ($course_id > 0) {
+            $course_sql .= " AND id = ?";
+            $course_stmt = $conn->prepare($course_sql);
+            $course_stmt->bind_param("ii", $institute_id, $course_id);
+        } else {
+            $course_stmt = $conn->prepare($course_sql);
+            $course_stmt->bind_param("i", $institute_id);
+        }
+    } else {
+        $course_sql = "SELECT id, title FROM courses WHERE admin_action = 'approved'";
+        if ($course_id > 0) {
+            $course_sql .= " AND id = ?";
+            $course_stmt = $conn->prepare($course_sql);
+            $course_stmt->bind_param("i", $course_id);
+        } else {
+            $course_stmt = $conn->prepare($course_sql);
+        }
     }
-
-    $course_result = $conn->query($course_sql);
+    
+    $course_stmt->execute();
+    $course_result = $course_stmt->get_result();
     $response = [];
 
     while ($course = $course_result->fetch_assoc()) {
-
         $courseData = [
             "course_id" => intval($course['id']),
             "course_name" => $course['title'],
             "batches" => []
         ];
 
-        // ----------------------------------------------------
-        // FETCH BATCHES OF THIS COURSE
-        // ----------------------------------------------------
-        $batch_sql = "
-            SELECT id, name, batch_time_slot, start_date, end_date
-            FROM batches
-            WHERE course_id = {$course['id']}
-              AND admin_action = 'approved'
-        ";
-
+        // FETCH BATCHES - Institute sees all batches
+        $batch_sql = "SELECT id, name, batch_time_slot, start_date, end_date FROM batches WHERE course_id = ?";
         if ($batch_id > 0) {
-            $batch_sql .= " AND id = $batch_id ";
+            $batch_sql .= " AND id = ?";
+            $batch_stmt = $conn->prepare($batch_sql);
+            $batch_stmt->bind_param("ii", $course['id'], $batch_id);
+        } else {
+            $batch_stmt = $conn->prepare($batch_sql);
+            $batch_stmt->bind_param("i", $course['id']);
         }
-
-        $batch_result = $conn->query($batch_sql);
+        
+        $batch_stmt->execute();
+        $batch_result = $batch_stmt->get_result();
 
         while ($batch = $batch_result->fetch_assoc()) {
 
@@ -98,9 +99,7 @@ try {
                 "students" => []
             ];
 
-            // ----------------------------------------------------
-            // FETCH STUDENTS OF THIS BATCH & COURSE
-            // ----------------------------------------------------
+            // FETCH STUDENTS - Simple query for institute
             $student_sql = "
                 SELECT 
                     sp.id AS student_id,
@@ -110,15 +109,14 @@ try {
                 FROM student_batches sb
                 JOIN student_profiles sp ON sb.student_id = sp.id
                 JOIN users u ON sp.user_id = u.id
-                JOIN student_course_enrollments sce 
-                    ON sce.student_id = sp.id
-                WHERE sb.batch_id = {$batch['id']}
-                  AND sce.course_id = {$course['id']}
-                  AND sb.admin_action = 'approved'
-                  AND sce.admin_action = 'approved'
+                WHERE sb.batch_id = ?
+                  AND u.status = 'active'
             ";
 
-            $student_result = $conn->query($student_sql);
+            $student_stmt = $conn->prepare($student_sql);
+            $student_stmt->bind_param("i", $batch['id']);
+            $student_stmt->execute();
+            $student_result = $student_stmt->get_result();
 
             while ($student = $student_result->fetch_assoc()) {
                 $batchData['students'][] = [
@@ -128,12 +126,16 @@ try {
                     "phone_number" => $student['phone_number']
                 ];
             }
+            $student_stmt->close();
 
             $courseData['batches'][] = $batchData;
         }
-
+        $batch_stmt->close();
+        
+        // ✅ Add courseData to response array
         $response[] = $courseData;
     }
+    $course_stmt->close();
 
     echo json_encode([
         "status" => true,
