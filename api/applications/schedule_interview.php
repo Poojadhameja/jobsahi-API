@@ -335,6 +335,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $update->execute();
 
         // ✅ Step 5.5: Send notification to student if not already sent
+        // ⚠️ Note: Notifications are sent ONLY to students
         // Get student user_id and job details
         $notif_sql = "
             SELECT sp.user_id, j.title as job_title, j.id as job_id
@@ -354,7 +355,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $job_title = $notif_data['job_title'];
             $job_id = intval($notif_data['job_id']);
             
-            // Send notification
+            // ✅ Send notification to student (students only)
             require_once '../helpers/notification_helper.php';
             $notification_result = NotificationHelper::notifyShortlisted($student_user_id, $job_title, $job_id);
             

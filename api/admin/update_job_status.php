@@ -50,8 +50,10 @@ try {
             $updatedJob = $result->fetch_assoc();
 
             // ✅ Send notification to all students when job is approved
+            // ⚠️ Note: Notifications are sent ONLY to all active students
             if ($admin_action === 'approved') {
                 require_once '../helpers/notification_helper.php';
+                // ✅ This sends notification to ALL active students only
                 $notification_result = NotificationHelper::notifyNewJobPosted(
                     $updatedJob['title'],
                     $updatedJob['job_id'],

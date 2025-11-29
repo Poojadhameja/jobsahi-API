@@ -1,7 +1,11 @@
 <?php
 // firebase_helper_v1.php - Firebase Cloud Messaging (FCM) v1 API Helper
 // Uses FCM v1 API with Service Account JSON (Not Legacy Server Key)
-
+//
+// ⚠️ IMPORTANT: This helper is used to send notifications to STUDENTS only
+// - FCM tokens are stored only for students
+// - All notification methods target students
+//
 class FirebaseHelperV1 {
     // Path to Service Account JSON file
     // Download from: Firebase Console > Project Settings > Service Accounts > Generate new private key

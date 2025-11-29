@@ -1,7 +1,13 @@
 <?php
+// send_notifications.php - Send manual notification (Admin/Recruiter/Institute only)
+// 
+// ⚠️ IMPORTANT: This endpoint is used by admin/recruiter/institute to send notifications
+// - Notifications are primarily sent to students
+// - Push notifications are sent only to students (via FCM tokens)
+//
 require_once '../cors.php';
 
-// Authenticate (allow all roles that can receive notifications)
+// Authenticate (allow admin, recruiter, institute to send notifications)
 $decoded = authenticateJWT(['admin', 'recruiter', 'institute']);
 $user_id = intval($decoded['user_id']); // ✅ Logged-in user
 

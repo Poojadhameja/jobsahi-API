@@ -1,8 +1,13 @@
 <?php
 // update-notification.php - Mark a notification as read
+// 
+// ⚠️ IMPORTANT: Notification system is primarily for STUDENTS
+// - Most notifications are for students
+// - This endpoint is mainly used by students to mark notifications as read
+//
 require_once '../cors.php';
 
-// Authenticate JWT for both admin and student roles
+// Authenticate JWT (all roles can mark notifications as read, but mainly used by students)
 authenticateJWT(['admin', 'recruiter','institute' , 'student']);
 
 // Check request method

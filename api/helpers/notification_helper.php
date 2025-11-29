@@ -1,13 +1,20 @@
 <?php
 // notification_helper.php - Helper functions for sending notifications
 // Using FCM v1 API (new method)
+// 
+// ⚠️ IMPORTANT: Notification system is ONLY for STUDENTS
+// - Push notifications are sent only to students
+// - FCM tokens are stored only for students
+// - All notification methods target students only
+//
 require_once __DIR__ . '/firebase_helper_v1.php';
 
 class NotificationHelper {
     
     /**
      * Get all active FCM tokens for a user
-     * @param int $user_id
+     * ⚠️ Note: Currently only students have FCM tokens stored
+     * @param int $user_id - User ID (should be a student)
      * @return array - Array of FCM tokens
      */
     public static function getUserFCMTokens($user_id) {
@@ -32,11 +39,13 @@ class NotificationHelper {
     
     /**
      * Get all active FCM tokens for all students
-     * @return array - Array of FCM tokens
+     * ✅ This method ONLY fetches tokens for students (role = 'student')
+     * @return array - Array of FCM tokens (students only)
      */
     public static function getAllStudentFCMTokens() {
         global $conn;
         
+        // ✅ Query: Only fetch tokens for students
         $sql = "SELECT DISTINCT ft.fcm_token 
                 FROM fcm_tokens ft
                 INNER JOIN users u ON ft.user_id = u.id
@@ -58,8 +67,9 @@ class NotificationHelper {
     }
     
     /**
-     * Send notification to a user when they are shortlisted
-     * @param int $student_user_id - User ID of the student
+     * Send notification to a student when they are shortlisted
+     * ✅ This method sends notification ONLY to students
+     * @param int $student_user_id - User ID of the student (must be a student)
      * @param string $job_title - Title of the job
      * @param int $job_id - Job ID
      * @return array - Result of notification send
@@ -91,12 +101,15 @@ class NotificationHelper {
     
     /**
      * Send notification to all students when a new job is posted
+     * ✅ This method sends notification ONLY to all active students
+     * Uses getAllStudentFCMTokens() which fetches only students' tokens
      * @param string $job_title - Title of the job
      * @param int $job_id - Job ID
      * @param string $location - Job location
      * @return array - Result of notification send
      */
     public static function notifyNewJobPosted($job_title, $job_id, $location = '') {
+        // ✅ Get tokens only for students
         $tokens = self::getAllStudentFCMTokens();
         
         if (empty($tokens)) {
@@ -167,6 +180,7 @@ class NotificationHelper {
     
     /**
      * Save notification to database for all students
+     * ✅ This method saves notifications ONLY for students (role = 'student')
      * @param string $message
      * @param string $type
      * @param int $reference_id
@@ -175,7 +189,7 @@ class NotificationHelper {
         global $conn;
         
         try {
-            // Insert notification for all active students
+            // ✅ Insert notification ONLY for active students
             $sql = "INSERT INTO notifications (user_id, message, type, is_read, created_at, received_role)
                     SELECT id, ?, ?, 0, NOW(), 'student'
                     FROM users
