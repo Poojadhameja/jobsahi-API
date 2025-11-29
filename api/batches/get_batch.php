@@ -101,7 +101,23 @@ try {
         $studentsRes = $stStmt->get_result();
 
         $students = [];
+        $active_students = 0;
+        $completed_students = 0;
+        $total_students = 0;
+
         while ($row = $studentsRes->fetch_assoc()) {
+            $total_students++;
+            $status = strtolower(trim($row['enrollment_status'] ?? 'enrolled'));
+            
+            // Count active students (status = 'enrolled')
+            if ($status === 'enrolled') {
+                $active_students++;
+            }
+            // Count completed students (status = 'completed')
+            if ($status === 'completed') {
+                $completed_students++;
+            }
+
             $students[] = [
                 "student_id"       => intval($row['student_id']),
                 "student_name"     => $row['student_name'],
@@ -112,13 +128,21 @@ try {
             ];
         }
 
+        // Calculate completion percentage
+        $completion_percent = 0;
+        if ($total_students > 0) {
+            $completion_percent = round(($completed_students / $total_students) * 100, 2);
+        }
+
         echo json_encode([
-            "status"        => true,
-            "message"       => "Batch fetched successfully.",
-            "batch"         => $batch,
-            "batch_limit"   => intval($batch["batch_limit"]),   // ⭐ batch_limit return
-            "students"      => $students,
-            "student_count" => count($students)
+            "status"            => true,
+            "message"           => "Batch fetched successfully.",
+            "batch"             => $batch,
+            "batch_limit"       => intval($batch["batch_limit"]),
+            "students"          => $students,
+            "student_count"     => $total_students,
+            "active_students"   => $active_students,
+            "completion_percent"=> $completion_percent
         ], JSON_PRETTY_PRINT);
 
         $stStmt->close();

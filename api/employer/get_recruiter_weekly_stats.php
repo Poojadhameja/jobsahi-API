@@ -3,7 +3,7 @@
 require_once '../cors.php';
 require_once '../jwt_token/jwt_helper.php';
 require_once '../auth/auth_middleware.php';
-include "../db.php";
+require_once '../db.php';
 
 // ✅ Authenticate recruiter
 $decoded = authenticateJWT(['recruiter']);
@@ -18,21 +18,26 @@ if ($role !== 'recruiter' || !$user_id) {
 
 try {
     // -------------------------------
-    // ✅ STEP 1: Get Recruiter Profile ID
+    // ✅ STEP 1: Get Recruiter Profile ID (REMOVED admin_action condition)
     // -------------------------------
     $sql_recruiter = "
         SELECT id 
         FROM recruiter_profiles 
-        WHERE user_id = ? AND admin_action = 'approved'
+        WHERE user_id = ?
         LIMIT 1
     ";
     $stmt = $conn->prepare($sql_recruiter);
+    if (!$stmt) {
+        throw new Exception("Database prepare error: " . $conn->error);
+    }
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
     $result = $stmt->get_result();
     $recruiter = $result->fetch_assoc();
+    $stmt->close();
 
     if (!$recruiter) {
+        http_response_code(400);
         echo json_encode(["status" => false, "message" => "Recruiter profile not found"]);
         exit;
     }
@@ -40,32 +45,38 @@ try {
     $recruiter_id = intval($recruiter['id']);
 
     // -------------------------------
-    // ✅ STEP 2: Weekly Applicants by Job (cards ke liye) – SAME AS BEFORE
+    // ✅ STEP 2: Weekly Applicants by Job - TOTAL APPLICATIONS PER JOB
     // -------------------------------
+    // Logic: Ab tak kitne logo ne apply kiya particular job par (total count)
+    // Chahe wo select ho, reject ho, kuch bhi ho - TOTAL count dikhana hai
     $sql_weekly = "
         SELECT 
             j.id AS job_id,
             j.title AS job_title,
-            jc.category_name AS trade_name,
+            COALESCE(jc.category_name, 'Uncategorized') AS trade_name,
             COUNT(a.id) AS total_applications,
             SUM(
                 CASE 
-                    WHEN a.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) 
+                    WHEN a.applied_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) 
                     THEN 1 ELSE 0 
                 END
             ) AS new_applications
         FROM jobs j
         LEFT JOIN job_category jc ON j.category_id = jc.id
         LEFT JOIN applications a ON a.job_id = j.id
-        WHERE j.recruiter_id = ? 
-          AND j.admin_action = 'approved'
+        WHERE j.recruiter_id = ?
         GROUP BY j.id, j.title, jc.category_name
-        ORDER BY total_applications DESC;
+        ORDER BY total_applications DESC, j.id DESC;
     ";
 
     $stmt_weekly = $conn->prepare($sql_weekly);
+    if (!$stmt_weekly) {
+        throw new Exception("Database prepare error: " . $conn->error);
+    }
     $stmt_weekly->bind_param("i", $recruiter_id);
-    $stmt_weekly->execute();
+    if (!$stmt_weekly->execute()) {
+        throw new Exception("Database execute error: " . $stmt_weekly->error);
+    }
     $result_weekly = $stmt_weekly->get_result();
 
     $weekly_applicants = [];
@@ -85,38 +96,46 @@ try {
     $stmt_weekly->close();
 
     // -------------------------------
-    // ✅ STEP 3: CHART DATA – TOP JOBS THIS MONTH (NEW LOGIC)
+    // ✅ STEP 3: CHART DATA – TOP JOBS BY APPLICATIONS (CURRENT MONTH)
     // -------------------------------
-    // Current month range
-    // Applications counted ONLY if created_at is within current month
+    // Logic: Current month me sabse highest applications wale jobs dikhana hai
+    // Format: Job Title (category) - Only show data for logged-in recruiter
     $sql_chart = "
         SELECT 
-            j.id AS job_id,
             j.title AS job_title,
+            COALESCE(jc.category_name, 'Uncategorized') AS category_name,
             COUNT(a.id) AS total_applications
-        FROM jobs j
-        LEFT JOIN applications a 
-            ON a.job_id = j.id
-           AND a.created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
-           AND a.created_at <  DATE_FORMAT(DATE_ADD(CURDATE(), INTERVAL 1 MONTH), '%Y-%m-01')
+        FROM applications a
+        INNER JOIN jobs j ON a.job_id = j.id
+        LEFT JOIN job_category jc ON j.category_id = jc.id
         WHERE j.recruiter_id = ?
-          AND j.admin_action = 'approved'
-        GROUP BY j.id, j.title
+          AND a.applied_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+          AND a.applied_at < DATE_FORMAT(DATE_ADD(CURDATE(), INTERVAL 1 MONTH), '%Y-%m-01')
+        GROUP BY j.id, j.title, jc.category_name
         HAVING total_applications > 0
         ORDER BY total_applications DESC
         LIMIT 10
     ";
 
     $stmt_chart = $conn->prepare($sql_chart);
+    if (!$stmt_chart) {
+        throw new Exception("Database prepare error: " . $conn->error);
+    }
     $stmt_chart->bind_param("i", $recruiter_id);
-    $stmt_chart->execute();
+    if (!$stmt_chart->execute()) {
+        throw new Exception("Database execute error: " . $stmt_chart->error);
+    }
     $res_chart = $stmt_chart->get_result();
 
     $chart_data = [];
     while ($row = $res_chart->fetch_assoc()) {
+        // Format: Job Title (category)
+        $trade_display = $row['job_title'];
+        if (!empty($row['category_name'])) {
+            $trade_display .= ' (' . $row['category_name'] . ')';
+        }
         $chart_data[] = [
-            // 👇 frontend key naam 'trade' hi rakha, value me job_title daal diya
-            "trade" => $row['job_title'],
+            "trade" => $trade_display,
             "total_applications" => intval($row['total_applications'])
         ];
     }

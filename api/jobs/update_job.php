@@ -141,7 +141,7 @@ try {
         WHERE id = ?
     ");
     $update_job->bind_param(
-        "ssissddsssissi",
+        "ssissddsssiisi",
         $title,
         $description,
         $category_id,
