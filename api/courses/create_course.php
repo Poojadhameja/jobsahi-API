@@ -36,7 +36,6 @@ $category_input = trim($data['category'] ?? '');
 $tagged_skills  = trim($data['tagged_skills'] ?? '');
 $batch_limit    = intval($data['batch_limit'] ?? 0);
 $status         = trim($data['status'] ?? 'active');
-$instructor_name = trim($data['instructor_name'] ?? '');
 $mode           = trim($data['mode'] ?? 'offline');
 $certification_allowed = !empty($data['certification_allowed']) ? 1 : 0;
 $module_title   = trim($data['module_title'] ?? '');
@@ -45,7 +44,7 @@ $fee            = floatval($data['fee'] ?? 0);
 $admin_action   = 'pending';
 
 // ✅ Validate required fields
-if (empty($title) || empty($description) || empty($duration) || empty($instructor_name) || $fee <= 0) {
+if (empty($title) || empty($description) || empty($duration) || $fee <= 0) {
     echo json_encode(["status" => false, "message" => "Required fields missing"]);
     exit();
 }
@@ -66,7 +65,7 @@ if ($user_role === 'institute') {
     $stmt->close();
 }
 
-// ✅ Handle media upload (ACTUAL FILE SAVE)
+// ✅ Handle media upload
 $absoluteUploadPath = "C:\\xampp\\htdocs\\jobsahi-API\\api\\uploads\\institute_course_image";
 $relativePathForDb  = "uploads/institute_course_image";
 $allowedExt = ['jpg', 'jpeg', 'png', 'csv', 'doc'];
@@ -85,13 +84,10 @@ if (!empty($_FILES['media']['name'][0])) {
             $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
 
             if (in_array($ext, $allowedExt)) {
-                // ✅ Generate a unique safe filename
                 $newName = uniqid("course_", true) . '.' . $ext;
                 $targetPath = $absoluteUploadPath . DIRECTORY_SEPARATOR . $newName;
 
-                // ✅ Physically move the file to uploads folder
                 if (move_uploaded_file($tmpName, $targetPath)) {
-                    // ✅ Save relative path for DB
                     $media_files[] = $relativePathForDb . '/' . $newName;
                 }
             }
@@ -105,25 +101,6 @@ $media_json = !empty($media_files) ? json_encode($media_files) : '';
 $category_name = !empty($category_input) ? $category_input : 'Technical';
 $category_id = null;
 
-// $stmt = $conn->prepare("SELECT id FROM course_category WHERE category_name = ? LIMIT 1");
-// $stmt->bind_param("s", $category_name);
-// $stmt->execute();
-// $result = $stmt->get_result();
-// if ($result->num_rows > 0) {
-//     $row = $result->fetch_assoc();
-//     $category_id = $row['id'];
-// } else {
-//     $stmt->close();
-//     $stmt = $conn->prepare("INSERT INTO course_category (category_name) VALUES (?)");
-//     $stmt->bind_param("s", $category_name);
-//     $stmt->execute();
-//     $category_id = $stmt->insert_id;
-// }
-// $stmt->close();
-// ✅ Ensure category exists
-$category_name = !empty($category_input) ? $category_input : 'Technical';
-$category_id = null;
-
 $stmt = $conn->prepare("SELECT id FROM course_category WHERE category_name = ? LIMIT 1");
 $stmt->bind_param("s", $category_name);
 $stmt->execute();
@@ -132,10 +109,10 @@ $result = $stmt->get_result();
 if ($result && $result->num_rows > 0) {
     $row = $result->fetch_assoc();
     $category_id = $row['id'];
-    $stmt->free_result(); // 👈 clear previous result buffer
+    $stmt->free_result();
     $stmt->close();
 } else {
-    $stmt->close(); // 👈 close old one completely
+    $stmt->close();
     $insertStmt = $conn->prepare("INSERT INTO course_category (category_name) VALUES (?)");
     $insertStmt->bind_param("s", $category_name);
     if ($insertStmt->execute()) {
@@ -147,20 +124,41 @@ if ($result && $result->num_rows > 0) {
     $insertStmt->close();
 }
 
+/* ------------------------------------------------------------------
+    ✅ FIX ADDED — PREVENT DUPLICATE COURSE TITLE FOR SAME INSTITUTE
+    ------------------------------------------------------------------ */
+$check = $conn->prepare("
+    SELECT id FROM courses 
+    WHERE title = ? AND institute_id = ? LIMIT 1
+");
+$check->bind_param("si", $title, $institute_id);
+$check->execute();
+$dupResult = $check->get_result();
+
+if ($dupResult && $dupResult->num_rows > 0) {
+    echo json_encode([
+        "status" => false,
+        "message" => "Course already exists for this institute",
+        "duplicate" => true
+    ]);
+    exit();
+}
+$check->close();
+/* ------------------------------------------------------------------ */
 
 // ✅ Insert course record
 $stmt = $conn->prepare("
     INSERT INTO courses (
         institute_id, title, description, duration, category_id,
-        tagged_skills, batch_limit, status, instructor_name, mode,
+        tagged_skills, batch_limit, status, mode,
         certification_allowed, module_title, module_description,
         media, fee, admin_action, created_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
 ");
 
 $stmt->bind_param(
-    "isssisisssisssds",
+    "isssisississsds",
     $institute_id,
     $title,
     $description,
@@ -169,7 +167,6 @@ $stmt->bind_param(
     $tagged_skills,
     $batch_limit,
     $status,
-    $instructor_name,
     $mode,
     $certification_allowed,
     $module_title,

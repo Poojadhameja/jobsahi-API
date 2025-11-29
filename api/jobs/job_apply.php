@@ -137,7 +137,6 @@ mysqli_stmt_bind_param(
     $student_profile_id,
     $input['cover_letter']
 );
-
 if (mysqli_stmt_execute($insert_stmt)) {
     $application_id = mysqli_insert_id($conn);
     mysqli_stmt_close($insert_stmt);

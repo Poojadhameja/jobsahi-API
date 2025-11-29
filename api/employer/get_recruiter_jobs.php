@@ -25,6 +25,7 @@ try {
         $stmt_posted->execute();
         $result_posted = $stmt_posted->get_result();
         $dashboard_stats['jobs_posted'] = $result_posted->fetch_assoc()['jobs_posted'] ?? 0;
+        $stmt_posted->close();
 
         // 2. Applied Jobs Count
         $sql_applied = "SELECT COUNT(DISTINCT a.id) as applied_count
@@ -38,6 +39,7 @@ try {
         $stmt_applied->execute();
         $result_applied = $stmt_applied->get_result();
         $dashboard_stats['applied_job'] = $result_applied->fetch_assoc()['applied_count'] ?? 0;
+        $stmt_applied->close();
 
         // 3. Interview Scheduled Count
         $sql_scheduled = "SELECT COUNT(*) as interview_scheduled
@@ -52,19 +54,22 @@ try {
         $stmt_scheduled->execute();
         $result_scheduled = $stmt_scheduled->get_result();
         $dashboard_stats['interview_job'] = $result_scheduled->fetch_assoc()['interview_scheduled'] ?? 0;
+        $stmt_scheduled->close();
 
-        // ✅ 4. Interview Completed Count (from applications table where job_selected = false)
+        // ✅ 4. Interview Completed Count (only when application status is 'selected')
         $sql_completed = "SELECT COUNT(*) as interview_completed
                           FROM applications a
                           INNER JOIN jobs j ON a.job_id = j.id
                           INNER JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
                           WHERE rp.user_id = ? 
-                          AND a.job_selected = 'false'";
+                          AND a.status = 'selected'
+                          AND (a.deleted_at IS NULL OR a.deleted_at = '0000-00-00 00:00:00')";
         $stmt_completed = $conn->prepare($sql_completed);
         $stmt_completed->bind_param("i", $user_id);
         $stmt_completed->execute();
         $result_completed = $stmt_completed->get_result();
         $dashboard_stats['interview_completed'] = $result_completed->fetch_assoc()['interview_completed'] ?? 0;
+        $stmt_completed->close();
     }
 
     // ✅ Get jobs list based on role

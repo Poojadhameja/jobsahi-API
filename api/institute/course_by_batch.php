@@ -41,16 +41,26 @@ try {
     // ======================================================
     if ($course_id === 0) {
 
-        $courseQuery = "
-            SELECT id AS course_id, title AS course_title, instructor_name, duration, fee, admin_action
-            FROM courses
-            WHERE admin_action = 'approved'
-            ".($role === 'institute' ? " AND institute_id = ?" : "")."
-            ORDER BY created_at DESC
-        ";
-
-        $courseStmt = $conn->prepare($courseQuery);
-        if ($role === 'institute') $courseStmt->bind_param("i", $institute_id);
+        // ✅ Role-based filtering: Institute sees ALL their courses, Admin sees all approved courses
+        if ($role === 'institute') {
+            $courseQuery = "
+                SELECT id AS course_id, title AS course_title, instructor_name, duration, fee, admin_action, certification_allowed
+                FROM courses
+                WHERE institute_id = ?
+                ORDER BY created_at DESC
+            ";
+            $courseStmt = $conn->prepare($courseQuery);
+            $courseStmt->bind_param("i", $institute_id);
+        } else {
+            // Admin sees all approved courses
+            $courseQuery = "
+                SELECT id AS course_id, title AS course_title, instructor_name, duration, fee, admin_action, certification_allowed
+                FROM courses
+                WHERE admin_action = 'approved'
+                ORDER BY created_at DESC
+            ";
+            $courseStmt = $conn->prepare($courseQuery);
+        }
         $courseStmt->execute();
         $courses = $courseStmt->get_result();
 
@@ -120,9 +130,14 @@ try {
                 "active_batches"   => $active_batches,
                 "overall_progress" => $overall_progress,
                 "total_students"   => $total_students,
-                "admin_action"     => $course['admin_action']
+                "admin_action"     => $course['admin_action'],
+                "certification_allowed" => (intval($course['certification_allowed']) === 1) ? "yes" : "no"
             ];
+            
+            $batchStmt->close(); // Close batch statement after processing each course
         }
+        
+        $courseStmt->close(); // Close course statement after processing all courses
 
         echo json_encode([
             "status" => true,
@@ -139,19 +154,26 @@ try {
     // ======================================================
     else {
 
-        $courseQuery = "
-            SELECT id AS course_id, title AS course_title, instructor_name,
-                   duration, description, fee, admin_action
-            FROM courses
-            WHERE id = ? AND admin_action = 'approved'
-            ".($role === 'institute' ? " AND institute_id = ?" : "")."
-            LIMIT 1
-        ";
-
+        // ✅ Role-based filtering for single course: Institute sees their course (any status), Admin sees approved only
         if ($role === 'institute') {
+            $courseQuery = "
+                SELECT id AS course_id, title AS course_title, instructor_name,
+                       duration, description, fee, admin_action, certification_allowed
+                FROM courses
+                WHERE id = ? AND institute_id = ?
+                LIMIT 1
+            ";
             $stmt = $conn->prepare($courseQuery);
             $stmt->bind_param("ii", $course_id, $institute_id);
         } else {
+            // Admin sees only approved courses
+            $courseQuery = "
+                SELECT id AS course_id, title AS course_title, instructor_name,
+                       duration, description, fee, admin_action, certification_allowed
+                FROM courses
+                WHERE id = ? AND admin_action = 'approved'
+                LIMIT 1
+            ";
             $stmt = $conn->prepare($courseQuery);
             $stmt->bind_param("i", $course_id);
         }
@@ -165,6 +187,10 @@ try {
         }
 
         $course = $courseRes->fetch_assoc();
+        $stmt->close(); // Close course statement
+        
+        // Convert certification_allowed to yes/no
+        $course['certification_allowed'] = (intval($course['certification_allowed']) === 1) ? "yes" : "no";
 
         // ================================
         // FETCH BATCHES (WITH STUDENTS)
@@ -227,6 +253,7 @@ try {
                         "phone"      => $inst['phone']
                     ];
                 }
+                $instStmt->close();
             }
 
             // ===============================
@@ -265,6 +292,7 @@ try {
                     "status"     => ucfirst($st['enrollment_status'] ?? 'Active')
                 ];
             }
+            $stuStmt->close();
 
             // ===============================
             // FINAL BATCH DATA
@@ -281,6 +309,7 @@ try {
                 "students"          => $students
             ];
         }
+        $batchStmt->close(); // Close batch statement after processing all batches
 
         echo json_encode([
             "status" => true,

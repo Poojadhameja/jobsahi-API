@@ -25,14 +25,14 @@ try {
     $summary['total_employers'] = $stmt->get_result()->fetch_assoc()['total'] ?? 0;
     $stmt->close();
 
-    // ✅ Pending Approvals
-    $stmt = $conn->prepare("SELECT COUNT(*) AS pending FROM recruiter_profiles WHERE admin_action = 'pending'");
+    // ✅ Pending Approvals (users where is_verified = 0)
+    $stmt = $conn->prepare("SELECT COUNT(*) AS pending FROM users WHERE role = 'recruiter' AND is_verified = 0");
     $stmt->execute();
     $summary['pending_approvals'] = $stmt->get_result()->fetch_assoc()['pending'] ?? 0;
     $stmt->close();
 
     // ✅ Active Jobs
-    $stmt = $conn->prepare("SELECT COUNT(*) AS active_jobs FROM jobs WHERE status = 'open' AND admin_action = 'approved'");
+    $stmt = $conn->prepare("SELECT COUNT(*) AS active_jobs FROM jobs WHERE status = 'open'");
     $stmt->execute();
     $summary['active_jobs'] = $stmt->get_result()->fetch_assoc()['active_jobs'] ?? 0;
     $stmt->close();
@@ -68,12 +68,11 @@ try {
             rp.website,
             rp.location,
             rp.created_at,
-            rp.modified_at,
-            rp.admin_action
+            rp.modified_at
         FROM users u
         LEFT JOIN recruiter_profiles rp ON u.id = rp.user_id
         WHERE u.role = 'recruiter'
-        ORDER BY rp.created_at DESC
+        ORDER BY u.created_at DESC
     ";
 
     $stmt = $conn->prepare($query);
@@ -88,8 +87,9 @@ try {
     $logo_base = '/jobsahi-API/api/uploads/recruiter_logo/';
 
     while ($row = $result->fetch_assoc()) {
-        // ✅ Status Mapping
-        $status = strtolower($row['admin_action'] ?? 'pending');
+        // ✅ Derive admin_action from users.is_verified
+        $is_verified = intval($row['is_verified'] ?? 0);
+        $admin_action = ($is_verified === 1) ? 'approved' : 'pending';
 
         // ✅ Company logo full URL logic
         $company_logo = $row['company_logo'] ?? "";
@@ -107,7 +107,8 @@ try {
             "email" => $row['email'],
             "phone_number" => $row['phone_number'],
             "role" => $row['role'],
-            "is_verified" => intval($row['is_verified'] ?? 0),
+            "is_verified" => $is_verified,
+            "admin_action" => $admin_action, // ✅ Derived from is_verified
             "profile" => [
                 "profile_id" => intval($row['profile_id']),
                 "company_name" => $row['company_name'] ?? "",
@@ -116,8 +117,7 @@ try {
                 "website" => $row['website'] ?? "",
                 "location" => $row['location'] ?? "",
                 "applied_date" => $row['created_at'],
-                "last_modified" => $row['modified_at'],
-                "status" => ucfirst($status)
+                "last_modified" => $row['modified_at']
             ]
         ];
     }

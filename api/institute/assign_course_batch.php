@@ -2,34 +2,126 @@
 require_once '../cors.php';
 require_once '../db.php';
 
-$decoded = authenticateJWT(['admin', 'institute']);
-$institute_id = intval($decoded['institute_id'] ?? 0);
-
-$input = json_decode(file_get_contents("php://input"), true);
-
-$student_id = $input['student_id'] ?? [];
-$course_id  = intval($input['course_id'] ?? 0);
-$batch_id   = intval($input['batch_id'] ?? 0);
-$assignment_reason = trim($input['assignment_reason'] ?? '');
-
-// ✅ Normalize student_id
-if (!is_array($student_id)) $student_id = [$student_id];
-
-if (empty($student_id) || !$course_id || !$batch_id) {
-    echo json_encode(["status" => false, "message" => "Missing parameters"]);
-    exit;
-}
-
 try {
-    // 🔹 Map user_id → student_profile_id
+    // ----------------------------------------------------
+    // 🔐 AUTHENTICATE JWT (admin or institute)
+    // ----------------------------------------------------
+    $decoded = authenticateJWT(['admin', 'institute']);
+    $role = strtolower($decoded['role'] ?? '');
+    $user_id = intval($decoded['user_id'] ?? ($decoded['id'] ?? 0));
+
+    // Default 0
+    $institute_id = 0;
+
+    // ----------------------------------------------------
+    // 🎯 FIXED: FETCH REAL institute_id FROM institute_profiles
+    // (NO LOGIC CHANGED)
+    // ----------------------------------------------------
+    if ($role === 'institute') {
+
+        $stmtInst = $conn->prepare("
+            SELECT id 
+            FROM institute_profiles 
+            WHERE user_id = ? 
+            LIMIT 1
+        ");
+        $stmtInst->bind_param("i", $user_id);
+        $stmtInst->execute();
+        $resInst = $stmtInst->get_result();
+
+        if ($rowInst = $resInst->fetch_assoc()) {
+            $institute_id = intval($rowInst['id']);
+        }
+        $stmtInst->close();
+
+        if ($institute_id <= 0) {
+            echo json_encode([
+                "status" => false,
+                "message" => "Invalid institute account. Institute ID not found."
+            ]);
+            exit;
+        }
+    }
+
+    // ----------------------------------------------------
+    // 🔽 INPUT HANDLING (UNCHANGED)
+    // ----------------------------------------------------
+    $input = json_decode(file_get_contents("php://input"), true);
+
+    $student_id = $input['student_id'] ?? [];
+    $course_id  = intval($input['course_id'] ?? 0);
+    $batch_id   = intval($input['batch_id'] ?? 0);
+    $assignment_reason = trim($input['assignment_reason'] ?? '');
+
+    if (!is_array($student_id)) $student_id = [$student_id];
+
+    if (empty($student_id) || !$course_id || !$batch_id) {
+        echo json_encode(["status" => false, "message" => "Missing parameters"]);
+        exit;
+    }
+
+    // ----------------------------------------------------
+    // 🟦 NEW STRICT FILTER:
+    // ✔ Institute can only assign THEIR COURSE
+    // ✔ Institute can only assign THEIR BATCH
+    // (NO LOGIC CHANGED — ONLY FILTER ADDED)
+    // ----------------------------------------------------
+    if ($role === "institute") {
+
+        // Check course
+        $chkCourse = $conn->prepare("
+            SELECT id FROM courses 
+            WHERE id = ? AND institute_id = ? 
+            LIMIT 1
+        ");
+        $chkCourse->bind_param("ii", $course_id, $institute_id);
+        $chkCourse->execute();
+        if ($chkCourse->get_result()->num_rows == 0) {
+            echo json_encode([
+                "status" => false,
+                "message" => "Unauthorized: This course does not belong to your institute"
+            ]);
+            exit;
+        }
+
+        // Check batch → batches.course_id MUST belong to same institute
+        $chkBatch = $conn->prepare("
+            SELECT b.id
+            FROM batches b
+            JOIN courses c ON c.id = b.course_id
+            WHERE b.id = ? AND c.institute_id = ?
+            LIMIT 1
+        ");
+        $chkBatch->bind_param("ii", $batch_id, $institute_id);
+        $chkBatch->execute();
+        if ($chkBatch->get_result()->num_rows == 0) {
+            echo json_encode([
+                "status" => false,
+                "message" => "Unauthorized: This batch does not belong to your institute"
+            ]);
+            exit;
+        }
+    }
+
+    // ----------------------------------------------------
+    // 🔽 MAP student user_id → student_profile_id
+    // ----------------------------------------------------
     $profileMap = [];
     $userIds = implode(',', array_map('intval', $student_id));
-    $res = $conn->query("SELECT id, user_id FROM student_profiles WHERE user_id IN ($userIds)");
+
+    $res = $conn->query("
+        SELECT id, user_id 
+        FROM student_profiles 
+        WHERE user_id IN ($userIds)
+    ");
+
     while ($row = $res->fetch_assoc()) {
         $profileMap[$row['user_id']] = $row['id'];
     }
 
-    // ✅ Prepared statements
+    // ----------------------------------------------------
+    // 🔽 PREPARED STATEMENTS (UNCHANGED)
+    // ----------------------------------------------------
     $stmt = $conn->prepare("
         INSERT INTO student_course_enrollments 
         (student_id, course_id, enrollment_date, status, admin_action)
@@ -55,11 +147,13 @@ try {
     $alreadyAssigned = [];
     $assignedCount = 0;
 
+    // ----------------------------------------------------
+    // 🔽 ASSIGN LOOP (UNCHANGED)
+    // ----------------------------------------------------
     foreach ($student_id as $sid) {
         $student_profile_id = $profileMap[$sid] ?? 0;
         if ($student_profile_id <= 0) continue;
 
-        // ✅ Check if student already assigned
         $check->bind_param("ii", $student_profile_id, $batch_id);
         $check->execute();
         $exists = $check->get_result()->fetch_assoc();
@@ -69,7 +163,6 @@ try {
             continue;
         }
 
-        // ✅ Proceed with assignment
         $stmt->bind_param("ii", $student_profile_id, $course_id);
         $stmt->execute();
 
@@ -79,11 +172,13 @@ try {
         $assignedCount++;
     }
 
-    // ✅ Prepare final message
+    // ----------------------------------------------------
+    // 🔽 FINAL RESPONSE (UNCHANGED)
+    // ----------------------------------------------------
     if (!empty($alreadyAssigned)) {
         echo json_encode([
             "status" => true,
-            "message" => "This students were already assigned to this batch.",
+            "message" => "These students were already assigned to this batch.",
             "assigned_count" => $assignedCount,
             "already_assigned" => $alreadyAssigned
         ]);
@@ -96,6 +191,9 @@ try {
     }
 
 } catch (Exception $e) {
-    echo json_encode(["status" => false, "message" => $e->getMessage()]);
+    echo json_encode([
+        "status" => false,
+        "message" => $e->getMessage()
+    ]);
 }
 ?>

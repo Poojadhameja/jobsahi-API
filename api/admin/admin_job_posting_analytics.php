@@ -11,6 +11,7 @@ $admin_id = intval($decoded['user_id']);
 // -------------------------------
 $sql = "
     SELECT 
+        rp.id AS recruiter_id,
         rp.company_name,
         rp.industry,
         u.user_name AS recruiter_name,
@@ -33,7 +34,7 @@ $sql = "
               AND a.deleted_at IS NULL
         ) AS shortlisted,
 
-        -- Last Activity from jobs table
+        -- Last Activity
         (
             SELECT DATE(updated_at) 
             FROM jobs 
@@ -56,9 +57,10 @@ $result = $conn->query($sql);
 $data = [];
 while ($row = $result->fetch_assoc()) {
     $data[] = [
+        "recruiter_id"     => intval($row["recruiter_id"]), // ⭐ ADDED
         "company_name"     => $row["company_name"],
         "recruiter_name"   => $row["recruiter_name"],
-        "industry"         => $row["industry"],     // ⭐ NEW FIELD (replaces success rate)
+        "industry"         => $row["industry"],
         "status"           => $row["status"],
         "jobs_posted"      => intval($row["jobs_posted"]),
         "total_applicants" => intval($row["total_applicants"]),

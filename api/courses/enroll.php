@@ -1,24 +1,27 @@
 <?php
 // enroll.php - Enroll a student into a course & fetch enrollments based on role
 require_once '../cors.php';
+require_once '../db.php';
 
 // Authenticate user and get their role
-$user = authenticateJWT(['admin', 'student','institute']); // Returns decoded JWT payload
+$user = authenticateJWT(['admin', 'student','institute']);
 $user_role = $user['role'] ?? 'student';
 
 // -------- ENROLL STUDENT (POST) --------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    // Get course_id from URL
-    if (!isset($_GET['id']) || empty($_GET['id'])) {
+    // Read JSON Body
+    $data = json_decode(file_get_contents("php://input"), true);
+
+    // Get course_id from BODY (NOT URL)
+    if (!isset($data['course_id']) || empty($data['course_id'])) {
         http_response_code(400);
         echo json_encode(["message" => "Course ID is required", "status" => false]);
         exit();
     }
-    $course_id = intval($_GET['id']);
+    $course_id = intval($data['course_id']);
 
-    // Get student_id from request body
-    $data = json_decode(file_get_contents("php://input"), true);
+    // Get student_id from BODY
     if (!isset($data['student_id']) || empty($data['student_id'])) {
         http_response_code(400);
         echo json_encode(["message" => "Student ID is required", "status" => false]);
@@ -57,10 +60,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         mysqli_stmt_close($stmt);
     }
 
-    // Insert enrollment with admin_action defaulted to 'approved'
+    // Insert enrollment (REMOVED admin_action as you requested)
     $sql = "INSERT INTO student_course_enrollments 
-            (student_id, course_id, enrollment_date, status, admin_action, created_at, modified_at) 
-            VALUES (?, ?, NOW(), 'enrolled', 'approved', NOW(), NOW())";
+            (student_id, course_id, enrollment_date, status, created_at, modified_at) 
+            VALUES (?, ?, NOW(), 'enrolled', NOW(), NOW())";
 
     if ($stmt = mysqli_prepare($conn, $sql)) {
         mysqli_stmt_bind_param($stmt, "ii", $student_id, $course_id);
@@ -85,16 +88,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // -------- FETCH ENROLLMENTS (GET) --------
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
-    // Build SQL query with role-based admin_action filter (exclude deleted records)
-    if ($user_role === 'admin') {
-        $sql = "SELECT * FROM student_course_enrollments 
-                WHERE admin_action IN ('pending','approved') AND deleted_at IS NULL 
-                ORDER BY id DESC";
-    } else {
-        $sql = "SELECT * FROM student_course_enrollments 
-                WHERE admin_action = 'approved' AND deleted_at IS NULL 
-                ORDER BY id DESC";
-    }
+    // admin_action removed → logic unchanged, simply fetch all active enrollments
+    $sql = "SELECT * FROM student_course_enrollments 
+            WHERE deleted_at IS NULL 
+            ORDER BY id DESC";
 
     $result = mysqli_query($conn, $sql);
     $enrollments = [];
@@ -108,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     exit();
 }
 
-// If method is not POST or GET
+// Invalid method
 http_response_code(405);
 echo json_encode(["message" => "Method not allowed", "status" => false]);
 exit();

@@ -79,8 +79,6 @@ $name = mysqli_real_escape_string($conn, trim($data['name']));
 $email = mysqli_real_escape_string($conn, trim($data['email']));
 $phone = isset($data['phone']) && !empty($data['phone']) ? mysqli_real_escape_string($conn, trim($data['phone'])) : null;
 
-// ✅ admin_action field - always set to 'approved' by default
-$admin_action = 'approved';
 
 // ✅ Validate institute_id exists
 $check_institute_sql = "SELECT id FROM institute_profiles WHERE id = ?";
@@ -127,9 +125,29 @@ if (mysqli_num_rows($email_result) > 0) {
 }
 mysqli_stmt_close($check_stmt);
 
+// ✅ Check if phone number already exists (only if phone is provided)
+if (!empty($phone)) {
+    $check_phone_sql = "SELECT id FROM faculty_users WHERE phone = ?";
+    $check_phone_stmt = mysqli_prepare($conn, $check_phone_sql);
+    mysqli_stmt_bind_param($check_phone_stmt, "s", $phone);
+    mysqli_stmt_execute($check_phone_stmt);
+    $phone_result = mysqli_stmt_get_result($check_phone_stmt);
+
+    if (mysqli_num_rows($phone_result) > 0) {
+        echo json_encode([
+            "message" => "Phone number already exists",
+            "status" => false
+        ]);
+        mysqli_stmt_close($check_phone_stmt);
+        mysqli_close($conn);
+        exit;
+    }
+    mysqli_stmt_close($check_phone_stmt);
+}
+
 // ✅ Insert faculty user (without password)
-$insert_sql = "INSERT INTO faculty_users (institute_id, name, email, phone, admin_action) 
-               VALUES (?, ?, ?, ?, ?)";
+$insert_sql = "INSERT INTO faculty_users (institute_id, name, email, phone) 
+               VALUES (?, ?, ?, ?)";
 $insert_stmt = mysqli_prepare($conn, $insert_sql);
 
 if (!$insert_stmt) {
@@ -140,19 +158,18 @@ if (!$insert_stmt) {
     exit;
 }
 
-mysqli_stmt_bind_param($insert_stmt, "issss", 
+mysqli_stmt_bind_param($insert_stmt, "isss", 
     $institute_id, 
     $name, 
     $email, 
-    $phone, 
-    $admin_action
+    $phone
 );
 
 if (mysqli_stmt_execute($insert_stmt)) {
     $faculty_id = mysqli_insert_id($conn);
     
     // ✅ Fetch created faculty user
-    $get_sql = "SELECT id, institute_id, name, email, phone, admin_action 
+    $get_sql = "SELECT id, institute_id, name, email, phone 
                 FROM faculty_users WHERE id = ?";
     $get_stmt = mysqli_prepare($conn, $get_sql);
     mysqli_stmt_bind_param($get_stmt, "i", $faculty_id);

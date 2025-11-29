@@ -34,7 +34,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATC
         $tagged_skills = trim($data['tagged_skills'] ?? '');
         $batch_limit  = intval($data['batch_limit'] ?? 0);
         $status       = trim($data['status'] ?? '');
-        $instructor_name = trim($data['instructor_name'] ?? '');
         $mode         = trim($data['mode'] ?? '');
         $certification_allowed = isset($data['certification_allowed']) ? (int)$data['certification_allowed'] : 0;
         $module_title = trim($data['module_title'] ?? '');
@@ -95,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATC
 
         // ✅ Validate required fields
         if (empty($title) || empty($description) || empty($duration) ||
-            $fee <= 0 || empty($instructor_name) || empty($mode)) {
+            $fee <= 0 || empty($mode)) {
             echo json_encode(["status" => false, "message" => "All required fields must be filled properly."]);
             exit();
         }
@@ -118,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATC
             ? trim($data['admin_action'] ?? $current_admin_action)
             : $current_admin_action;
 
-        // ✅ Update Query (16 fields)
+        // ✅ Update Query (15 fields - instructor_name removed)
         $stmt = $conn->prepare("
             UPDATE courses 
             SET 
@@ -130,7 +129,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATC
                 tagged_skills = ?, 
                 batch_limit = ?, 
                 status = ?, 
-                instructor_name = ?, 
                 mode = ?, 
                 certification_allowed = ?, 
                 module_title = ?, 
@@ -141,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATC
         ");
 
         $stmt->bind_param(
-            "sssdisssssissssi",
+            "sssdisississssi",
             $title,
             $description,
             $duration,
@@ -150,7 +148,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATC
             $tagged_skills,
             $batch_limit,
             $status,
-            $instructor_name,
             $mode,
             $certification_allowed,
             $module_title,

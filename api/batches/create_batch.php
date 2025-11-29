@@ -27,7 +27,6 @@ try {
     $start_date      = isset($data['start_date']) ? $data['start_date'] : null;
     $end_date        = isset($data['end_date']) ? $data['end_date'] : null;
     $instructor_id   = isset($data['instructor_id']) ? intval($data['instructor_id']) : 0;
-    $admin_action    = "approved"; // default status
 
     // ✅ Basic validation for required fields
     if ($course_id <= 0 || empty($name) || empty($batch_time_slot) || empty($start_date) || empty($end_date) || $instructor_id <= 0) {
@@ -61,18 +60,17 @@ try {
     // ✅ Insert new batch
     $stmt = $conn->prepare("
         INSERT INTO batches 
-        (course_id, name, batch_time_slot, start_date, end_date, instructor_id, admin_action)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        (course_id, name, batch_time_slot, start_date, end_date, instructor_id)
+        VALUES (?, ?, ?, ?, ?, ?)
     ");
     $stmt->bind_param(
-    "issssis",
+    "issssi",
     $course_id,
     $name,
     $batch_time_slot,
     $start_date,
     $end_date,
-    $instructor_id,
-    $admin_action
+    $instructor_id
 );
 
 

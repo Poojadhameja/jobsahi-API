@@ -3,16 +3,31 @@ require_once '../cors.php';
 require_once '../db.php';
 
 try {
-    // ✅ Authenticate JWT for admin or institute
+
+    // ---------------------------------------------------------
+    // ✅ FIXED JWT – Always correct user_id and institute_id
+    // ---------------------------------------------------------
     $decoded = authenticateJWT(['admin', 'institute']);
-    $role = strtolower($decoded['role'] ?? '');
 
-    // -------------------------------
-    // ✅ Determine institute_id
-    // -------------------------------
-    $user_id = intval($decoded['user_id'] ?? ($decoded['id'] ?? 0));
+    $role = strtolower(trim($decoded['role'] ?? ''));
+
+    if (!in_array($role, ['admin', 'institute'])) {
+        echo json_encode(["status" => false, "message" => "Invalid role"]);
+        exit;
+    }
+
+    // Correct user_id resolution
+    $user_id = isset($decoded['user_id'])
+        ? intval($decoded['user_id'])
+        : (isset($decoded['id']) ? intval($decoded['id']) : 0);
+
+    if ($user_id <= 0) {
+        echo json_encode(["status" => false, "message" => "JWT user_id missing"]);
+        exit;
+    }
+
+    // Load institute_id fresh each time
     $institute_id = 0;
-
     if ($role === 'institute') {
         $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
         $stmt->bind_param("i", $user_id);
@@ -22,19 +37,19 @@ try {
             $institute_id = intval($row['id']);
         }
         $stmt->close();
+
+        if ($institute_id <= 0) {
+            echo json_encode(["status" => false, "message" => "Institute not found"]);
+            exit;
+        }
     }
 
-    if ($role === 'institute' && $institute_id <= 0) {
-        echo json_encode([
-            "status" => false,
-            "message" => "Institute ID missing or invalid"
-        ]);
-        exit;
-    }
-
-    // -------------------------------
-    // ✅ Fetch students + enrollments
-    // -------------------------------
+    // ---------------------------------------------------------
+    // 🔍 MAIN QUERY – STUDENT + COURSE + LATEST BATCH ASSIGNMENT
+    // ---------------------------------------------------------
+    
+    // For institute: Only show students enrolled in their courses
+    // For admin: Show all students
     $sql = "
         SELECT 
             sp.id AS student_id,
@@ -43,27 +58,55 @@ try {
             u.phone_number AS phone,
             sp.trade,
             sp.education,
+
             e.course_id,
             c.title AS course_title,
+            c.institute_id,
             e.enrollment_date,
             e.status AS enrollment_status,
+
             b.id AS batch_id,
             b.name AS batch_name,
             b.start_date,
             b.end_date
         FROM student_profiles sp
-        INNER JOIN users u ON sp.user_id = u.id
+        INNER JOIN users u 
+            ON sp.user_id = u.id
+
+        -- 🔹 Course enrollments
         LEFT JOIN student_course_enrollments e 
-            ON sp.id = e.student_id 
-            AND (e.admin_action = 'approved' OR e.admin_action = 'pending' OR e.admin_action IS NULL)
+            ON sp.id = e.student_id
+           AND (e.admin_action = 'approved' 
+             OR e.admin_action = 'pending' 
+             OR e.admin_action IS NULL)
+
+        -- 🔹 Courses
         LEFT JOIN courses c 
             ON e.course_id = c.id
-            " . ($role === 'institute' ? "AND c.institute_id = ?" : "") . "
+
+        -- 🔹 LATEST batch assignment per student (from student_batches)
+        LEFT JOIN student_batches sb
+            ON sb.student_id = sp.id
+           AND sb.admin_action = 'approved'
+           AND sb.id = (
+                SELECT sb2.id 
+                FROM student_batches sb2 
+                WHERE sb2.student_id = sp.id 
+                  AND sb2.admin_action = 'approved'
+                ORDER BY sb2.id DESC
+                LIMIT 1
+           )
+
+        -- 🔹 Actual batch details (linked to course)
         LEFT JOIN batches b 
-            ON b.course_id = c.id 
-            AND b.admin_action = 'approved'
+            ON b.id = sb.batch_id 
+           AND b.admin_action = 'approved'
+           AND b.course_id = c.id
+
         WHERE sp.deleted_at IS NULL 
           AND u.status = 'active'
+          " . ($role === 'institute' ? "AND c.institute_id = ?" : "") . "
+
         ORDER BY u.user_name ASC, c.title ASC
     ";
 
@@ -78,84 +121,88 @@ try {
     $result = $stmt->get_result();
 
     $students = [];
-    $seenCourses = []; // Prevent duplicates per student
+    $seenCourses = [];
     $activeCount = 0;
     $completedCount = 0;
 
-    // -------------------------------
-    // ✅ Build final data (skip duplicate course for same student)
-    // -------------------------------
     while ($row = $result->fetch_assoc()) {
+
+        // For institute role: Skip students not enrolled in their courses
+        if ($role === 'institute') {
+            // Skip if course_id is null or institute_id doesn't match
+            if ($row['course_id'] === null || $row['institute_id'] != $institute_id) {
+                continue;
+            }
+        }
+
         $sid = $row['student_id'];
         $cid = $row['course_id'] ?? 0;
 
-        // Skip duplicates of same course per student
-        if (isset($seenCourses[$sid][$cid])) {
-            continue;
-        }
+        // Avoid duplicate same student+course rows
+        if (isset($seenCourses[$sid][$cid])) continue;
         $seenCourses[$sid][$cid] = true;
 
-        // Track stats
         $statusVal = strtolower(trim($row['enrollment_status'] ?? 'enrolled'));
-        if ($statusVal === 'enrolled') $activeCount++;
-        elseif ($statusVal === 'completed') $completedCount++;
+        if ($statusVal === 'enrolled') {
+            $activeCount++;
+        } elseif ($statusVal === 'completed') {
+            $completedCount++;
+        }
 
-        // Push one row per course
         $students[] = [
-            "student_id" => $sid,
-            "name" => $row['student_name'],
-            "email" => $row['email'],
-            "phone" => $row['phone'],
-            "trade" => $row['trade'],
-            "education" => $row['education'],
-            "course_id" => $row['course_id'],
-            "course" => $row['course_title'] ?? 'Not Assigned',
-            "batch_id" => $row['batch_id'],
-            "batch" => $row['batch_name'] ?? 'Not Assigned',
-            "status" => ucfirst($row['enrollment_status'] ?? 'Enrolled'),
+            "student_id"      => $sid,
+            "name"            => $row['student_name'],
+            "email"           => $row['email'],
+            "phone"           => $row['phone'],
+            "trade"           => $row['trade'],
+            "education"       => $row['education'],
+            "course_id"       => $row['course_id'],
+            "course"          => $row['course_title'] ?? 'Not Assigned',
+            "batch_id"        => $row['batch_id'],
+            "batch"           => $row['batch_name'] ?? 'Not Assigned',
+            "status"          => ucfirst($row['enrollment_status'] ?? 'Enrolled'),
             "enrollment_date" => $row['enrollment_date'] ?? null,
-            "start_date" => $row['start_date'] ?? null,
-            "end_date" => $row['end_date'] ?? null
+            "start_date"      => $row['start_date'] ?? null,
+            "end_date"        => $row['end_date'] ?? null
         ];
     }
 
-    // -------------------------------
-    // ✅ Count total courses
-    // -------------------------------
+    // ---------------------------------------------------------
+    // 🔢 Count total courses
+    // ---------------------------------------------------------
     if ($role === 'institute') {
-        $sql_courses = "
+        $stmtC = $conn->prepare("
             SELECT COUNT(*) AS total_courses 
             FROM courses 
-            WHERE institute_id = ? 
-              AND (admin_action = 'approved' OR admin_action = 'pending' OR admin_action IS NULL)
-        ";
-        $stmtC = $conn->prepare($sql_courses);
+            WHERE institute_id = ?
+              AND (admin_action = 'approved' 
+               OR admin_action = 'pending' 
+               OR admin_action IS NULL)
+        ");
         $stmtC->bind_param("i", $institute_id);
     } else {
-        $sql_courses = "
+        $stmtC = $conn->prepare("
             SELECT COUNT(*) AS total_courses 
             FROM courses 
-            WHERE admin_action = 'approved' OR admin_action = 'pending' OR admin_action IS NULL
-        ";
-        $stmtC = $conn->prepare($sql_courses);
+            WHERE admin_action = 'approved' 
+               OR admin_action = 'pending' 
+               OR admin_action IS NULL
+        ");
     }
 
     $stmtC->execute();
     $resC = $stmtC->get_result();
     $totalCourses = ($resC->fetch_assoc())['total_courses'] ?? 0;
 
-    // -------------------------------
-    // ✅ Final response
-    // -------------------------------
     echo json_encode([
-        "status" => true,
+        "status"  => true,
         "message" => "Student summary fetched successfully.",
-        "role" => $role,
+        "role"    => $role,
         "summary" => [
-            "total_students" => count(array_unique(array_column($students, 'student_id'))),
-            "active_students" => $activeCount,
-            "completed_students" => $completedCount,
-            "total_courses" => $totalCourses
+            "total_students"    => count(array_unique(array_column($students, 'student_id'))),
+            "active_students"   => $activeCount,
+            "completed_students"=> $completedCount,
+            "total_courses"     => $totalCourses
         ],
         "data" => $students
     ], JSON_PRETTY_PRINT);

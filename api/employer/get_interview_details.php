@@ -1,6 +1,5 @@
 <?php
 require_once '../cors.php';
-require_once '../db.php';
 
 // ✅ Authenticate recruiter
 $decoded = authenticateJWT(['recruiter', 'admin']);
@@ -20,8 +19,8 @@ try {
         exit;
     }
 
-    // 🔹 Get recruiter_profile id
-    $sql_rec = "SELECT id FROM recruiter_profiles WHERE user_id = ? AND admin_action = 'approved'";
+    // 🔹 Get recruiter_profile id (REMOVED admin_action condition)
+    $sql_rec = "SELECT id FROM recruiter_profiles WHERE user_id = ?";
     $stmt_rec = $conn->prepare($sql_rec);
     $stmt_rec->bind_param("i", $user_id);
     $stmt_rec->execute();
@@ -30,7 +29,7 @@ try {
 
     if (!$recruiter_profile_id) {
         http_response_code(400);
-        echo json_encode(["message" => "Recruiter profile not found or not approved", "status" => false]);
+        echo json_encode(["message" => "Recruiter profile not found", "status" => false]);
         exit;
     }
 
@@ -40,8 +39,6 @@ try {
             u.user_name AS candidate_name,
             j.title AS job_title,
             i.mode AS interview_mode,
-            i.platform_name,
-            i.interview_link,
             i.location AS interview_location,
             DATE_FORMAT(i.scheduled_at, '%h:%i %p') AS interview_time,
             DATE(i.scheduled_at) AS interview_date
@@ -51,7 +48,6 @@ try {
         INNER JOIN student_profiles sp ON sp.id = a.student_id
         INNER JOIN users u ON u.id = sp.user_id
         WHERE j.recruiter_id = ?
-          AND i.admin_action = 'approved'
           AND i.status = 'scheduled'
         ORDER BY i.scheduled_at DESC";
 
@@ -65,9 +61,7 @@ try {
             "name" => $row['candidate_name'],
             "job_title" => $row['job_title'],
             "mode" => ucfirst($row['interview_mode']),
-            "location" => $row['interview_mode'] === 'offline' ? $row['interview_location'] : null,
-            "platform_name" => $row['interview_mode'] === 'online' ? $row['platform_name'] : null,
-            "interview_link" => $row['interview_mode'] === 'online' ? $row['interview_link'] : null,
+            "location" => $row['interview_location'],
             "time" => $row['interview_time'],
             "scheduled_at" => $row['interview_date']
         ];
