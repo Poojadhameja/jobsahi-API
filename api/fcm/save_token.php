@@ -1,5 +1,11 @@
 <?php
 // save_token.php - Save or update FCM token for a user
+// 
+// ⚠️ IMPORTANT: Notification system is ONLY for STUDENTS
+// - Currently, only students use this endpoint to save FCM tokens
+// - FCM tokens are stored only for students
+// - Push notifications are sent only to students
+//
 require_once '../cors.php';
 require_once '../db.php';
 
@@ -15,7 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit();
 }
 
-// ✅ Authenticate user (any role can save their token)
+// ✅ Authenticate user
+// ⚠️ Note: Currently only students use this endpoint (app access is students only)
 $decoded = authenticateJWT(['student', 'recruiter', 'institute', 'admin']);
 $user_id = intval($decoded['user_id']);
 

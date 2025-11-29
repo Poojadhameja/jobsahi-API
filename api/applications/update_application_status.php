@@ -88,6 +88,7 @@ try {
 
     if ($update_stmt->affected_rows > 0) {
         // ✅ Send notification if student is shortlisted
+        // ⚠️ Note: Notifications are sent ONLY to students
         if ($new_status === 'shortlisted') {
             // Get student user_id from application
             $student_sql = "
@@ -108,7 +109,7 @@ try {
                 $job_title = $student_data['job_title'];
                 $job_id = intval($student_data['job_id']);
                 
-                // Send notification
+                // ✅ Send notification to student (students only)
                 require_once '../helpers/notification_helper.php';
                 $notification_result = NotificationHelper::notifyShortlisted($student_user_id, $job_title, $job_id);
                 

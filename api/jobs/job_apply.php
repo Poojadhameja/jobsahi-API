@@ -134,7 +134,7 @@ mysqli_stmt_bind_param(
     $insert_stmt,
     "iis",
     $job_id,
-    $student_id,
+    $student_profile_id,
     $input['cover_letter']
 );
 
