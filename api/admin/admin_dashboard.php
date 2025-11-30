@@ -8,37 +8,25 @@ $decoded = authenticateJWT(['admin']);
 try {
 
     /* --------------------------------------------------
-       1️⃣ Total Students
+       1️⃣ Total Institutes
     -------------------------------------------------- */
-    $totalStudents = $conn->query("
+    $totalInstitutes = $conn->query("
         SELECT COUNT(*) AS total 
-        FROM student_profiles
+        FROM institute_profiles
         WHERE deleted_at IS NULL
     ")->fetch_assoc()['total'] ?? 0;
 
-
     /* --------------------------------------------------
-       2️⃣ Applied Jobs
+       2️⃣ Total Recruiters
     -------------------------------------------------- */
-    $appliedJobs = $conn->query("
+    $totalRecruiters = $conn->query("
         SELECT COUNT(*) AS total 
-        FROM applications
+        FROM recruiter_profiles
         WHERE deleted_at IS NULL
     ")->fetch_assoc()['total'] ?? 0;
 
-
     /* --------------------------------------------------
-       3️⃣ Interview Jobs
-    -------------------------------------------------- */
-    $interviewJobs = $conn->query("
-        SELECT COUNT(DISTINCT interview_id) AS total
-        FROM applications
-        WHERE interview_id IS NOT NULL
-    ")->fetch_assoc()['total'] ?? 0;
-
-
-    /* --------------------------------------------------
-       4️⃣ Active Jobs
+       3️⃣ Active Jobs
     -------------------------------------------------- */
     $activeJobs = $conn->query("
         SELECT COUNT(*) AS total 
@@ -47,15 +35,38 @@ try {
           AND admin_action='approved'
     ")->fetch_assoc()['total'] ?? 0;
 
-
     /* --------------------------------------------------
-       5️⃣ Active Courses (Remove offers)
+       4️⃣ Active Courses
     -------------------------------------------------- */
     $activeCourses = $conn->query("
         SELECT COUNT(*) AS total 
         FROM courses
         WHERE status='active'
           AND admin_action='approved'
+    ")->fetch_assoc()['total'] ?? 0;
+
+    /* --------------------------------------------------
+       5️⃣ Total Students
+    -------------------------------------------------- */
+    $totalStudents = $conn->query("
+        SELECT COUNT(*) AS total 
+        FROM student_profiles
+        WHERE deleted_at IS NULL
+    ")->fetch_assoc()['total'] ?? 0;
+
+    /* --------------------------------------------------
+       Additional Stats (for other sections)
+    -------------------------------------------------- */
+    $appliedJobs = $conn->query("
+        SELECT COUNT(*) AS total 
+        FROM applications
+        WHERE deleted_at IS NULL
+    ")->fetch_assoc()['total'] ?? 0;
+
+    $interviewJobs = $conn->query("
+        SELECT COUNT(DISTINCT interview_id) AS total
+        FROM applications
+        WHERE interview_id IS NOT NULL
     ")->fetch_assoc()['total'] ?? 0;
 
 
@@ -137,10 +148,9 @@ try {
         "message" => "Admin dashboard data loaded successfully",
         "data" => [
             "cards" => [
-                "total_students" => $totalStudents,
-                "applied_jobs" => $appliedJobs,
-                "interview_jobs" => $interviewJobs,
-                "active_jobs" => $activeJobs
+                "total_institutes" => $totalInstitutes,
+                "total_recruiters" => $totalRecruiters,
+                "total_students" => $totalStudents
             ],
             "placement_funnel" => [
                 "applications" => $funnelApplications,
