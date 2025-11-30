@@ -216,7 +216,8 @@ try {
         case 'student':
 
             $skills = isset($data['skills']) ? (is_array($data['skills']) ? json_encode($data['skills']) : $data['skills']) : null;
-            $bio = $user_name;
+            // ✅ Bio should come from input data, not automatically set to user_name
+            $bio = isset($data['bio']) ? trim($data['bio']) : (isset($data['additional_info']['bio']) ? trim($data['additional_info']['bio']) : null);
             $resume = handleFileUpload('resume_cv');
             $socials = isset($data['linkedin_portfolio_link']) ? json_encode(['linkedin' => $data['linkedin_portfolio_link']]) : null;
             $dob = $data['date_of_birth'] ?? null;

@@ -74,22 +74,55 @@ $student_profile = mysqli_fetch_assoc($student_result);
 $student_profile_id = $student_profile['id'];
 mysqli_stmt_close($check_student_stmt);
 
-// ✅ Check if course exists and is approved/active
-$check_course_sql = "SELECT id, title FROM courses WHERE id = ? AND status = 'active' AND admin_action = 'approved'";
-$check_course_stmt = mysqli_prepare($conn, $check_course_sql);
-mysqli_stmt_bind_param($check_course_stmt, "i", $course_id);
-mysqli_stmt_execute($check_course_stmt);
-$course_result = mysqli_stmt_get_result($check_course_stmt);
+// ✅ Check if course exists first
+$check_course_exists_sql = "SELECT id, title, status, admin_action FROM courses WHERE id = ?";
+$check_course_exists_stmt = mysqli_prepare($conn, $check_course_exists_sql);
+mysqli_stmt_bind_param($check_course_exists_stmt, "i", $course_id);
+mysqli_stmt_execute($check_course_exists_stmt);
+$course_exists_result = mysqli_stmt_get_result($check_course_exists_stmt);
 
-if (mysqli_num_rows($course_result) === 0) {
-    echo json_encode(["message" => "Course not found or not available for saving", "status" => false]);
-    mysqli_stmt_close($check_course_stmt);
+if (mysqli_num_rows($course_exists_result) === 0) {
+    echo json_encode([
+        "message" => "Course not found",
+        "status" => false,
+        "course_id" => $course_id,
+        "reason" => "Course with this ID does not exist"
+    ]);
+    mysqli_stmt_close($check_course_exists_stmt);
     mysqli_close($conn);
     exit;
 }
 
-$course_data = mysqli_fetch_assoc($course_result);
-mysqli_stmt_close($check_course_stmt);
+$course_info = mysqli_fetch_assoc($course_exists_result);
+mysqli_stmt_close($check_course_exists_stmt);
+
+// ✅ Check if course is active and approved
+if ($course_info['status'] !== 'active') {
+    echo json_encode([
+        "message" => "Course is not available for saving",
+        "status" => false,
+        "course_id" => $course_id,
+        "course_title" => $course_info['title'],
+        "reason" => "Course status is not active. Current status: " . $course_info['status']
+    ]);
+    mysqli_close($conn);
+    exit;
+}
+
+if ($course_info['admin_action'] !== 'approved') {
+    echo json_encode([
+        "message" => "Course is not available for saving",
+        "status" => false,
+        "course_id" => $course_id,
+        "course_title" => $course_info['title'],
+        "reason" => "Course is not approved by admin. Current status: " . $course_info['admin_action']
+    ]);
+    mysqli_close($conn);
+    exit;
+}
+
+// Course is valid, proceed with saving
+$course_data = $course_info;
 
 // ✅ Check if already saved by this student
 $check_saved_sql = "SELECT id FROM saved_courses WHERE student_id = ? AND course_id = ?";
