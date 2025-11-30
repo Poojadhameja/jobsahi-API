@@ -84,7 +84,8 @@ try {
     $funnelHired = $conn->query("
         SELECT COUNT(*) AS c 
         FROM applications 
-        WHERE job_selected = 1
+        WHERE status = 'selected'
+          AND (deleted_at IS NULL OR deleted_at = '0000-00-00 00:00:00')
     ")->fetch_assoc()['c'] ?? 0;
 
 
