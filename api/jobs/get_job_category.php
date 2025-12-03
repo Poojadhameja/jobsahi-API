@@ -6,7 +6,7 @@ require_once '../db.php';
 try {
 
     // ✅ Authenticate JWT (Admin, Recruiter allowed)
-    $decoded = authenticateJWT(['admin', 'recruiter']);
+    $decoded = authenticateJWT(['admin', 'recruiter', 'student']);
     $user_id = intval($decoded['user_id']);
     $user_role = strtolower($decoded['role']);
 

@@ -1,5 +1,6 @@
 <?php
 require_once '../cors.php';
+require_once '../db.php';
 
 // ✅ Authenticate recruiter
 $decoded = authenticateJWT(['recruiter', 'admin']);
@@ -33,7 +34,11 @@ try {
         exit;
     }
 
-    // 🔹 Fetch latest approved & scheduled interview
+    // 🔹 Get optional month filter (if provided)
+    $month = isset($_GET['month']) ? intval($_GET['month']) : null;
+    $year = isset($_GET['year']) ? intval($_GET['year']) : null;
+
+    // 🔹 Fetch ALL scheduled interviews (not just one)
     $sql = "
         SELECT 
             u.user_name AS candidate_name,
@@ -49,28 +54,58 @@ try {
         INNER JOIN users u ON u.id = sp.user_id
         WHERE j.recruiter_id = ?
           AND i.status = 'scheduled'
-        ORDER BY i.scheduled_at DESC";
+          AND (i.deleted_at IS NULL OR i.deleted_at = '0000-00-00 00:00:00')";
+
+    // Add month filter if provided
+    $params = [$recruiter_profile_id];
+    $types = "i";
+    
+    if ($month !== null && $month >= 1 && $month <= 12) {
+        if ($year !== null && $year > 0) {
+            $sql .= " AND YEAR(i.scheduled_at) = ? AND MONTH(i.scheduled_at) = ?";
+            $params[] = $year;
+            $params[] = $month;
+            $types .= "ii";
+        } else {
+            $sql .= " AND MONTH(i.scheduled_at) = ?";
+            $params[] = $month;
+            $types .= "i";
+        }
+    }
+
+    $sql .= " ORDER BY i.scheduled_at ASC";
 
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $recruiter_profile_id);
+    if (!$stmt) {
+        throw new Exception("Database prepare error: " . $conn->error);
+    }
+    
+    $stmt->bind_param($types, ...$params);
     $stmt->execute();
     $result = $stmt->get_result();
 
-    if ($row = $result->fetch_assoc()) {
-        $data = [
+    // 🔹 Fetch ALL interviews into an array
+    $interviews = [];
+    while ($row = $result->fetch_assoc()) {
+        $interviews[] = [
             "name" => $row['candidate_name'],
             "job_title" => $row['job_title'],
             "mode" => ucfirst($row['interview_mode']),
-            "location" => $row['interview_location'],
+            "location" => $row['interview_location'] ?? "",
             "time" => $row['interview_time'],
             "scheduled_at" => $row['interview_date']
         ];
-        http_response_code(200);
-        echo json_encode(["candidate_interview_details" => $data, "status" => true]);
-    } else {
-        http_response_code(200);
-        echo json_encode(["candidate_interview_details" => null, "status" => true]);
     }
+
+    $stmt->close();
+
+    // Return all interviews as an array
+    http_response_code(200);
+    echo json_encode([
+        "candidate_interview_details" => $interviews,
+        "status" => true,
+        "total" => count($interviews)
+    ]);
 
 } catch (Exception $e) {
     http_response_code(500);

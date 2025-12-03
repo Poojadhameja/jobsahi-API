@@ -50,6 +50,7 @@ try {
     }
 
     // ✅ Build query with prepared statements
+    // Flow: interview_id -> application_id -> job_id -> job title
     $sql = "
         SELECT 
             ip.id,
@@ -58,9 +59,12 @@ try {
             ip.feedback,
             ip.rating,
             ip.created_at,
-            ip.admin_action
+            ip.admin_action,
+            COALESCE(j.title, 'N/A') AS job_title
         FROM interview_panel ip
-        JOIN interviews i ON ip.interview_id = i.id
+        INNER JOIN interviews i ON ip.interview_id = i.id
+        LEFT JOIN applications a ON i.application_id = a.id
+        LEFT JOIN jobs j ON a.job_id = j.id
         WHERE 1 = 1
           AND (i.deleted_at IS NULL OR i.deleted_at = '0000-00-00 00:00:00')
     ";
@@ -154,16 +158,41 @@ try {
     // Execute with prepared statement if params exist
     if (!empty($params)) {
         $stmt = $conn->prepare($sql);
+        if (!$stmt) {
+            throw new Exception("Prepare error: " . $conn->error);
+        }
         $stmt->bind_param($types, ...$params);
-        $stmt->execute();
+        if (!$stmt->execute()) {
+            throw new Exception("Execute error: " . $stmt->error);
+        }
         $result = $stmt->get_result();
     } else {
         $result = $conn->query($sql);
+        if (!$result) {
+            throw new Exception("Query error: " . $conn->error);
+        }
     }
 
     $panelists = [];
     while ($row = $result->fetch_assoc()) {
-        $panelists[] = $row;
+        // Get job_title - check multiple possible field names
+        $job_title = 'N/A';
+        if (isset($row['job_title']) && !empty($row['job_title'])) {
+            $job_title = $row['job_title'];
+        } elseif (isset($row['title']) && !empty($row['title'])) {
+            $job_title = $row['title'];
+        }
+        
+        $panelists[] = [
+            "id" => intval($row['id'] ?? 0),
+            "interview_id" => intval($row['interview_id'] ?? 0),
+            "panelist_name" => $row['panelist_name'] ?? '',
+            "feedback" => $row['feedback'] ?? '',
+            "rating" => intval($row['rating'] ?? 0),
+            "created_at" => $row['created_at'] ?? '',
+            "admin_action" => $row['admin_action'] ?? '',
+            "job_title" => $job_title
+        ];
     }
 
     if (empty($panelists)) {
@@ -184,4 +213,3 @@ try {
 
 $conn->close();
 ?>
-
