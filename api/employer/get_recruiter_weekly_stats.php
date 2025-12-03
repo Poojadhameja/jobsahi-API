@@ -24,6 +24,7 @@ try {
         SELECT id 
         FROM recruiter_profiles 
         WHERE user_id = ?
+          AND (deleted_at IS NULL OR deleted_at = '0000-00-00 00:00:00')
         LIMIT 1
     ";
     $stmt = $conn->prepare($sql_recruiter);
@@ -36,7 +37,7 @@ try {
     $recruiter = $result->fetch_assoc();
     $stmt->close();
 
-    if (!$recruiter) {
+    if (!$recruiter || !isset($recruiter['id'])) {
         http_response_code(400);
         echo json_encode(["status" => false, "message" => "Recruiter profile not found"]);
         exit;
@@ -96,9 +97,10 @@ try {
     $stmt_weekly->close();
 
     // -------------------------------
-    // ✅ STEP 3: CHART DATA – TOP JOBS BY APPLICATIONS (CURRENT MONTH)
+    // ✅ STEP 3: CHART DATA – TOP JOBS BY APPLICATIONS (CURRENT MONTH, FALLBACK TO ALL-TIME)
     // -------------------------------
     // Logic: Current month me sabse highest applications wale jobs dikhana hai
+    // If current month has no data, show all-time top jobs
     // Format: Job Title (category) - Only show data for logged-in recruiter
     $sql_chart = "
         SELECT 
@@ -140,6 +142,44 @@ try {
         ];
     }
     $stmt_chart->close();
+
+    // ✅ FALLBACK: If current month has no data, show all-time top jobs
+    if (empty($chart_data)) {
+        $sql_chart_fallback = "
+            SELECT 
+                j.title AS job_title,
+                COALESCE(jc.category_name, 'Uncategorized') AS category_name,
+                COUNT(a.id) AS total_applications
+            FROM applications a
+            INNER JOIN jobs j ON a.job_id = j.id
+            LEFT JOIN job_category jc ON j.category_id = jc.id
+            WHERE j.recruiter_id = ?
+            GROUP BY j.id, j.title, jc.category_name
+            HAVING total_applications > 0
+            ORDER BY total_applications DESC
+            LIMIT 10
+        ";
+
+        $stmt_chart_fallback = $conn->prepare($sql_chart_fallback);
+        if ($stmt_chart_fallback) {
+            $stmt_chart_fallback->bind_param("i", $recruiter_id);
+            if ($stmt_chart_fallback->execute()) {
+                $res_chart_fallback = $stmt_chart_fallback->get_result();
+                while ($row = $res_chart_fallback->fetch_assoc()) {
+                    // Format: Job Title (category)
+                    $trade_display = $row['job_title'];
+                    if (!empty($row['category_name'])) {
+                        $trade_display .= ' (' . $row['category_name'] . ')';
+                    }
+                    $chart_data[] = [
+                        "trade" => $trade_display,
+                        "total_applications" => intval($row['total_applications'])
+                    ];
+                }
+            }
+            $stmt_chart_fallback->close();
+        }
+    }
 
     // -------------------------------
     // ✅ STEP 4: Final Response

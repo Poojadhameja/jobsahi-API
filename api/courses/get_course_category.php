@@ -5,7 +5,7 @@ require_once '../db.php';
 
 try {
     // Authenticate user
-    $decoded = authenticateJWT(['admin', 'institute']);
+    $decoded = authenticateJWT(['admin', 'institute', 'student']);
     $user_role = strtolower($decoded['role']);
     $user_id   = intval($decoded['user_id']);
 
@@ -48,15 +48,14 @@ try {
             $stmt->bind_param("i", $category_id);
 
         } else {
-            // Institute — show only if USED by this institute
+            // Institute — show category if it exists
             $sql = "
-                SELECT DISTINCT cc.id, cc.category_name, cc.created_at
-                FROM course_category cc
-                JOIN courses c ON c.category_id = cc.id
-                WHERE cc.id = ? AND c.institute_id = ?
+                SELECT id, category_name, created_at
+                FROM course_category
+                WHERE id = ?
             ";
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param("ii", $category_id, $institute_id);
+            $stmt->bind_param("i", $category_id);
         }
 
         $stmt->execute();
@@ -65,7 +64,7 @@ try {
         if ($result->num_rows === 0) {
             echo json_encode([
                 "status" => false,
-                "message" => "Category not found for this institute"
+                "message" => "Category not found"
             ]);
             exit;
         }
@@ -80,30 +79,22 @@ try {
 
 
     // =======================================================
-    // FETCH ALL CATEGORIES (Admin → all | Institute → only used ones)
+    // FETCH ALL CATEGORIES (Admin & Institute → all categories)
     // =======================================================
 
-    if ($user_role === 'admin') {
-
-        $sql = "SELECT id, category_name, created_at FROM course_category ORDER BY id ASC";
-
-    } else {
-
-        // Institute → only categories USED in its courses
-        $sql = "
-            SELECT DISTINCT cc.id, cc.category_name, cc.created_at
-            FROM course_category cc
-            JOIN courses c ON c.category_id = cc.id
-            WHERE c.institute_id = {$institute_id}
-            ORDER BY cc.id ASC
-        ";
+    $sql = "SELECT id, category_name, created_at FROM course_category ORDER BY id ASC";
+    $result = $conn->query($sql);
+    
+    if (!$result) {
+        throw new Exception("Database query error: " . $conn->error);
     }
 
-    $result = $conn->query($sql);
     $categories = [];
 
-    while ($row = $result->fetch_assoc()) {
-        $categories[] = $row;
+    if ($result) {
+        while ($row = $result->fetch_assoc()) {
+            $categories[] = $row;
+        }
     }
 
     echo json_encode([

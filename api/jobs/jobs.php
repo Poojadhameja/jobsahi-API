@@ -84,6 +84,8 @@ if ($job_id > 0) {
             j.status,
             j.is_featured,
             j.created_at,
+            j.category_id,
+            jc.category_name,
             rp.company_name,
             ci.person_name,
             ci.phone,
@@ -105,6 +107,7 @@ if ($job_id > 0) {
         FROM jobs j
         LEFT JOIN recruiter_profiles rp ON rp.id = j.recruiter_id
         LEFT JOIN recruiter_company_info ci ON ci.job_id = j.id
+        LEFT JOIN job_category jc ON j.category_id = jc.id
         WHERE j.id = ?
     ";
 
@@ -223,6 +226,8 @@ $sql = "
         j.status,
         j.is_featured,
         j.created_at,
+        j.category_id,
+        jc.category_name,
         rp.company_name,
         (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS views,
 
@@ -258,6 +263,7 @@ if ($userRole === 'student' && $student_profile_id) {
 $sql .= " 
     FROM jobs j
     LEFT JOIN recruiter_profiles rp ON rp.id = j.recruiter_id
+    LEFT JOIN job_category jc ON j.category_id = jc.id
 ";
 
 // -------------------------------------------------------------
