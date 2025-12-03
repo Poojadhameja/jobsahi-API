@@ -120,18 +120,12 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
             mysqli_stmt_close($insert_stmt);
         }
     } else {
-        // Security: Don't reveal user existence for forgot_password
-        if ($purpose === 'forgot_password') {
-            echo json_encode([
-                "message" => "If the email exists, a password reset OTP has been sent",
-                "status"  => true
-            ]);
-        } else {
-            echo json_encode([
-                "message" => "No account found with this email address",
-                "status"  => false
-            ]);
-        }
+        // User not found - email doesn't exist in database
+        http_response_code(401);
+        echo json_encode([
+            "message" => "User not exist",
+            "status"  => false
+        ]);
     }
     mysqli_stmt_close($stmt);
 } else {

@@ -101,10 +101,10 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
             echo json_encode(["message" => "Database error (insert prepare failed)", "status" => false]);
         }
     } else {
-        // ✅ Security: don't reveal if phone exists
-        http_response_code(200);
+        // User not found - phone number doesn't exist in database
+        http_response_code(401);
         echo json_encode([
-            "message" => "The phone number don't exists, an OTP not has been sent",
+            "message" => "User not exist",
             "status"  => false
         ]);
     }

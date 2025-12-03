@@ -41,7 +41,8 @@ $certification_allowed = !empty($data['certification_allowed']) ? 1 : 0;
 $module_title   = trim($data['module_title'] ?? '');
 $module_description = trim($data['module_description'] ?? '');
 $fee            = floatval($data['fee'] ?? 0);
-$admin_action   = 'pending';
+// ✅ Default admin_action = 'approved' (by default courses are approved)
+$admin_action   = 'approved';
 
 // ✅ Validate required fields
 if (empty($title) || empty($description) || empty($duration) || $fee <= 0) {

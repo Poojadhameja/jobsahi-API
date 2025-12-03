@@ -70,19 +70,22 @@ try {
         $ins->close();
     }
 
+    // ✅ Default admin_action = 'approved' (by default jobs are approved)
+    $admin_action = 'approved';
+    
     // FIXED TYPE STRING:
-    // i i s s s s d d s s s i i s   = 14 params
+    // i i s s s s d d s s s i i s s   = 15 params (added admin_action)
     $job_sql = "
         INSERT INTO jobs 
         (recruiter_id, category_id, title, description, location, skills_required,
          salary_min, salary_max, job_type, experience_required, application_deadline,
-         is_remote, no_of_vacancies, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         is_remote, no_of_vacancies, status, admin_action)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ";
 
     $job_stmt = $conn->prepare($job_sql);
-    // correct type string: i i s s s s d d s s s i i s
-    $types = "iissssddsssiis";
+    // correct type string: i i s s s s d d s s s i i s s (added 's' for admin_action)
+    $types = "iissssddsssiiss";
     $job_stmt->bind_param(
         $types,
         $recruiter_id,
@@ -98,7 +101,8 @@ try {
         $application_deadline,
         $is_remote,
         $no_of_vacancies,
-        $status
+        $status,
+        $admin_action
     );
 
     $job_stmt->execute();

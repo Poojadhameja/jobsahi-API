@@ -31,12 +31,10 @@ if ($job_id <= 0) {
     exit;
 }
 
-// ✅ Validate cover_letter
-if (empty($input['cover_letter'])) {
-    http_response_code(400);
-    echo json_encode(["status" => false, "message" => "Missing required field: cover_letter"]);
-    exit;
-}
+// ✅ Get cover_letter (optional field)
+$cover_letter = isset($input['cover_letter']) && !empty(trim($input['cover_letter'])) 
+    ? trim($input['cover_letter']) 
+    : null;
 
 // ✅ Get student_profile_id using user_id
 $user_id = $decoded['id'] ?? $decoded['user_id'] ?? null;
@@ -135,7 +133,7 @@ mysqli_stmt_bind_param(
     "iis",
     $job_id,
     $student_profile_id,
-    $input['cover_letter']
+    $cover_letter
 );
 if (mysqli_stmt_execute($insert_stmt)) {
     $application_id = mysqli_insert_id($conn);

@@ -78,8 +78,8 @@ try {
         }
     } 
     else {
-        // Student — earlier filter removed (admin_action removed)
-        // Students now see all courses
+        // ✅ Student filter: Only show approved and active courses
+        $sql .= " AND c.admin_action = 'approved' AND c.status = 'active'";
     }
 
 

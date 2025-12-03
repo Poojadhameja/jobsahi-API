@@ -110,6 +110,11 @@ if ($job_id > 0) {
         LEFT JOIN job_category jc ON j.category_id = jc.id
         WHERE j.id = ?
     ";
+    
+    // ✅ Student filter: Only show approved jobs
+    if ($userRole === 'student') {
+        $sql = str_replace("WHERE j.id = ?", "WHERE j.id = ? AND j.admin_action = 'approved'", $sql);
+    }
 
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("i", $job_id);
@@ -278,6 +283,11 @@ if (!empty($filters)) {
 // Recruiter-only filter (main FIX)
 if ($userRole === 'recruiter' && $recruiter_profile_id) {
     $sql .= " AND j.recruiter_id = $recruiter_profile_id";
+}
+
+// ✅ Student filter: Only show approved jobs
+if ($userRole === 'student') {
+    $sql .= " AND j.admin_action = 'approved'";
 }
 
 $sql .= " ORDER BY j.created_at DESC";

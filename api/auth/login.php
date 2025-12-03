@@ -9,14 +9,14 @@ $data = json_decode($json_input, true);
 
 if (json_last_error() !== JSON_ERROR_NONE) {
     http_response_code(400);
-    echo json_encode(array("message" => "Invalid JSON data", "status" => false));
+    echo json_encode(["message" => "Invalid JSON data", "status" => false]);
     exit;
 }
 
 // Validate required fields
 if (!isset($data['email']) || !isset($data['password'])) {
     http_response_code(400);
-    echo json_encode(array("message" => "Email and password are required", "status" => false));
+    echo json_encode(["message" => "Email and password are required", "status" => false]);
     exit;
 }
 
@@ -25,7 +25,7 @@ $password = trim($data['password']);
 
 if (empty($email) || empty($password)) {
     http_response_code(400);
-    echo json_encode(array("message" => "Email and password cannot be empty", "status" => false));
+    echo json_encode(["message" => "Email and password cannot be empty", "status" => false]);
     exit;
 }
 
@@ -61,30 +61,32 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
                 unset($user['password']);
                 
                 http_response_code(200);
-                echo json_encode(array(
+                echo json_encode([
                     "message" => "Login successful", 
                     "status" => true, 
                     "user" => $user,
                     "token" => $jwt_token
                     // "expires_in" => JWT_EXPIRY  // Removed - tokens never expire
-                ));
+                ]);
             } else {
                 http_response_code(403);
-                echo json_encode(array("message" => "Account not verified", "status" => false));
+                echo json_encode(["message" => "Account not verified", "status" => false]);
             }
         } else {
+            // Email exists but password is wrong
             http_response_code(401);
-            echo json_encode(array("message" => "Invalid credentials", "status" => false));
+            echo json_encode(["message" => "Password wrong", "status" => false]);
         }
     } else {
+        // User not found - email doesn't exist in database
         http_response_code(401);
-        echo json_encode(array("message" => "Invalid credentials", "status" => false));
+        echo json_encode(["message" => "User not exist", "status" => false]);
     }
     
     mysqli_stmt_close($stmt);
 } else {
     http_response_code(500);
-    echo json_encode(array("message" => "Database query failed", "status" => false));
+    echo json_encode(["message" => "Database query failed", "status" => false]);
 }
 
 mysqli_close($conn);
