@@ -44,9 +44,9 @@ if ($user_stmt = mysqli_prepare($conn, $user_sql)) {
 
     if (mysqli_num_rows($user_result) === 0) {
         mysqli_stmt_close($user_stmt);
-        http_response_code(400);
+        http_response_code(401);
         echo json_encode([
-            "message" => "Invalid user_id. Please enter correct user_id",
+            "message" => "User not exist",
             "status" => false
         ]);
         exit;
@@ -167,10 +167,11 @@ if ($otp_stmt = mysqli_prepare($conn, $otp_sql)) {
                 ]);
             }
         } else {
+            // OTP is wrong
             mysqli_stmt_close($otp_stmt);
-            http_response_code(400);
+            http_response_code(401);
             echo json_encode([
-                "message" => "Invalid OTP. Please check and try again", 
+                "message" => "OTP wrong", 
                 "status" => false
             ]);
         }
