@@ -9,7 +9,14 @@ if (!defined('COMPANY_NAME')) {
     define('COMPANY_NAME', 'JobSahi');
 }
 if (!defined('COMPANY_EMAIL_PASSWORD')) {
-    define('COMPANY_EMAIL_PASSWORD', ''); // Add Gmail App Password here if using PHPMailer
+    // IMPORTANT: Gmail App Password is required for sending emails via SMTP
+    // Steps to get Gmail App Password:
+    // 1. Go to https://myaccount.google.com/security
+    // 2. Enable 2-Step Verification if not already enabled
+    // 3. Go to App Passwords: https://myaccount.google.com/apppasswords
+    // 4. Select "Mail" and "Other (Custom name)" - enter "JobSahi API"
+    // 5. Copy the 16-character password and paste it below
+    define('COMPANY_EMAIL_PASSWORD', 'vrkf pwpt wnvm pbkp'); // Gmail App Password for JobSahi forgot OTP
 }
 
 // Try to load PHPMailer if available
@@ -24,11 +31,22 @@ if (!function_exists('sendPasswordResetOTP')) {
     function sendPasswordResetOTP($email, $name, $otp) {
         global $phpmailer_available;
         
+        error_log("Attempting to send OTP email to: $email");
+        error_log("PHPMailer available: " . ($phpmailer_available ? 'Yes' : 'No'));
+        error_log("Company Email: " . COMPANY_EMAIL);
+        error_log("Company Email Password set: " . (!empty(COMPANY_EMAIL_PASSWORD) ? 'Yes' : 'No'));
+        
         // Use PHPMailer if available, otherwise fallback to basic mail()
         if ($phpmailer_available) {
-            return sendPasswordResetOTPWithPHPMailer($email, $name, $otp);
+            $result = sendPasswordResetOTPWithPHPMailer($email, $name, $otp);
+            if (!$result) {
+                error_log("PHPMailer failed, trying fallback method");
+                return sendPasswordResetOTPWithLocalSMTP($email, $name, $otp);
+            }
+            return $result;
         } else {
             // Fallback to basic mail() function
+            error_log("Using basic mail() function");
             return sendPasswordResetOTPWithLocalSMTP($email, $name, $otp);
         }
     }
@@ -36,25 +54,72 @@ if (!function_exists('sendPasswordResetOTP')) {
 
 if (!function_exists('sendPasswordResetOTPWithLocalSMTP')) {
     function sendPasswordResetOTPWithLocalSMTP($email, $name, $otp) {
+    error_log("Using basic mail() function to send OTP to: $email");
+    
     // Configure SMTP settings programmatically
     ini_set("SMTP", "smtp.gmail.com");
     ini_set("smtp_port", "587");
     ini_set("sendmail_from", COMPANY_EMAIL);
     
-    $subject = "Password Reset OTP";
+    $subject = "Password Reset OTP - JobSahi";
     $message = "
-    <html>
+    <!DOCTYPE html>
+    <html lang='en'>
     <head>
-        <title>Password Reset OTP</title>
+        <meta charset='UTF-8'>
+        <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+        <title>Password Reset OTP - JobSahi</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333333; background-color: #f5f5f5; }
+            .email-wrapper { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+            .email-body { padding: 45px 35px; background-color: #ffffff; }
+            .greeting { font-size: 20px; color: #333333; margin-bottom: 25px; font-weight: 500; }
+            .message-text { font-size: 16px; color: #666666; margin-bottom: 35px; line-height: 1.8; }
+            .otp-container { background: linear-gradient(135deg, #007cba 0%, #005a8a 100%); border-radius: 12px; padding: 30px; margin: 35px 0; text-align: center; box-shadow: 0 4px 16px rgba(0, 124, 186, 0.25); }
+            .otp-code { font-size: 42px; font-weight: 700; color: #ffffff; letter-spacing: 10px; font-family: 'Courier New', monospace; margin: 15px 0; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
+            .otp-label { font-size: 13px; color: rgba(255, 255, 255, 0.9); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 15px; font-weight: 600; }
+            .warning-box { background-color: #fff8e1; border-left: 4px solid #ffc107; padding: 18px 22px; margin: 30px 0; border-radius: 6px; }
+            .warning-box strong { color: #f57c00; font-size: 15px; display: block; margin-bottom: 8px; }
+            .warning-box p { color: #666666; font-size: 14px; margin: 0; line-height: 1.6; }
+            .footer-text { font-size: 15px; color: #999999; margin-top: 35px; line-height: 1.7; }
+            .email-footer { background-color: #f9f9f9; padding: 30px 35px; text-align: center; border-top: 1px solid #eeeeee; }
+            .email-footer p { font-size: 13px; color: #999999; margin: 6px 0; }
+            .brand-name { font-weight: 700; color: #007cba; }
+            .divider { height: 1px; background-color: #eeeeee; margin: 25px 0; }
+            @media only screen and (max-width: 600px) {
+                .email-body { padding: 30px 20px; }
+                .otp-code { font-size: 32px; letter-spacing: 6px; }
+                .otp-container { padding: 25px 20px; }
+            }
+        </style>
     </head>
     <body>
-        <h2>Password Reset Request</h2>
-        <p>Hello $name,</p>
-        <p>You have requested to reset your password. Please use the following OTP to proceed:</p>
-        <h3 style='color: #007cba; font-size: 24px; letter-spacing: 2px;'>$otp</h3>
-        <p>This OTP will expire in 5 minutes.</p>
-        <p>If you didn't request this, please ignore this email.</p>
-        <p>Best regards,<br>Your App Team</p>
+        <div class='email-wrapper'>
+            <div class='email-body'>
+                <div class='greeting'>Hello <strong>$name</strong>,</div>
+                <div class='message-text'>
+                    Your password reset OTP for your <span class='brand-name'>JobSahi</span> account is below. Use this code to complete your verification.
+                </div>
+                <div class='otp-container'>
+                    <div class='otp-label'>Your Password Reset OTP</div>
+                    <div class='otp-code'>$otp</div>
+                </div>
+                <div class='warning-box'>
+                    <strong>⏰ Important Security Notice</strong>
+                    <p>This OTP code will expire in <strong>5 minutes</strong> for security reasons. Please use it promptly.</p>
+                </div>
+                <div class='footer-text'>
+                    If you didn't request this code, please ignore this email. Your account is secure.
+                </div>
+            </div>
+            <div class='email-footer'>
+                <p><strong style='color: #007cba;'>JobSahi Support Team</strong></p>
+                <p>This is an automated message. Please do not reply to this email.</p>
+                <div class='divider'></div>
+                <p style='font-size: 12px; color: #bbbbbb;'>© " . date('Y') . " JobSahi. All rights reserved.</p>
+            </div>
+        </div>
     </body>
     </html>
     ";
@@ -64,7 +129,16 @@ if (!function_exists('sendPasswordResetOTPWithLocalSMTP')) {
     $headers .= "From: " . COMPANY_NAME . " <" . COMPANY_EMAIL . ">" . "\r\n";
     $headers .= "Reply-To: " . COMPANY_EMAIL . "\r\n";
     
-    return mail($email, $subject, $message, $headers);
+    $result = @mail($email, $subject, $message, $headers);
+    
+    if ($result) {
+        error_log("✅ Email sent successfully using mail() function to: $email");
+    } else {
+        error_log("❌ mail() function failed for: $email");
+        error_log("   Note: mail() function may not work with Gmail SMTP in XAMPP. Please install PHPMailer and set COMPANY_EMAIL_PASSWORD");
+    }
+    
+    return $result;
     }
 }
 
@@ -76,8 +150,20 @@ if (!function_exists('sendPasswordResetOTPWithPHPMailer')) {
         return sendPasswordResetOTPWithLocalSMTP($toEmail, $toName, $otp);
     }
     
+    // Check if password is set
+    if (empty(COMPANY_EMAIL_PASSWORD)) {
+        error_log("WARNING: COMPANY_EMAIL_PASSWORD is not set. Gmail SMTP requires App Password. Please set it in email_helper.php");
+        error_log("To get Gmail App Password: Go to Google Account > Security > 2-Step Verification > App Passwords");
+    }
+    
     $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
     try {
+        // Enable verbose debug output (only for error logging)
+        $mail->SMTPDebug = 0; // Set to 2 for detailed debugging
+        $mail->Debugoutput = function($str, $level) {
+            error_log("PHPMailer Debug ($level): $str");
+        };
+        
         // SMTP configuration
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
@@ -86,6 +172,7 @@ if (!function_exists('sendPasswordResetOTPWithPHPMailer')) {
         $mail->Password = COMPANY_EMAIL_PASSWORD ?: ''; // Gmail App Password (add if using PHPMailer)
         $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
+        $mail->Timeout = 30; // 30 seconds timeout
         
         // Additional SMTP options for XAMPP compatibility
         $mail->SMTPOptions = array(
@@ -97,44 +184,70 @@ if (!function_exists('sendPasswordResetOTPWithPHPMailer')) {
         );
         
         // Sender and recipient
-        $mail->setFrom(COMPANY_EMAIL, COMPANY_NAME . ' Support');
-        $mail->addReplyTo(COMPANY_EMAIL, COMPANY_NAME . ' Support');
+        $mail->setFrom(COMPANY_EMAIL, COMPANY_NAME);
+        $mail->addReplyTo(COMPANY_EMAIL, COMPANY_NAME);
         $mail->addAddress($toEmail, $toName);
         
         // Email content
         $mail->isHTML(true);
-        $mail->Subject = "Password Reset OTP";
+        $mail->CharSet = 'UTF-8';
+        $mail->Subject = "Password Reset OTP - JobSahi";
         $mail->Body = "
-        <html>
+        <!DOCTYPE html>
+        <html lang='en'>
         <head>
-            <title>Password Reset OTP</title>
+            <meta charset='UTF-8'>
+            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+            <title>Password Reset OTP - JobSahi</title>
             <style>
-                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background-color: #007cba; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
-                .content { padding: 20px; background-color: #f9f9f9; }
-                .otp { background-color: #007cba; color: white; padding: 15px; text-align: center; font-size: 24px; letter-spacing: 2px; margin: 20px 0; border-radius: 5px; font-weight: bold; }
-                .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
-                .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 10px; margin: 15px 0; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333333; background-color: #f5f5f5; }
+                .email-wrapper { max-width: 600px; margin: 0 auto; background-color: #ffffff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
+                .email-body { padding: 45px 35px; background-color: #ffffff; }
+                .greeting { font-size: 20px; color: #333333; margin-bottom: 25px; font-weight: 500; }
+                .message-text { font-size: 16px; color: #666666; margin-bottom: 35px; line-height: 1.8; }
+                .otp-container { background: linear-gradient(135deg, #007cba 0%, #005a8a 100%); border-radius: 12px; padding: 30px; margin: 35px 0; text-align: center; box-shadow: 0 4px 16px rgba(0, 124, 186, 0.25); }
+                .otp-label { font-size: 13px; color: rgba(255, 255, 255, 0.9); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 15px; font-weight: 600; }
+                .otp-code { font-size: 42px; font-weight: 700; color: #ffffff; letter-spacing: 10px; font-family: 'Courier New', monospace; margin: 15px 0; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
+                .warning-box { background-color: #fff8e1; border-left: 4px solid #ffc107; padding: 18px 22px; margin: 30px 0; border-radius: 6px; }
+                .warning-box strong { color: #f57c00; font-size: 15px; display: block; margin-bottom: 8px; }
+                .warning-box p { color: #666666; font-size: 14px; margin: 0; line-height: 1.6; }
+                .footer-text { font-size: 15px; color: #999999; margin-top: 35px; line-height: 1.7; }
+                .email-footer { background-color: #f9f9f9; padding: 30px 35px; text-align: center; border-top: 1px solid #eeeeee; }
+                .email-footer p { font-size: 13px; color: #999999; margin: 6px 0; }
+                .brand-name { font-weight: 700; color: #007cba; }
+                .divider { height: 1px; background-color: #eeeeee; margin: 25px 0; }
+                @media only screen and (max-width: 600px) {
+                    .email-body { padding: 30px 20px; }
+                    .otp-code { font-size: 32px; letter-spacing: 6px; }
+                    .otp-container { padding: 25px 20px; }
+                }
             </style>
         </head>
         <body>
-            <div class='container'>
-                <div class='header'>
-                    <h1>Password Reset Request</h1>
-                </div>
-                <div class='content'>
-                    <p>Hello <strong>$toName</strong>,</p>
-                    <p>You have requested to reset your password for your JobSahi account. Please use the following OTP to proceed:</p>
-                    <div class='otp'>$otp</div>
-                    <div class='warning'>
-                        <strong>⚠️ Important:</strong> This OTP will expire in 5 minutes for security reasons.
+            <div class='email-wrapper'>
+                <div class='email-body'>
+                    <div class='greeting'>Hello <strong>$toName</strong>,</div>
+                    <div class='message-text'>
+                        Your password reset OTP for your <span class='brand-name'>JobSahi</span> account is below. Use this code to complete your verification.
                     </div>
-                    <p>If you didn't request this password reset, please ignore this email and your password will remain unchanged.</p>
+                    <div class='otp-container'>
+                        <div class='otp-label'>Your Password Reset OTP</div>
+                        <div class='otp-code'>$otp</div>
+                    </div>
+                    <div class='warning-box'>
+                        <strong>⏰ Important Security Notice</strong>
+                        <p>This OTP code will expire in <strong>5 minutes</strong> for security reasons. Please use it promptly.</p>
+                    </div>
+                    <div class='footer-text'>
+                        If you didn't request this code, please ignore this email. Your account is secure.
+                    </div>
                 </div>
-                <div class='footer'>
-                    <p>Best regards,<br><strong>JobSahi Support Team</strong></p>
-                    <p>This is an automated message, please do not reply to this email.</p>
+                <div class='email-footer'>
+                    <p><strong style='color: #007cba;'>JobSahi Support Team</strong></p>
+                    <p>This is an automated message. Please do not reply to this email.</p>
+                    <div class='divider'></div>
+                    <p style='font-size: 12px; color: #bbbbbb;'>© " . date('Y') . " JobSahi. All rights reserved.</p>
                 </div>
             </div>
         </body>
@@ -142,20 +255,23 @@ if (!function_exists('sendPasswordResetOTPWithPHPMailer')) {
         ";
         
         // Plain text version
-        $mail->AltBody = "Hello $toName,\n\nYou have requested to reset your password. Your OTP is: $otp\n\nThis code will expire in 5 minutes.\n\nIf you didn't request this, please ignore this email.\n\nBest regards,\nJobSahi Support Team";
+        $mail->AltBody = "Password Reset OTP - JobSahi\n\nHello $toName,\n\nYour password reset OTP for your JobSahi account is below.\n\nYour Password Reset OTP: $otp\n\nThis OTP code will expire in 5 minutes for security reasons.\n\nIf you didn't request this code, please ignore this email. Your account is secure.\n\nBest regards,\nJobSahi Support Team\n\nThis is an automated message. Please do not reply to this email.";
         
         $result = $mail->send();
         
         if ($result) {
-            error_log("Password reset OTP sent successfully to: $toEmail");
+            error_log("✅ Verification OTP sent successfully to: $toEmail via PHPMailer");
             return true;
+        } else {
+            error_log("❌ PHPMailer send() returned false for: $toEmail");
+            return false;
         }
         
-        return false;
-        
     } catch (Exception $e) {
-        error_log("PHPMailer Error: {$mail->ErrorInfo}");
-        error_log("Exception: " . $e->getMessage());
+        error_log("❌ PHPMailer Exception for $toEmail:");
+        error_log("   Error Info: " . $mail->ErrorInfo);
+        error_log("   Exception Message: " . $e->getMessage());
+        error_log("   Exception Trace: " . $e->getTraceAsString());
         return false;
     }
     }
@@ -207,25 +323,61 @@ if (!function_exists('sendPasswordResetOTPWithDebug')) {
         $mail->Subject = "Password Reset OTP - JobSahi";
         
         $mail->Body = "
-        <html>
+        <!DOCTYPE html>
+        <html lang='en'>
         <head>
-            <title>Password Reset OTP</title>
             <meta charset='UTF-8'>
+            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+            <title>Password Reset OTP - JobSahi</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333333; background-color: #f5f5f5; }
+                .email-wrapper { max-width: 600px; margin: 0 auto; background-color: #ffffff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
+                .email-body { padding: 45px 35px; background-color: #ffffff; }
+                .greeting { font-size: 20px; color: #333333; margin-bottom: 25px; font-weight: 500; }
+                .message-text { font-size: 16px; color: #666666; margin-bottom: 35px; line-height: 1.8; }
+                .otp-container { background: linear-gradient(135deg, #007cba 0%, #005a8a 100%); border-radius: 12px; padding: 30px; margin: 35px 0; text-align: center; box-shadow: 0 4px 16px rgba(0, 124, 186, 0.25); }
+                .otp-label { font-size: 13px; color: rgba(255, 255, 255, 0.9); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 15px; font-weight: 600; }
+                .otp-code { font-size: 42px; font-weight: 700; color: #ffffff; letter-spacing: 10px; font-family: 'Courier New', monospace; margin: 15px 0; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
+                .warning-box { background-color: #fff8e1; border-left: 4px solid #ffc107; padding: 18px 22px; margin: 30px 0; border-radius: 6px; }
+                .warning-box strong { color: #f57c00; font-size: 15px; display: block; margin-bottom: 8px; }
+                .warning-box p { color: #666666; font-size: 14px; margin: 0; line-height: 1.6; }
+                .footer-text { font-size: 15px; color: #999999; margin-top: 35px; line-height: 1.7; }
+                .email-footer { background-color: #f9f9f9; padding: 30px 35px; text-align: center; border-top: 1px solid #eeeeee; }
+                .email-footer p { font-size: 13px; color: #999999; margin: 6px 0; }
+                .brand-name { font-weight: 700; color: #007cba; }
+                .divider { height: 1px; background-color: #eeeeee; margin: 25px 0; }
+                @media only screen and (max-width: 600px) {
+                    .email-body { padding: 30px 20px; }
+                    .otp-code { font-size: 32px; letter-spacing: 6px; }
+                    .otp-container { padding: 25px 20px; }
+                }
+            </style>
         </head>
-        <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
-            <div style='max-width: 600px; margin: 0 auto; padding: 20px;'>
-                <div style='background-color: #007cba; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0;'>
-                    <h1>Password Reset Request</h1>
+        <body>
+            <div class='email-wrapper'>
+                <div class='email-body'>
+                    <div class='greeting'>Hello <strong>$toName</strong>,</div>
+                    <div class='message-text'>
+                        Your password reset OTP for your <span class='brand-name'>JobSahi</span> account is below. Use this code to complete your verification.
+                    </div>
+                    <div class='otp-container'>
+                        <div class='otp-label'>Your Password Reset OTP</div>
+                        <div class='otp-code'>$otp</div>
+                    </div>
+                    <div class='warning-box'>
+                        <strong>⏰ Important Security Notice</strong>
+                        <p>This OTP code will expire in <strong>5 minutes</strong> for security reasons. Please use it promptly.</p>
+                    </div>
+                    <div class='footer-text'>
+                        If you didn't request this code, please ignore this email. Your account is secure.
+                    </div>
                 </div>
-                <div style='padding: 20px; background-color: #f9f9f9;'>
-                    <p>Hello <strong>$toName</strong>,</p>
-                    <p>You have requested to reset your password for your JobSahi account.</p>
-                    <div style='background-color: #007cba; color: white; padding: 15px; text-align: center; font-size: 24px; letter-spacing: 2px; margin: 20px 0; border-radius: 5px; font-weight: bold;'>$otp</div>
-                    <p style='background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 10px; margin: 15px 0;'><strong>⚠️ Important:</strong> This OTP will expire in 5 minutes.</p>
-                    <p>If you didn't request this, please ignore this email.</p>
-                </div>
-                <div style='padding: 20px; text-align: center; color: #666; font-size: 12px;'>
-                    <p>Best regards,<br><strong>JobSahi Support Team</strong></p>
+                <div class='email-footer'>
+                    <p><strong style='color: #007cba;'>JobSahi Support Team</strong></p>
+                    <p>This is an automated message. Please do not reply to this email.</p>
+                    <div class='divider'></div>
+                    <p style='font-size: 12px; color: #bbbbbb;'>© " . date('Y') . " JobSahi. All rights reserved.</p>
                 </div>
             </div>
         </body>

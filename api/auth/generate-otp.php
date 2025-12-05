@@ -101,14 +101,19 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
                 flush();
                 
                 // Send email with timeout to prevent hanging
-                set_time_limit(10); // Max 10 seconds for email
+                set_time_limit(30); // Max 30 seconds for email
                 try {
-                    $email_sent = @sendPasswordResetOTP($email, $user['user_name'], $otp);
+                    $email_sent = sendPasswordResetOTP($email, $user['user_name'], $otp);
                     if (!$email_sent) {
-                        error_log("Email sending failed for user_id: $user_id, purpose: $purpose, but OTP saved: $otp");
+                        error_log("❌ Email sending FAILED for user_id: $user_id, email: $email, purpose: $purpose, OTP: $otp");
+                        error_log("   Please check error logs above for details. Make sure COMPANY_EMAIL_PASSWORD is set in email_helper.php");
+                    } else {
+                        error_log("✅ Email sent successfully for user_id: $user_id, email: $email, purpose: $purpose");
                     }
                 } catch (Exception $e) {
-                    error_log("Email sending error for user_id: $user_id: " . $e->getMessage());
+                    error_log("❌ Email sending EXCEPTION for user_id: $user_id, email: $email");
+                    error_log("   Exception: " . $e->getMessage());
+                    error_log("   Trace: " . $e->getTraceAsString());
                 }
                 
                 // Exit to prevent any further execution
