@@ -91,8 +91,9 @@ try {
             if ($existing_cat_id) {
                 $category_id = $existing_cat_id;
             } else {
-                $cat_insert = $conn->prepare("INSERT INTO job_category (category_name, created_at) VALUES (?, NOW())");
-                $cat_insert->bind_param("s", $category_name);
+                $current_time = date('Y-m-d H:i:s');
+                $cat_insert = $conn->prepare("INSERT INTO job_category (category_name, created_at) VALUES (?, ?)");
+                $cat_insert->bind_param("ss", $category_name, $current_time);
                 $cat_insert->execute();
                 $category_id = $cat_insert->insert_id;
                 $cat_insert->close();
@@ -111,8 +112,9 @@ try {
         if ($existing_id) {
             $category_id = $existing_id;
         } else {
-            $cat_insert = $conn->prepare("INSERT INTO job_category (category_name, created_at) VALUES (?, NOW())");
-            $cat_insert->bind_param("s", $category_name);
+            $current_time = date('Y-m-d H:i:s');
+            $cat_insert = $conn->prepare("INSERT INTO job_category (category_name, created_at) VALUES (?, ?)");
+            $cat_insert->bind_param("ss", $category_name, $current_time);
             $cat_insert->execute();
             $category_id = $cat_insert->insert_id;
             $cat_insert->close();
@@ -122,6 +124,7 @@ try {
     }
 
     // --- 3️⃣ Update Job Table ---
+    $current_time = date('Y-m-d H:i:s');
     $update_job = $conn->prepare("
         UPDATE jobs 
         SET title = ?, 
@@ -137,11 +140,11 @@ try {
             is_remote = ?, 
             no_of_vacancies = ?, 
             status = ?, 
-            updated_at = NOW()
+            updated_at = ?
         WHERE id = ?
     ");
     $update_job->bind_param(
-        "ssissddsssiisi",
+        "ssissddsssiissi",
         $title,
         $description,
         $category_id,
@@ -155,6 +158,7 @@ try {
         $is_remote,
         $no_of_vacancies,
         $status,
+        $current_time,
         $job_id
     );
 
@@ -162,6 +166,16 @@ try {
         throw new Exception("Failed to update job: " . $update_job->error);
     }
     $update_job->close();
+
+    // ✅ If recruiter updates job, set admin_action to 'pending' for re-review
+    if ($user_role === 'recruiter') {
+        $update_admin_action = $conn->prepare("UPDATE jobs SET admin_action = 'pending' WHERE id = ?");
+        $update_admin_action->bind_param("i", $job_id);
+        if (!$update_admin_action->execute()) {
+            throw new Exception("Failed to update admin_action: " . $update_admin_action->error);
+        }
+        $update_admin_action->close();
+    }
 
     // --- 4️⃣ Update Recruiter Company Info (if linked) ---
     $get_info = $conn->prepare("SELECT company_info_id FROM jobs WHERE id = ?");
@@ -172,23 +186,25 @@ try {
     $get_info->close();
 
     if ($company_info_id) {
+        $current_time = date('Y-m-d H:i:s');
         $update_info = $conn->prepare("
             UPDATE recruiter_company_info 
-            SET person_name = ?, phone = ?, additional_contact = ?, updated_at = NOW() 
+            SET person_name = ?, phone = ?, additional_contact = ?, updated_at = ? 
             WHERE id = ?
         ");
-        $update_info->bind_param("sssi", $person_name, $phone, $additional_contact, $company_info_id);
+        $update_info->bind_param("ssssi", $person_name, $phone, $additional_contact, $current_time, $company_info_id);
         if (!$update_info->execute()) {
             throw new Exception("Failed to update recruiter contact info: " . $update_info->error);
         }
         $update_info->close();
     } else {
+        $current_time = date('Y-m-d H:i:s');
         $insert_info = $conn->prepare("
             INSERT INTO recruiter_company_info (job_id, recruiter_id, person_name, phone, additional_contact, created_at)
             VALUES ((SELECT recruiter_id FROM jobs WHERE id = ?), 
-                    (SELECT recruiter_id FROM jobs WHERE id = ?), ?, ?, ?, NOW())
+                    (SELECT recruiter_id FROM jobs WHERE id = ?), ?, ?, ?, ?)
         ");
-        $insert_info->bind_param("iisss", $job_id, $job_id, $person_name, $phone, $additional_contact);
+        $insert_info->bind_param("iissss", $job_id, $job_id, $person_name, $phone, $additional_contact, $current_time);
         $insert_info->execute();
         $new_info_id = $insert_info->insert_id;
         $insert_info->close();

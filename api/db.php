@@ -30,6 +30,10 @@ try {
     if (!$conn) {
         throw new Exception("MySQLi connection failed: " . mysqli_connect_error());
     }
+    
+    // ✅ Set timezone to IST (Indian Standard Time) for correct timestamps
+    date_default_timezone_set('Asia/Kolkata');
+    mysqli_query($conn, "SET time_zone = '+05:30'");
 
 } catch (Exception $e) {
     die("❌ DB Connection failed: " . $e->getMessage());

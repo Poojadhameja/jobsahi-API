@@ -152,6 +152,12 @@ try {
     if ($stmt->execute()) {
         $flag_id = $stmt->insert_id;
         
+        // ✅ Update jobs table: Set admin_action to 'pending' when job is flagged
+        $updateJob = $conn->prepare("UPDATE jobs SET admin_action = 'pending', updated_at = NOW() WHERE id = ?");
+        $updateJob->bind_param("i", $job_id);
+        $updateJob->execute();
+        $updateJob->close();
+        
         echo json_encode([
             "status" => true,
             "message" => "Job posting flagged successfully",
