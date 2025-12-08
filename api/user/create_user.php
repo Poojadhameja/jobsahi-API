@@ -25,8 +25,8 @@ if ($is_multipart) {
     }
 }
 
-// Required fields
-$required_fields = ['user_name', 'email', 'password', 'phone_number', 'role'];
+// Required fields (password is optional for OAuth users)
+$required_fields = ['user_name', 'email', 'phone_number', 'role'];
 foreach ($required_fields as $field) {
     if (!isset($data[$field]) || empty(trim($data[$field]))) {
         echo json_encode(array("message" => ucfirst(str_replace('_', ' ', $field)) . " is required", "status" => false));
@@ -36,11 +36,14 @@ foreach ($required_fields as $field) {
 
 $user_name = trim($data['user_name']);
 $email = trim($data['email']);
-$password = trim($data['password']);
+$password = isset($data['password']) ? trim($data['password']) : null; // Optional for OAuth users
 $phone_number = trim($data['phone_number']);
 $role = isset($data['role']) ? trim($data['role']) : 'student';
 $is_verified = isset($data['is_verified']) ? (int)$data['is_verified'] : 0;
 $status = isset($data['status']) ? trim($data['status']) : 'active';
+$auth_provider = isset($data['auth_provider']) ? trim($data['auth_provider']) : 'email';
+$google_id = isset($data['google_id']) ? trim($data['google_id']) : null;
+$linkedin_id = isset($data['linkedin_id']) ? trim($data['linkedin_id']) : null;
 
 // Validate role
 $allowed_roles = ['student', 'recruiter', 'institute', 'admin'];
@@ -62,9 +65,15 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
-// Validate password length
-if (strlen($password) < 6) {
+// Validate password length (only if password is provided)
+if ($password !== null && strlen($password) < 6) {
     echo json_encode(array("message" => "Password must be at least 6 characters long", "status" => false));
+    exit;
+}
+
+// Password is required for email auth, optional for OAuth
+if ($auth_provider === 'email' && $password === null) {
+    echo json_encode(array("message" => "Password is required for email authentication", "status" => false));
     exit;
 }
 
@@ -120,15 +129,15 @@ try {
     if (mysqli_num_rows($check_phone_result) > 0) throw new Exception("Phone number already exists");
     mysqli_stmt_close($check_phone_stmt);
 
-    // Hash password
-    $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+    // Hash password (only if provided)
+    $hashed_password = $password !== null ? password_hash($password, PASSWORD_DEFAULT) : null;
 
-    // Insert user
-    $sql = "INSERT INTO users (user_name, email, password, phone_number, role, is_verified, status, created_at, last_activity) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+    // Insert user (with OAuth fields)
+    $sql = "INSERT INTO users (user_name, email, password, phone_number, role, is_verified, status, google_id, linkedin_id, auth_provider, created_at, last_activity) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
 
     $stmt = mysqli_prepare($conn, $sql);
-    mysqli_stmt_bind_param($stmt, "sssssis", $user_name, $email, $hashed_password, $phone_number, $role, $is_verified, $status);
+    mysqli_stmt_bind_param($stmt, "sssssissss", $user_name, $email, $hashed_password, $phone_number, $role, $is_verified, $status, $google_id, $linkedin_id, $auth_provider);
     if (!mysqli_stmt_execute($stmt)) throw new Exception("User registration failed");
     $user_id = mysqli_insert_id($conn);
     mysqli_stmt_close($stmt);
