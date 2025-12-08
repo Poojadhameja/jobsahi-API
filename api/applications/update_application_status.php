@@ -87,6 +87,60 @@ try {
     $update_stmt->execute();
 
     if ($update_stmt->affected_rows > 0) {
+        // ✅ Step 3.1: Update interview status based on application status
+        $interview_updated = false;
+        $interview_update_message = '';
+        
+        if ($new_status === 'selected') {
+            // When application is selected → mark interview as completed
+            $update_interview_sql = "
+                UPDATE interviews 
+                SET status = 'completed', 
+                    modified_at = NOW()
+                WHERE application_id = ?
+                  AND (deleted_at IS NULL OR deleted_at = '0000-00-00 00:00:00')
+            ";
+            $update_interview_stmt = $conn->prepare($update_interview_sql);
+            if ($update_interview_stmt) {
+                $update_interview_stmt->bind_param("i", $application_id);
+                if ($update_interview_stmt->execute()) {
+                    $interview_updated = ($update_interview_stmt->affected_rows > 0);
+                    $interview_update_message = $interview_updated 
+                        ? "Interview status updated to 'completed'" 
+                        : "No interview found for this application";
+                } else {
+                    $interview_update_message = "Failed to update interview: " . $update_interview_stmt->error;
+                }
+                $update_interview_stmt->close();
+            } else {
+                $interview_update_message = "Failed to prepare interview update query: " . $conn->error;
+            }
+        } elseif ($new_status === 'rejected') {
+            // When application is rejected → mark interview as cancelled
+            $update_interview_sql = "
+                UPDATE interviews 
+                SET status = 'cancelled', 
+                    modified_at = NOW()
+                WHERE application_id = ?
+                  AND (deleted_at IS NULL OR deleted_at = '0000-00-00 00:00:00')
+            ";
+            $update_interview_stmt = $conn->prepare($update_interview_sql);
+            if ($update_interview_stmt) {
+                $update_interview_stmt->bind_param("i", $application_id);
+                if ($update_interview_stmt->execute()) {
+                    $interview_updated = ($update_interview_stmt->affected_rows > 0);
+                    $interview_update_message = $interview_updated 
+                        ? "Interview status updated to 'cancelled'" 
+                        : "No interview found for this application";
+                } else {
+                    $interview_update_message = "Failed to update interview: " . $update_interview_stmt->error;
+                }
+                $update_interview_stmt->close();
+            } else {
+                $interview_update_message = "Failed to prepare interview update query: " . $conn->error;
+            }
+        }
+
         // ✅ Send notification if student is shortlisted
         // ⚠️ Note: Notifications are sent ONLY to students
         if ($new_status === 'shortlisted') {
@@ -121,7 +175,7 @@ try {
             $student_stmt->close();
         }
         
-        echo json_encode([
+        $response = [
             "status" => true,
             "message" => "Application updated successfully",
             "application_id" => $application_id,
@@ -129,7 +183,15 @@ try {
             "job_selected" => $job_selected,
             "updated_by" => $user_role,
             "timestamp" => date('Y-m-d H:i:s')
-        ]);
+        ];
+        
+        // Add interview update info if status was selected or rejected
+        if ($new_status === 'selected' || $new_status === 'rejected') {
+            $response["interview_updated"] = $interview_updated;
+            $response["interview_update_message"] = $interview_update_message;
+        }
+        
+        echo json_encode($response);
     } else {
         echo json_encode([
             "status" => false,

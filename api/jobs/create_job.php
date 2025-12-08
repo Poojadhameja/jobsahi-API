@@ -63,8 +63,9 @@ try {
     $cat->close();
 
     if (!$category_id) {
-        $ins = $conn->prepare("INSERT INTO job_category (category_name, created_at) VALUES (?, NOW())");
-        $ins->bind_param("s", $category_name);
+        $current_time = date('Y-m-d H:i:s');
+        $ins = $conn->prepare("INSERT INTO job_category (category_name, created_at) VALUES (?, ?)");
+        $ins->bind_param("ss", $category_name, $current_time);
         $ins->execute();
         $category_id = $ins->insert_id;
         $ins->close();
@@ -109,14 +110,15 @@ try {
     $job_id = $job_stmt->insert_id;
     $job_stmt->close();
 
+    $current_time = date('Y-m-d H:i:s');
     $csql = "
         INSERT INTO recruiter_company_info 
         (job_id, recruiter_id, person_name, phone, additional_contact, created_at)
-        VALUES (?, ?, ?, ?, ?, NOW())
+        VALUES (?, ?, ?, ?, ?, ?)
     ";
 
     $cstmt = $conn->prepare($csql);
-    $cstmt->bind_param("iisss", $job_id, $recruiter_id, $person_name, $phone, $additional_contact);
+    $cstmt->bind_param("iissss", $job_id, $recruiter_id, $person_name, $phone, $additional_contact, $current_time);
     $cstmt->execute();
     $company_info_id = $cstmt->insert_id;
     $cstmt->close();
