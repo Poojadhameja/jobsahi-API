@@ -2,11 +2,32 @@
 // firebase_helper.php - Firebase Cloud Messaging (FCM) Helper
 // This helper sends push notifications using Firebase Cloud Messaging
 
+// Load environment variables from .env file
+require_once __DIR__ . '/../config/env_loader.php';
+
 class FirebaseHelper {
-    // Firebase Server Key - Replace with your actual FCM Server Key
+    // Firebase Server Key - Load from environment variable
     // Get it from: Firebase Console > Project Settings > Cloud Messaging > Server Key
-    private static $FCM_SERVER_KEY = 'YOUR_FIREBASE_SERVER_KEY_HERE';
-    private static $FCM_URL = 'https://fcm.googleapis.com/fcm/send';
+    // Set in .env file as FCM_SERVER_KEY
+    private static function getFCMServerKey() {
+        // Try to get from environment variable
+        $key = getenv('FCM_SERVER_KEY');
+        if ($key === false || empty($key) || $key === 'YOUR_FIREBASE_SERVER_KEY_HERE') {
+            // Try $_ENV as fallback
+            $key = isset($_ENV['FCM_SERVER_KEY']) ? $_ENV['FCM_SERVER_KEY'] : 'YOUR_FIREBASE_SERVER_KEY_HERE';
+        }
+        return $key;
+    }
+    
+    private static function getFCMUrl() {
+        $url = getenv('FCM_URL');
+        if ($url === false || empty($url)) {
+            $url = isset($_ENV['FCM_URL']) ? $_ENV['FCM_URL'] : 'https://fcm.googleapis.com/fcm/send';
+        }
+        return $url;
+    }
+    
+    private static $FCM_URL = null; // Will be resolved dynamically
 
     /**
      * Send notification to a single device
@@ -17,11 +38,12 @@ class FirebaseHelper {
      * @return array - Response with status and message
      */
     public static function sendToDevice($fcm_token, $title, $body, $data = []) {
-        if (empty(self::$FCM_SERVER_KEY) || self::$FCM_SERVER_KEY === 'YOUR_FIREBASE_SERVER_KEY_HERE') {
-            error_log("Firebase Server Key not configured");
+        $serverKey = self::getFCMServerKey();
+        if (empty($serverKey) || $serverKey === 'YOUR_FIREBASE_SERVER_KEY_HERE') {
+            error_log("Firebase Server Key not configured. Please set FCM_SERVER_KEY in .env file");
             return [
                 'success' => false,
-                'message' => 'Firebase Server Key not configured'
+                'message' => 'Firebase Server Key not configured. Please set FCM_SERVER_KEY in .env file'
             ];
         }
 
@@ -50,7 +72,7 @@ class FirebaseHelper {
             'priority' => 'high'
         ];
 
-        return self::sendRequest($payload);
+        return self::sendRequest($payload, $serverKey);
     }
 
     /**
@@ -62,11 +84,12 @@ class FirebaseHelper {
      * @return array - Response with status and message
      */
     public static function sendToMultipleDevices($fcm_tokens, $title, $body, $data = []) {
-        if (empty(self::$FCM_SERVER_KEY) || self::$FCM_SERVER_KEY === 'YOUR_FIREBASE_SERVER_KEY_HERE') {
-            error_log("Firebase Server Key not configured");
+        $serverKey = self::getFCMServerKey();
+        if (empty($serverKey) || $serverKey === 'YOUR_FIREBASE_SERVER_KEY_HERE') {
+            error_log("Firebase Server Key not configured. Please set FCM_SERVER_KEY in .env file");
             return [
                 'success' => false,
-                'message' => 'Firebase Server Key not configured'
+                'message' => 'Firebase Server Key not configured. Please set FCM_SERVER_KEY in .env file'
             ];
         }
 
@@ -105,7 +128,7 @@ class FirebaseHelper {
             'priority' => 'high'
         ];
 
-        return self::sendRequest($payload);
+        return self::sendRequest($payload, $serverKey);
     }
 
     /**
@@ -117,11 +140,12 @@ class FirebaseHelper {
      * @return array - Response with status and message
      */
     public static function sendToTopic($topic, $title, $body, $data = []) {
-        if (empty(self::$FCM_SERVER_KEY) || self::$FCM_SERVER_KEY === 'YOUR_FIREBASE_SERVER_KEY_HERE') {
-            error_log("Firebase Server Key not configured");
+        $serverKey = self::getFCMServerKey();
+        if (empty($serverKey) || $serverKey === 'YOUR_FIREBASE_SERVER_KEY_HERE') {
+            error_log("Firebase Server Key not configured. Please set FCM_SERVER_KEY in .env file");
             return [
                 'success' => false,
-                'message' => 'Firebase Server Key not configured'
+                'message' => 'Firebase Server Key not configured. Please set FCM_SERVER_KEY in .env file'
             ];
         }
 
@@ -143,22 +167,28 @@ class FirebaseHelper {
             'priority' => 'high'
         ];
 
-        return self::sendRequest($payload);
+        return self::sendRequest($payload, $serverKey);
     }
 
     /**
      * Send HTTP request to FCM
      * @param array $payload - FCM payload
+     * @param string $serverKey - FCM Server Key
      * @return array - Response with status and message
      */
-    private static function sendRequest($payload) {
+    private static function sendRequest($payload, $serverKey = null) {
+        if ($serverKey === null) {
+            $serverKey = self::getFCMServerKey();
+        }
+        
         $headers = [
-            'Authorization: key=' . self::$FCM_SERVER_KEY,
+            'Authorization: key=' . $serverKey,
             'Content-Type: application/json'
         ];
 
+        $fcmUrl = self::getFCMUrl();
         $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, self::$FCM_URL);
+        curl_setopt($ch, CURLOPT_URL, $fcmUrl);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -202,15 +232,17 @@ class FirebaseHelper {
      * @return string
      */
     public static function getServerKey() {
-        return self::$FCM_SERVER_KEY;
+        return self::getFCMServerKey();
     }
 
     /**
      * Set FCM Server Key (for configuration)
+     * Note: This method sets the environment variable temporarily
      * @param string $server_key
      */
     public static function setServerKey($server_key) {
-        self::$FCM_SERVER_KEY = $server_key;
+        putenv("FCM_SERVER_KEY=$server_key");
+        $_ENV['FCM_SERVER_KEY'] = $server_key;
     }
 }
 

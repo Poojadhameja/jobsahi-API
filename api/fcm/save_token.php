@@ -15,6 +15,7 @@ header('Content-Type: application/json');
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode([
+        "success" => false,
         "status" => false,
         "message" => "Only POST method is allowed"
     ]);
@@ -32,6 +33,7 @@ $data = json_decode(file_get_contents("php://input"), true);
 if (!$data || !isset($data['fcm_token']) || empty(trim($data['fcm_token']))) {
     http_response_code(400);
     echo json_encode([
+        "success" => false,
         "status" => false,
         "message" => "fcm_token is required"
     ]);
@@ -78,6 +80,7 @@ try {
         
         http_response_code(200);
         echo json_encode([
+            "success" => true,
             "status" => true,
             "message" => "FCM token updated successfully"
         ]);
@@ -111,6 +114,7 @@ try {
                 
                 http_response_code(200);
                 echo json_encode([
+                    "success" => true,
                     "status" => true,
                     "message" => "FCM token updated successfully"
                 ]);
@@ -126,6 +130,7 @@ try {
                 
                 http_response_code(201);
                 echo json_encode([
+                    "success" => true,
                     "status" => true,
                     "message" => "FCM token saved successfully"
                 ]);
@@ -142,6 +147,7 @@ try {
             
             http_response_code(201);
             echo json_encode([
+                "success" => true,
                 "status" => true,
                 "message" => "FCM token saved successfully"
             ]);
@@ -151,6 +157,7 @@ try {
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode([
+        "success" => false,
         "status" => false,
         "message" => "Database error: " . $e->getMessage()
     ]);
