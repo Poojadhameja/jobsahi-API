@@ -1,6 +1,7 @@
 <?php
 require_once '../cors.php';
 require_once '../db.php';
+require_once '../helpers/r2_uploader.php'; // ✅ R2 Uploader
 
 try {
     // ✅ Authenticate JWT (Admin / Recruiter)
@@ -105,7 +106,7 @@ try {
     }
 
     // ---------------------------------------------------------
-    // Handle company_logo upload
+    // Handle company_logo upload to R2
     // ---------------------------------------------------------
     if (!empty($_FILES['company_logo']['name'])) {
 
@@ -119,27 +120,51 @@ try {
             exit;
         }
 
-        // Delete old logo
+        // ✅ Delete old logo from R2 if exists
         $old_stmt = $conn->prepare("SELECT company_logo FROM recruiter_profiles WHERE id = ?");
         $old_stmt->bind_param("i", $recruiter_id);
         $old_stmt->execute();
         $old_res = $old_stmt->get_result();
         if ($old = $old_res->fetch_assoc()) {
             if (!empty($old['company_logo'])) {
-                $old_file = __DIR__ . '/..' . $old['company_logo'];
-                if (file_exists($old_file)) unlink($old_file);
+                $old_logo = $old['company_logo'];
+                
+                // Check if old logo is R2 URL
+                if (strpos($old_logo, 'r2.dev') !== false || strpos($old_logo, 'r2.cloudflarestorage.com') !== false) {
+                    // Extract R2 path from URL
+                    $parsedUrl = parse_url($old_logo);
+                    $r2Path = ltrim($parsedUrl['path'], '/');
+                    
+                    // Remove bucket name if present
+                    if (strpos($r2Path, 'jobsahi-media/') === 0) {
+                        $r2Path = str_replace('jobsahi-media/', '', $r2Path);
+                    }
+                    
+                    // Delete from R2
+                    R2Uploader::deleteFile($r2Path);
+                } else {
+                    // Old local file (backward compatibility)
+                    $old_file = __DIR__ . '/..' . $old_logo;
+                    if (file_exists($old_file)) unlink($old_file);
+                }
             }
         }
         $old_stmt->close();
 
-        // Save new logo
-        $safe_name = "logo_" . $user_id . "." . $ext;
-        $save_path = $upload_dir . $safe_name;
+        // ✅ Upload to R2
+        $r2Path = "company_logos/logo_{$user_id}." . $ext;
+        $uploadResult = R2Uploader::uploadFile($tmp, $r2Path);
 
-        if (is_uploaded_file($tmp)) move_uploaded_file($tmp, $save_path);
-        else rename($tmp, $save_path);
+        if (!$uploadResult['success']) {
+            echo json_encode([
+                "success" => false,
+                "message" => "Logo upload failed: " . $uploadResult['message']
+            ]);
+            exit;
+        }
 
-        $input['company_logo'] = $relative_path . $safe_name;
+        // ✅ Use R2 URL
+        $input['company_logo'] = $uploadResult['url'];
     }
 
     // ---------------------------------------------------------

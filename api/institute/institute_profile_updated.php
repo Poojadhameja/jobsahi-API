@@ -1,6 +1,7 @@
 <?php 
 require_once '../cors.php';
 require_once '../db.php';
+require_once '../helpers/r2_uploader.php'; // ✅ R2 Uploader
 
 try {
     // ✅ Authenticate JWT (Admin / Institute)
@@ -96,7 +97,7 @@ try {
     }
 
     /* =====================================================
-       🔥 LOGO UPLOAD
+       🔥 LOGO UPLOAD TO R2
     ===================================================== */
     if (!empty($_FILES['institute_logo']['name'])) {
         $file = $_FILES['institute_logo'];
@@ -108,21 +109,42 @@ try {
             exit;
         }
 
-        $safe_name = 'logo_' . $user_id . '_' . time() . '.' . $ext;
-        $file_path = $upload_dir . $safe_name;
-
-        if (is_uploaded_file($file['tmp_name'])) {
-            move_uploaded_file($file['tmp_name'], $file_path);
-        } else {
-            rename($file['tmp_name'], $file_path);
-        }
-
+        // ✅ Delete old logo from R2 if exists
         if (!empty($old_logo)) {
-            $old_file = __DIR__ . '/../' . ltrim($old_logo, '/');
-            if (file_exists($old_file)) unlink($old_file);
+            // Check if old logo is R2 URL
+            if (strpos($old_logo, 'r2.dev') !== false || strpos($old_logo, 'r2.cloudflarestorage.com') !== false) {
+                // Extract R2 path from URL
+                $parsedUrl = parse_url($old_logo);
+                $r2Path = ltrim($parsedUrl['path'], '/');
+                
+                // Remove bucket name if present
+                if (strpos($r2Path, 'jobsahi-media/') === 0) {
+                    $r2Path = str_replace('jobsahi-media/', '', $r2Path);
+                }
+                
+                // Delete from R2
+                R2Uploader::deleteFile($r2Path);
+            } else {
+                // Old local file (backward compatibility)
+                $old_file = __DIR__ . '/../' . ltrim($old_logo, '/');
+                if (file_exists($old_file)) unlink($old_file);
+            }
         }
 
-        $input['institute_logo'] = $relative_path . $safe_name;
+        // ✅ Upload to R2
+        $r2Path = "institute_logos/logo_{$user_id}_" . time() . '.' . $ext;
+        $uploadResult = R2Uploader::uploadFile($file['tmp_name'], $r2Path);
+
+        if (!$uploadResult['success']) {
+            echo json_encode([
+                "success" => false,
+                "message" => "Logo upload failed: " . $uploadResult['message']
+            ]);
+            exit;
+        }
+
+        // ✅ Use R2 URL
+        $input['institute_logo'] = $uploadResult['url'];
         $file_uploaded = true;
     }
 

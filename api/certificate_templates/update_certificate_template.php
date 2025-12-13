@@ -2,6 +2,7 @@
 // update_certificate_template.php - Update existing certificate template (ONLY PUT)
 require_once '../cors.php';
 require_once '../db.php';
+require_once '../helpers/r2_uploader.php'; // ✅ R2 Uploader
 
 // -------------------------------------------------------------
 // ALLOW ONLY PUT
@@ -139,21 +140,10 @@ $description   = trim($input['description'] ?? $existing['description']);
 $is_active     = intval($input['is_active'] ?? $existing['is_active']);
 
 // -------------------------------------------------------------
-// MEDIA UPLOAD — SAME AS CREATE API
+// MEDIA UPLOAD TO R2
 // -------------------------------------------------------------
-$upload_dir    = __DIR__ . '/../uploads/institute_certificate_templates/';
-$relative_path = '/uploads/institute_certificate_templates/';
-
-if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-
 $allowed_extensions = ['jpg', 'jpeg', 'png', 'webp'];
 $file_fields = ['logo', 'seal', 'signature'];
-
-function removeOld($path) {
-    if ($path && file_exists(__DIR__ . '/..' . $path)) {
-        unlink(__DIR__ . '/..' . $path);
-    }
-}
 
 $updated = [];
 
@@ -168,24 +158,45 @@ foreach ($file_fields as $field) {
             exit;
         }
 
-        // 💥 SAME NAMING FORMAT AS CREATE API
-        $filename = 'certificate_' . $user_id . '_' . $field . '.' . $ext;
-        $destination = $upload_dir . $filename;
-
-        // Delete old file
-        removeOld($existing[$field]);
-
-        // PUT uploads do not support move_uploaded_file()
-        if (!@move_uploaded_file($_FILES[$field]['tmp_name'], $destination)) {
-
-            // fallback for PUT
-            if (!@rename($_FILES[$field]['tmp_name'], $destination)) {
-                echo json_encode(["status" => false, "message" => "Failed uploading $field"]);
-                exit;
+        // ✅ Delete old file from R2 if exists
+        if (!empty($existing[$field])) {
+            $old_path = $existing[$field];
+            
+            // Check if old file is R2 URL
+            if (strpos($old_path, 'r2.dev') !== false || strpos($old_path, 'r2.cloudflarestorage.com') !== false) {
+                // Extract R2 path from URL
+                $parsedUrl = parse_url($old_path);
+                $r2Path = ltrim($parsedUrl['path'], '/');
+                
+                // Remove bucket name if present
+                if (strpos($r2Path, 'jobsahi-media/') === 0) {
+                    $r2Path = str_replace('jobsahi-media/', '', $r2Path);
+                }
+                
+                // Delete from R2
+                R2Uploader::deleteFile($r2Path);
+            } else {
+                // Old local file (backward compatibility)
+                if ($old_path && file_exists(__DIR__ . '/..' . $old_path)) {
+                    unlink(__DIR__ . '/..' . $old_path);
+                }
             }
         }
 
-        $updated[$field] = $relative_path . $filename;
+        // ✅ Upload to R2
+        $r2Path = "certificate_templates/certificate_{$user_id}_{$field}." . $ext;
+        $uploadResult = R2Uploader::uploadFile($_FILES[$field]['tmp_name'], $r2Path);
+
+        if (!$uploadResult['success']) {
+            echo json_encode([
+                "status" => false,
+                "message" => "Failed uploading $field: " . $uploadResult['message']
+            ]);
+            exit;
+        }
+
+        // ✅ Use R2 URL
+        $updated[$field] = $uploadResult['url'];
 
     } else {
         $updated[$field] = $existing[$field];

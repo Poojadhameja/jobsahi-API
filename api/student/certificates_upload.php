@@ -1,6 +1,7 @@
 <?php
 require_once '../cors.php';
 require_once '../db.php';
+require_once '../helpers/r2_uploader.php'; // ✅ R2 Uploader
 
 try {
     // ✅ Authenticate JWT (Student Only)
@@ -12,11 +13,6 @@ try {
         echo json_encode(["success" => false, "message" => "Only POST requests allowed"]);
         exit;
     }
-
-    // ✅ Directory setup
-    $upload_dir = __DIR__ . '/../uploads/student_certificate/';
-    $relative_path = '/uploads/student_certificate/';
-    if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
 
     // ✅ Allowed extensions
     $allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'];
@@ -55,52 +51,69 @@ try {
     $student_id = intval($student['id']);
     $old_certificate = $student['certificates'] ?? null;
 
-    // ✅ Delete old certificate if exists
+    // ✅ Delete old certificate from R2 if exists
     if (!empty($old_certificate)) {
-        $old_file = __DIR__ . '/..' . $old_certificate;
-        if (file_exists($old_file)) unlink($old_file);
+        // Check if old certificate is R2 URL
+        if (strpos($old_certificate, 'r2.dev') !== false || strpos($old_certificate, 'r2.cloudflarestorage.com') !== false) {
+            // Extract R2 path from URL
+            $parsedUrl = parse_url($old_certificate);
+            $r2Path = ltrim($parsedUrl['path'], '/');
+            
+            // Remove bucket name if present
+            if (strpos($r2Path, 'jobsahi-media/') === 0) {
+                $r2Path = str_replace('jobsahi-media/', '', $r2Path);
+            }
+            
+            // Delete from R2
+            R2Uploader::deleteFile($r2Path);
+        } else {
+            // Old local file (backward compatibility)
+            $old_file = __DIR__ . '/..' . $old_certificate;
+            if (file_exists($old_file)) {
+                unlink($old_file);
+            }
+        }
     }
 
-    // ✅ Save file as certificate_USERID.ext
-    $safe_name = 'certificate_' . $user_id . '.' . $ext;
-    $file_path = $upload_dir . $safe_name;
+    // ✅ Upload to Cloudflare R2
+    $r2Path = "certificates/certificate_{$user_id}." . $ext;
+    $uploadResult = R2Uploader::uploadFile($tmpName, $r2Path);
 
-    if (is_uploaded_file($tmpName)) {
-        move_uploaded_file($tmpName, $file_path);
-    } else {
-        rename($tmpName, $file_path);
+    if (!$uploadResult['success']) {
+        echo json_encode([
+            "success" => false,
+            "message" => "Upload failed: " . $uploadResult['message']
+        ]);
+        exit;
     }
 
-    $certificate_relative = $relative_path . $safe_name;
+    // ✅ Get R2 public URL
+    $r2Url = $uploadResult['url'];
 
-    // ✅ Update student profile in DB
+    // ✅ Update student profile in DB with R2 URL
     $update_sql = "UPDATE student_profiles 
                    SET certificates = ?, updated_at = NOW() 
                    WHERE id = ? AND deleted_at IS NULL";
     $update_stmt = $conn->prepare($update_sql);
-    $update_stmt->bind_param("si", $certificate_relative, $student_id);
+    $update_stmt->bind_param("si", $r2Url, $student_id);
     $update_stmt->execute();
-
-    // ✅ Build public URL
-    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
-    $host = $_SERVER['HTTP_HOST'];
-    $certificate_url = $protocol . $host . "/jobsahi-API/api" . $certificate_relative;
 
     // ✅ Final structured response
     echo json_encode([
         "success" => true,
-        "message" => "Certificate uploaded successfully",
+        "message" => "Certificate uploaded successfully to R2",
         "data" => [
             "student_id" => $student_id,
             "user_id" => $user_id,
-            "certificate_url" => $certificate_url,
-            "file_name" => basename($certificate_url),
+            "certificate_url" => $r2Url, // Direct R2 URL
+            "file_name" => basename($r2Url),
             "file_type" => $ext
         ],
         "meta" => [
             "uploaded_at" => date('Y-m-d H:i:s'),
             "api_version" => "1.0",
-            "response_format" => "structured"
+            "response_format" => "structured",
+            "storage" => "cloudflare_r2"
         ]
     ], JSON_PRETTY_PRINT);
 

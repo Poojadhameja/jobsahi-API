@@ -1,6 +1,7 @@
 <?php
 require_once '../cors.php';
 require_once '../db.php';
+require_once '../helpers/r2_uploader.php'; // ✅ R2 Uploader
 
 $decoded = authenticateJWT(['admin', 'institute']);
 $user_role = strtolower($decoded['role'] ?? '');
@@ -66,15 +67,9 @@ if ($user_role === 'institute') {
     $stmt->close();
 }
 
-// ✅ Handle media upload
-$absoluteUploadPath = "C:\\xampp\\htdocs\\jobsahi-API\\api\\uploads\\institute_course_image";
-$relativePathForDb  = "uploads/institute_course_image";
+// ✅ Handle media upload to R2
 $allowedExt = ['jpg', 'jpeg', 'png', 'csv', 'doc'];
 $media_files = [];
-
-if (!is_dir($absoluteUploadPath)) {
-    mkdir($absoluteUploadPath, 0777, true);
-}
 
 if (!empty($_FILES['media']['name'][0])) {
     foreach ($_FILES['media']['name'] as $key => $name) {
@@ -85,11 +80,13 @@ if (!empty($_FILES['media']['name'][0])) {
             $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
 
             if (in_array($ext, $allowedExt)) {
-                $newName = uniqid("course_", true) . '.' . $ext;
-                $targetPath = $absoluteUploadPath . DIRECTORY_SEPARATOR . $newName;
+                // ✅ Upload to R2
+                $r2Path = "course_images/" . uniqid("course_", true) . '.' . $ext;
+                $uploadResult = R2Uploader::uploadFile($tmpName, $r2Path);
 
-                if (move_uploaded_file($tmpName, $targetPath)) {
-                    $media_files[] = $relativePathForDb . '/' . $newName;
+                if ($uploadResult['success']) {
+                    // Store R2 URL in array
+                    $media_files[] = $uploadResult['url'];
                 }
             }
         }

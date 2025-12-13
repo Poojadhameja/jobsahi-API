@@ -2,6 +2,7 @@
 // update_course.php - Update existing course (Admin or Institute)
 require_once '../cors.php';
 require_once '../db.php';
+require_once '../helpers/r2_uploader.php'; // ✅ R2 Uploader
 
 if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATCH' || $_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
@@ -50,15 +51,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATC
             $media = '';
         }
 
-        // ✅ File upload handling
-        $absoluteUploadPath = "C:\\xampp\\htdocs\\jobsahi-API\\api\\uploads\\institute_course_image";
-        $relativePathForDb  = "uploads/institute_course_image";
+        // ✅ File upload handling to R2
         $allowedExt = ['jpg', 'jpeg', 'png', 'csv', 'doc'];
         $media_files = [];
-
-        if (!is_dir($absoluteUploadPath)) {
-            mkdir($absoluteUploadPath, 0777, true);
-        }
 
         if (!empty($_FILES['media']['name'][0])) {
             foreach ($_FILES['media']['name'] as $key => $name) {
@@ -67,10 +62,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT' || $_SERVER['REQUEST_METHOD'] === 'PATC
                 if ($error === UPLOAD_ERR_OK && is_uploaded_file($tmpName)) {
                     $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
                     if (in_array($ext, $allowedExt)) {
-                        $newName = uniqid("course_", true) . '.' . $ext;
-                        $targetPath = $absoluteUploadPath . DIRECTORY_SEPARATOR . $newName;
-                        if (move_uploaded_file($tmpName, $targetPath)) {
-                            $media_files[] = $relativePathForDb . '/' . $newName;
+                        // ✅ Upload to R2
+                        $r2Path = "course_images/" . uniqid("course_", true) . '.' . $ext;
+                        $uploadResult = R2Uploader::uploadFile($tmpName, $r2Path);
+                        
+                        if ($uploadResult['success']) {
+                            // Store R2 URL in array
+                            $media_files[] = $uploadResult['url'];
                         }
                     }
                 }

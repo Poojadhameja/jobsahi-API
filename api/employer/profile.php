@@ -63,14 +63,22 @@ try {
         $company_logo_url = null;
 
         if (!empty($row['company_logo'])) {
-            // Clean relative path
-            $clean_path = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $row['company_logo']);
-            $company_logo_url = $protocol . $host . "/jobsahi-API/api/uploads/recruiter_logo/" . $clean_path;
+            // ✅ Check if it's R2 URL (starts with http and contains r2.dev or r2.cloudflarestorage.com)
+            if (strpos($row['company_logo'], 'http') === 0 && 
+                (strpos($row['company_logo'], 'r2.dev') !== false || 
+                 strpos($row['company_logo'], 'r2.cloudflarestorage.com') !== false)) {
+                // ✅ Already R2 URL - use directly
+                $company_logo_url = $row['company_logo'];
+            } else {
+                // ✅ Old local file path - construct server URL (backward compatibility)
+                $clean_path = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $row['company_logo']);
+                $company_logo_url = $protocol . $host . "/jobsahi-API/api/uploads/recruiter_logo/" . $clean_path;
 
-            // ✅ Optional: Verify file exists (only append if real)
-            $local_path = __DIR__ . '/../uploads/recruiter_logo/' . $clean_path;
-            if (!file_exists($local_path)) {
-                $company_logo_url = null; // fallback
+                // ✅ Optional: Verify file exists (only append if real)
+                $local_path = __DIR__ . '/../uploads/recruiter_logo/' . $clean_path;
+                if (!file_exists($local_path)) {
+                    $company_logo_url = null; // fallback
+                }
             }
         }
 

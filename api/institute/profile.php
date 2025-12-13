@@ -69,14 +69,23 @@ try {
 
     while ($row = $result->fetch_assoc()) {
 
-        // Build logo URL
+        // Build logo URL (R2 support)
         $logo_url = null;
         if (!empty($row['institute_logo'])) {
-            $clean_path = str_replace(["\\", "/uploads/institute_logo/", "./", "../"], "", $row['institute_logo']);
-            $logo_url   = $base_url . $clean_path;
+            // ✅ Check if it's R2 URL
+            if (strpos($row['institute_logo'], 'http') === 0 && 
+                (strpos($row['institute_logo'], 'r2.dev') !== false || 
+                 strpos($row['institute_logo'], 'r2.cloudflarestorage.com') !== false)) {
+                // ✅ Already R2 URL - use directly
+                $logo_url = $row['institute_logo'];
+            } else {
+                // ✅ Old local file path - construct server URL (backward compatibility)
+                $clean_path = str_replace(["\\", "/uploads/institute_logo/", "./", "../"], "", $row['institute_logo']);
+                $logo_url   = $base_url . $clean_path;
 
-            $local_path = __DIR__ . '/../uploads/institute_logo/' . $clean_path;
-            if (!file_exists($local_path)) $logo_url = null;
+                $local_path = __DIR__ . '/../uploads/institute_logo/' . $clean_path;
+                if (!file_exists($local_path)) $logo_url = null;
+            }
         }
 
         $profiles[] = [

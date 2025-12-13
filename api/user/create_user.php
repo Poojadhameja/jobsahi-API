@@ -82,7 +82,9 @@ include "../db.php";
 // Start transaction
 mysqli_autocommit($conn, FALSE);
 
-// File upload handler
+// File upload handler - Updated for R2
+require_once __DIR__ . '/../helpers/r2_uploader.php';
+
 function handleFileUpload($file_key, $upload_dir = '../uploads/') {
     if (!isset($_FILES[$file_key]) || $_FILES[$file_key]['error'] !== UPLOAD_ERR_OK) {
         return null;
@@ -95,6 +97,19 @@ function handleFileUpload($file_key, $upload_dir = '../uploads/') {
         return null;
     }
 
+    // ✅ Upload to R2 for company_logo (recruiter registration)
+    if ($file_key === 'company_logo') {
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        $r2Path = "company_logos/logo_" . uniqid() . "_" . time() . '.' . $ext;
+        $uploadResult = R2Uploader::uploadFile($file['tmp_name'], $r2Path);
+        
+        if ($uploadResult['success']) {
+            return $uploadResult['url']; // Return R2 URL
+        }
+        return null;
+    }
+
+    // ✅ Fallback to local storage for other files (backward compatibility)
     if (!file_exists($upload_dir)) {
         mkdir($upload_dir, 0777, true);
     }

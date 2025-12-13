@@ -5,8 +5,13 @@
  */
 function loadEnv($envFile = null) {
     if ($envFile === null) {
-        // Default to project root .env file
-        $envFile = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . '.env';
+        // Default to api/.env file (same directory as config/)
+        $envFile = dirname(__DIR__) . DIRECTORY_SEPARATOR . '.env';
+        
+        // If not found, try parent directory (backward compatibility)
+        if (!file_exists($envFile)) {
+            $envFile = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . '.env';
+        }
     }
     
     if (!file_exists($envFile)) {
@@ -41,5 +46,10 @@ function loadEnv($envFile = null) {
 }
 
 // Auto-load .env file when this file is included
-loadEnv();
+$envLoaded = loadEnv();
+
+// Debug: Uncomment to check if .env is loading (remove after debugging)
+// if (!$envLoaded) {
+//     error_log("Warning: .env file not found at " . dirname(__DIR__) . DIRECTORY_SEPARATOR . '.env');
+// }
 ?>

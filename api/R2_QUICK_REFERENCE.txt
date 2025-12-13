@@ -1,0 +1,32 @@
+===========================================
+R2 INTEGRATION - QUICK REFERENCE
+===========================================
+
+✅ STATUS: ALL INTEGRATED!
+
+सभी media uploads अब Cloudflare R2 में store होंगे:
+- Resume uploads
+- Certificate uploads
+- Course images
+- Institute logos
+- Company logos
+- Certificate template images (logo, seal, signature)
+
+===========================================
+ESSENTIAL FILES (DO NOT DELETE):
+===========================================
+
+1. api/config/r2_config.php - Configuration
+2. api/helpers/r2_uploader.php - Upload helper
+3. api/.env - Credentials (create on server)
+
+===========================================
+TESTING:
+===========================================
+
+1. Upload any media file
+2. Check response - R2 URL मिलेगा
+3. R2 URL को browser में open करें - file दिखनी चाहिए
+
+===========================================
+

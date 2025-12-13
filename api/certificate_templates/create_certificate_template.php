@@ -2,6 +2,7 @@
 // create_certificate_template.php - Create new certificate template (Admin / Institute)
 require_once '../cors.php';
 require_once '../db.php';
+require_once '../helpers/r2_uploader.php'; // ✅ R2 Uploader
 
 // --------------------------------------------
 // 🔐 Authenticate JWT
@@ -90,22 +91,24 @@ if (!is_dir($upload_dir)) {
 $allowed_extensions = ['jpg', 'jpeg', 'png', 'webp'];
 
 // --------------------------------------------
-// 📤 File Upload Function
+// 📤 File Upload Function (R2)
 // --------------------------------------------
-function uploadFile($key, $upload_dir, $relative_path, $allowed_extensions, $user_id) {
+function uploadFileToR2($key, $allowed_extensions, $user_id) {
     if (!isset($_FILES[$key]) || $_FILES[$key]['error'] !== UPLOAD_ERR_OK) return null;
 
     $ext = strtolower(pathinfo($_FILES[$key]['name'], PATHINFO_EXTENSION));
     if (!in_array($ext, $allowed_extensions)) return null;
 
-    $filename = "certificate_{$user_id}_{$key}." . $ext;
-    $destination = $upload_dir . $filename;
+    // ✅ Upload to R2
+    $r2Path = "certificate_templates/certificate_{$user_id}_{$key}." . $ext;
+    $uploadResult = R2Uploader::uploadFile($_FILES[$key]['tmp_name'], $r2Path);
 
-    if (file_exists($destination)) unlink($destination);
+    if (!$uploadResult['success']) {
+        return null;
+    }
 
-    move_uploaded_file($_FILES[$key]['tmp_name'], $destination);
-
-    return $relative_path . $filename;
+    // ✅ Return R2 URL
+    return $uploadResult['url'];
 }
 
 // --------------------------------------------
@@ -143,11 +146,11 @@ $description  = trim($_POST['description'] ?? '');
 $is_active    = intval($_POST['is_active'] ?? 1);
 
 // --------------------------------------------
-// 📤 Upload new files or inherit old ones
+// 📤 Upload new files to R2 or inherit old ones
 // --------------------------------------------
-$logo_path      = uploadFile('logo', $upload_dir, $relative_path, $allowed_extensions, $user_id);
-$seal_path      = uploadFile('seal', $upload_dir, $relative_path, $allowed_extensions, $user_id);
-$signature_path = uploadFile('signature', $upload_dir, $relative_path, $allowed_extensions, $user_id);
+$logo_path      = uploadFileToR2('logo', $allowed_extensions, $user_id);
+$seal_path      = uploadFileToR2('seal', $allowed_extensions, $user_id);
+$signature_path = uploadFileToR2('signature', $allowed_extensions, $user_id);
 
 // If no new upload → reuse old template media
 if (!$logo_path)      $logo_path      = $last_logo;

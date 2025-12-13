@@ -98,13 +98,22 @@ if ($user_stmt = mysqli_prepare($conn, $user_sql)) {
                 if (mysqli_num_rows($profile_result) > 0) {
                     $profile_data = mysqli_fetch_assoc($profile_result);
 
-                    // ✅ Build resume URL
+                    // ✅ Build resume URL (R2 support)
                     $resume_url = null;
                     if (!empty($profile_data['resume'])) {
-                        $clean_resume = str_replace(["\\", "/uploads/resume/", "./", "../"], "", $profile_data['resume']);
-                        $resume_local = __DIR__ . '/../uploads/resume/' . $clean_resume;
-                        if (file_exists($resume_local)) {
-                            $resume_url = $resume_base . $clean_resume;
+                        // ✅ Check if it's R2 URL
+                        if (strpos($profile_data['resume'], 'http') === 0 && 
+                            (strpos($profile_data['resume'], 'r2.dev') !== false || 
+                             strpos($profile_data['resume'], 'r2.cloudflarestorage.com') !== false)) {
+                            // ✅ Already R2 URL - use directly
+                            $resume_url = $profile_data['resume'];
+                        } else {
+                            // ✅ Old local file path - construct server URL (backward compatibility)
+                            $clean_resume = str_replace(["\\", "/uploads/resume/", "./", "../"], "", $profile_data['resume']);
+                            $resume_local = __DIR__ . '/../uploads/resume/' . $clean_resume;
+                            if (file_exists($resume_local)) {
+                                $resume_url = $resume_base . $clean_resume;
+                            }
                         }
                     }
 
@@ -145,13 +154,22 @@ if ($user_stmt = mysqli_prepare($conn, $user_sql)) {
                 if (mysqli_num_rows($profile_result) > 0) {
                     $profile_data = mysqli_fetch_assoc($profile_result);
 
-                    // ✅ Build company_logo URL
+                    // ✅ Build company_logo URL (R2 support)
                     $company_logo_url = null;
                     if (!empty($profile_data['company_logo'])) {
-                        $clean_logo = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $profile_data['company_logo']);
-                        $logo_local = __DIR__ . '/../uploads/recruiter_logo/' . $clean_logo;
-                        if (file_exists($logo_local)) {
-                            $company_logo_url = $company_logo_base . $clean_logo;
+                        // ✅ Check if it's R2 URL
+                        if (strpos($profile_data['company_logo'], 'http') === 0 && 
+                            (strpos($profile_data['company_logo'], 'r2.dev') !== false || 
+                             strpos($profile_data['company_logo'], 'r2.cloudflarestorage.com') !== false)) {
+                            // ✅ Already R2 URL - use directly
+                            $company_logo_url = $profile_data['company_logo'];
+                        } else {
+                            // ✅ Old local file path - construct server URL (backward compatibility)
+                            $clean_logo = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $profile_data['company_logo']);
+                            $logo_local = __DIR__ . '/../uploads/recruiter_logo/' . $clean_logo;
+                            if (file_exists($logo_local)) {
+                                $company_logo_url = $company_logo_base . $clean_logo;
+                            }
                         }
                     }
 
@@ -190,13 +208,22 @@ if ($user_stmt = mysqli_prepare($conn, $user_sql)) {
                 if (mysqli_num_rows($profile_result) > 0) {
                     $profile_data = mysqli_fetch_assoc($profile_result);
 
-                    // ✅ Build institute_logo URL
+                    // ✅ Build institute_logo URL (R2 support)
                     $institute_logo_url = null;
                     if (!empty($profile_data['institute_logo'])) {
-                        $clean_logo = str_replace(["\\", "/uploads/institute_logo/", "./", "../"], "", $profile_data['institute_logo']);
-                        $logo_local = __DIR__ . '/../uploads/institute_logo/' . $clean_logo;
-                        if (file_exists($logo_local)) {
-                            $institute_logo_url = $institute_logo_base . $clean_logo;
+                        // ✅ Check if it's R2 URL
+                        if (strpos($profile_data['institute_logo'], 'http') === 0 && 
+                            (strpos($profile_data['institute_logo'], 'r2.dev') !== false || 
+                             strpos($profile_data['institute_logo'], 'r2.cloudflarestorage.com') !== false)) {
+                            // ✅ Already R2 URL - use directly
+                            $institute_logo_url = $profile_data['institute_logo'];
+                        } else {
+                            // ✅ Old local file path - construct server URL (backward compatibility)
+                            $clean_logo = str_replace(["\\", "/uploads/institute_logo/", "./", "../"], "", $profile_data['institute_logo']);
+                            $logo_local = __DIR__ . '/../uploads/institute_logo/' . $clean_logo;
+                            if (file_exists($logo_local)) {
+                                $institute_logo_url = $institute_logo_base . $clean_logo;
+                            }
                         }
                     }
 
