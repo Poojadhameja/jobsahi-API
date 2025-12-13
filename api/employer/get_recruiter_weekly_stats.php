@@ -6,14 +6,28 @@ require_once '../auth/auth_middleware.php';
 require_once '../db.php';
 
 // ✅ Authenticate recruiter
-$decoded = authenticateJWT(['recruiter']);
+$decoded = authenticateJWT(['recruiter','admin']);
 $role = strtolower($decoded['role'] ?? '');
 $user_id = intval($decoded['user_id'] ?? 0);
 
-if ($role !== 'recruiter' || !$user_id) {
+if ($role !== 'recruiter' && $role !== 'admin' || !$user_id) {
     http_response_code(403);
     echo json_encode(["status" => false, "message" => "Access denied"]);
     exit;
+}
+if ($role === 'admin') {
+    // Admin impersonation - GET params se recruiter_id lo
+    $impersonated_user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : 
+                           (isset($_GET['recruiter_id']) ? intval($_GET['recruiter_id']) : 
+                           (isset($_GET['uid']) ? intval($_GET['uid']) : null));
+    
+    if ($impersonated_user_id) {
+        $user_id = $impersonated_user_id; // Admin ke liye recruiter ka user_id use karo
+    } else {
+        http_response_code(400);
+        echo json_encode(["status" => false, "message" => "Recruiter ID required for admin impersonation"]);
+        exit;
+    }
 }
 
 try {

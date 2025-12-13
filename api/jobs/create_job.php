@@ -129,19 +129,79 @@ try {
     $up->close();
 
     $conn->commit();
-
-    echo json_encode([
+    
+    // ✅ Prepare response immediately (before sending notifications)
+    $response = [
         "status" => true,
         "message" => "Job created successfully",
         "job_id" => $job_id,
         "category_id" => $category_id,
         "company_info_id" => $company_info_id
-    ]);
+    ];
+    
+    // ✅ Disable output buffering and prepare response
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    
+    // ✅ Send response immediately to client (before notifications)
+    header('Content-Length: ' . strlen(json_encode($response)));
+    echo json_encode($response);
+    
+    // ✅ Flush response to client immediately
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+    } else {
+        if (ob_get_level() > 0) {
+            ob_end_flush();
+        }
+        flush();
+        if (function_exists('ob_flush')) {
+            @ob_flush();
+        }
+        flush();
+    }
+    
+    // ✅ Now send notifications in background (connection still open, response already sent)
+    // ⚠️ Note: Notifications are sent ONLY to all active students
+    if ($admin_action === 'approved') {
+        // Set execution time limit for notification process
+        set_time_limit(120); // 2 minutes for sending notifications to all students
+        ignore_user_abort(true); // Continue even if client disconnects
+        
+        error_log("Job created: job_id=$job_id, title=$title, sending notifications in background...");
+        
+        require_once '../helpers/notification_helper.php';
+        
+        // ✅ This sends notification to ALL active students only
+        try {
+            $notification_result = NotificationHelper::notifyNewJobPosted(
+                $title,
+                $job_id,
+                $location
+            );
+            
+            // Log notification result
+            if (!$notification_result['success']) {
+                error_log("Failed to send new job notification: " . $notification_result['message']);
+            } else {
+                $sent_count = $notification_result['success_count'] ?? 0;
+                $failed_count = $notification_result['fail_count'] ?? 0;
+                error_log("New job notification sent successfully: sent=$sent_count, failed=$failed_count");
+            }
+        } catch (Exception $e) {
+            error_log("Exception while sending notifications: " . $e->getMessage());
+            error_log("Exception trace: " . $e->getTraceAsString());
+        }
+    }
+    
+    // ✅ Close connection after notifications are sent
+    $conn->close();
 
 } catch (Exception $e) {
     $conn->rollback();
+    $conn->close();
     echo json_encode(["status" => false, "message" => $e->getMessage()]);
+    exit();
 }
-
-$conn->close();
 ?>

@@ -141,9 +141,9 @@ try {
             }
         }
 
-        // ✅ Send notification if student is shortlisted
-        // ⚠️ Note: Notifications are sent ONLY to students
-        if ($new_status === 'shortlisted') {
+        // ✅ Get student data for background notification (before closing connection)
+        $student_result = null;
+        if ($new_status === 'shortlisted' || $new_status === 'selected') {
             // Get student user_id from application
             $student_sql = "
                 SELECT sp.user_id, j.title as job_title, j.id as job_id
@@ -156,25 +156,22 @@ try {
             $student_stmt->bind_param("i", $application_id);
             $student_stmt->execute();
             $student_result = $student_stmt->get_result();
-            
-            if ($student_result->num_rows > 0) {
-                $student_data = $student_result->fetch_assoc();
-                $student_user_id = intval($student_data['user_id']);
-                $job_title = $student_data['job_title'];
-                $job_id = intval($student_data['job_id']);
-                
-                // ✅ Send notification to student (students only)
-                require_once '../helpers/notification_helper.php';
-                $notification_result = NotificationHelper::notifyShortlisted($student_user_id, $job_title, $job_id);
-                
-                // Log notification result (optional)
-                if (!$notification_result['success']) {
-                    error_log("Failed to send shortlist notification: " . $notification_result['message']);
-                }
-            }
             $student_stmt->close();
         }
         
+        // ✅ Store notification data for background processing
+        $background_notification_data = null;
+        if ($student_result && $student_result->num_rows > 0) {
+            $student_data = $student_result->fetch_assoc();
+            $background_notification_data = [
+                'student_user_id' => intval($student_data['user_id']),
+                'job_title' => $student_data['job_title'],
+                'job_id' => intval($student_data['job_id']),
+                'status' => $new_status
+            ];
+        }
+        
+        // ✅ Prepare response immediately (before sending notifications)
         $response = [
             "status" => true,
             "message" => "Application updated successfully",
@@ -191,7 +188,70 @@ try {
             $response["interview_update_message"] = $interview_update_message;
         }
         
+        // ✅ Disable output buffering and prepare response
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        
+        // ✅ Send response immediately to client (before notifications)
+        header('Content-Length: ' . strlen(json_encode($response)));
         echo json_encode($response);
+        
+        // ✅ Flush response to client immediately
+        if (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+        } else {
+            if (ob_get_level() > 0) {
+                ob_end_flush();
+            }
+            flush();
+            if (function_exists('ob_flush')) {
+                @ob_flush();
+            }
+            flush();
+        }
+        
+        // ✅ Now send notification in background (connection still open, response already sent)
+        if ($background_notification_data !== null) {
+            // Set execution time limit for background process
+            set_time_limit(60); // 1 minute for sending notification
+            ignore_user_abort(true); // Continue even if client disconnects
+            
+            error_log("Application status update: application_id=$application_id, new_status=" . $background_notification_data['status'] . ", sending notification in background...");
+            
+            require_once '../helpers/notification_helper.php';
+            
+            try {
+                if ($background_notification_data['status'] === 'shortlisted') {
+                    $notification_result = NotificationHelper::notifyShortlisted(
+                        $background_notification_data['student_user_id'],
+                        $background_notification_data['job_title'],
+                        $background_notification_data['job_id']
+                    );
+                } elseif ($background_notification_data['status'] === 'selected') {
+                    $notification_result = NotificationHelper::notifySelected(
+                        $background_notification_data['student_user_id'],
+                        $background_notification_data['job_title'],
+                        $background_notification_data['job_id']
+                    );
+                }
+                
+                // Log notification result
+                if (isset($notification_result)) {
+                    if (!$notification_result['success']) {
+                        error_log("Failed to send notification: " . $notification_result['message']);
+                    } else {
+                        error_log("Notification sent successfully to user_id: " . $background_notification_data['student_user_id']);
+                    }
+                }
+            } catch (Exception $e) {
+                error_log("Exception while sending notifications: " . $e->getMessage());
+                error_log("Exception trace: " . $e->getTraceAsString());
+            }
+        }
+        
+        // ✅ Close connection after notifications are sent
+        $conn->close();
     } else {
         echo json_encode([
             "status" => false,
@@ -200,11 +260,13 @@ try {
     }
 
 } catch (Exception $e) {
+    if (isset($conn)) {
+        $conn->close();
+    }
     echo json_encode([
         "status" => false,
         "message" => "Server Error: " . $e->getMessage()
     ]);
+    exit();
 }
-
-$conn->close();
 ?>

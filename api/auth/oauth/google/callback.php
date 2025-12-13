@@ -137,6 +137,31 @@ try {
         }
         
         $user = $existing_user;
+        
+        // ✅ For existing users, also check if student_profiles entry exists (if role is student)
+        if ($existing_user['role'] === 'student') {
+            $check_profile_sql = "SELECT id FROM student_profiles WHERE user_id = ?";
+            $check_profile_stmt = mysqli_prepare($conn, $check_profile_sql);
+            mysqli_stmt_bind_param($check_profile_stmt, "i", $user_id);
+            mysqli_stmt_execute($check_profile_stmt);
+            $profile_result = mysqli_stmt_get_result($check_profile_stmt);
+            
+            if (mysqli_num_rows($profile_result) === 0) {
+                // Create student profile entry for existing user
+                $profile_sql = "INSERT INTO student_profiles 
+                    (user_id, created_at, updated_at)
+                    VALUES (?, NOW(), NOW())";
+                $profile_stmt = mysqli_prepare($conn, $profile_sql);
+                mysqli_stmt_bind_param($profile_stmt, "i", $user_id);
+                
+                if (!mysqli_stmt_execute($profile_stmt)) {
+                    // Log error but don't fail the login
+                    error_log("Failed to create student profile for existing user_id: $user_id - " . mysqli_error($conn));
+                }
+                mysqli_stmt_close($profile_stmt);
+            }
+            mysqli_stmt_close($check_profile_stmt);
+        }
     } else {
         // User doesn't exist - Create new user
         $is_new_user = true;
@@ -184,6 +209,32 @@ try {
         
         $user_id = mysqli_insert_id($conn);
         mysqli_stmt_close($insert_stmt);
+        
+        // ✅ Create student_profiles entry if role is 'student'
+        if ($role === 'student') {
+            // Check if student_profiles entry already exists
+            $check_profile_sql = "SELECT id FROM student_profiles WHERE user_id = ?";
+            $check_profile_stmt = mysqli_prepare($conn, $check_profile_sql);
+            mysqli_stmt_bind_param($check_profile_stmt, "i", $user_id);
+            mysqli_stmt_execute($check_profile_stmt);
+            $profile_result = mysqli_stmt_get_result($check_profile_stmt);
+            
+            if (mysqli_num_rows($profile_result) === 0) {
+                // Create student profile entry
+                $profile_sql = "INSERT INTO student_profiles 
+                    (user_id, created_at, updated_at)
+                    VALUES (?, NOW(), NOW())";
+                $profile_stmt = mysqli_prepare($conn, $profile_sql);
+                mysqli_stmt_bind_param($profile_stmt, "i", $user_id);
+                
+                if (!mysqli_stmt_execute($profile_stmt)) {
+                    // Log error but don't fail the login
+                    error_log("Failed to create student profile for user_id: $user_id - " . mysqli_error($conn));
+                }
+                mysqli_stmt_close($profile_stmt);
+            }
+            mysqli_stmt_close($check_profile_stmt);
+        }
         
         // Fetch created user
         $user_sql = "SELECT id, user_name, email, role, phone_number, is_verified FROM users WHERE id = ?";

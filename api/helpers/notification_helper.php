@@ -78,14 +78,17 @@ class NotificationHelper {
         $tokens = self::getUserFCMTokens($student_user_id);
         
         if (empty($tokens)) {
+            error_log("NotificationHelper::notifyShortlisted - No FCM tokens found for user_id: $student_user_id");
             return [
                 'success' => false,
                 'message' => 'No FCM tokens found for user'
             ];
         }
         
-        $title = "🎉 Congratulations! You've been shortlisted";
-        $body = "You have been shortlisted for the position: " . $job_title;
+        error_log("NotificationHelper::notifyShortlisted - Sending to " . count($tokens) . " device(s) for user_id: $student_user_id, job_id: $job_id");
+        
+        $title = "Congrats! You've been shortlisted";
+        $body = "Your profile matched the recruiter's requirements for the role of " . $job_title . ". Check the app for next steps.";
         
         $data = [
             'type' => 'shortlisted',
@@ -96,7 +99,59 @@ class NotificationHelper {
         // Save notification to database
         self::saveNotificationToDB($student_user_id, $body, 'shortlisted', $job_id);
         
-        return FirebaseHelperV1::sendToMultipleDevices($tokens, $title, $body, $data);
+        $result = FirebaseHelperV1::sendToMultipleDevices($tokens, $title, $body, $data);
+        
+        if (!$result['success']) {
+            error_log("NotificationHelper::notifyShortlisted - Failed: " . $result['message']);
+        } else {
+            error_log("NotificationHelper::notifyShortlisted - Success: " . ($result['success_count'] ?? 0) . " sent, " . ($result['fail_count'] ?? 0) . " failed");
+        }
+        
+        return $result;
+    }
+    
+    /**
+     * Send notification to a student when they are hired/selected
+     * ✅ This method sends notification ONLY to students
+     * @param int $student_user_id - User ID of the student (must be a student)
+     * @param string $job_title - Title of the job
+     * @param int $job_id - Job ID
+     * @return array - Result of notification send
+     */
+    public static function notifySelected($student_user_id, $job_title, $job_id) {
+        $tokens = self::getUserFCMTokens($student_user_id);
+        
+        if (empty($tokens)) {
+            error_log("NotificationHelper::notifySelected - No FCM tokens found for user_id: $student_user_id");
+            return [
+                'success' => false,
+                'message' => 'No FCM tokens found for user'
+            ];
+        }
+        
+        error_log("NotificationHelper::notifySelected - Sending to " . count($tokens) . " device(s) for user_id: $student_user_id, job_id: $job_id");
+        
+        $title = "Congrats! You've been Hired";
+        $body = "You're officially hired for the " . $job_title . " role! The recruiter will contact you soon with further details.";
+        
+        $data = [
+            'type' => 'selected',
+            'job_id' => (string)$job_id,
+            'job_title' => $job_title
+        ];
+        
+        // Save notification to database
+        self::saveNotificationToDB($student_user_id, $body, 'selected', $job_id);
+        
+        $result = FirebaseHelperV1::sendToMultipleDevices($tokens, $title, $body, $data);
+        
+        if (!$result['success']) {
+            error_log("NotificationHelper::notifySelected - Failed: " . $result['message']);
+        } else {
+            error_log("NotificationHelper::notifySelected - Success: " . ($result['success_count'] ?? 0) . " sent, " . ($result['fail_count'] ?? 0) . " failed");
+        }
+        
+        return $result;
     }
     
     /**
@@ -113,17 +168,21 @@ class NotificationHelper {
         $tokens = self::getAllStudentFCMTokens();
         
         if (empty($tokens)) {
+            error_log("NotificationHelper::notifyNewJobPosted - No student FCM tokens found for job_id: $job_id");
             return [
                 'success' => false,
                 'message' => 'No student FCM tokens found'
             ];
         }
         
-        $title = "🆕 New Job Posted!";
-        $body = "A new job has been posted: " . $job_title;
+        error_log("NotificationHelper::notifyNewJobPosted - Sending to " . count($tokens) . " student device(s) for job_id: $job_id");
+        
+        $title = "New Job Opportunity";
+        $body = "A fresh opening for " . $job_title;
         if (!empty($location)) {
-            $body .= " - " . $location;
+            $body .= " (" . $location . ")";
         }
+        $body .= " is now live. Apply early to boost your chances!";
         
         $data = [
             'type' => 'new_job',
@@ -141,17 +200,35 @@ class NotificationHelper {
             $batches = array_chunk($tokens, 1000);
             $results = [];
             foreach ($batches as $batch) {
-                $results[] = FirebaseHelper::sendToMultipleDevices($batch, $title, $body, $data);
+                // ✅ Fixed: Use FirebaseHelperV1 instead of FirebaseHelper
+                $results[] = FirebaseHelperV1::sendToMultipleDevices($batch, $title, $body, $data);
             }
+            $total_success = 0;
+            $total_fail = 0;
+            foreach ($results as $result) {
+                $total_success += ($result['success_count'] ?? 0);
+                $total_fail += ($result['fail_count'] ?? 0);
+            }
+            error_log("NotificationHelper::notifyNewJobPosted - Batch result: $total_success sent, $total_fail failed across " . count($batches) . " batches");
             return [
                 'success' => true,
                 'message' => 'Notifications sent in batches',
                 'batches' => count($batches),
+                'success_count' => $total_success,
+                'fail_count' => $total_fail,
                 'results' => $results
             ];
         }
         
-        return FirebaseHelperV1::sendToMultipleDevices($tokens, $title, $body, $data);
+        $result = FirebaseHelperV1::sendToMultipleDevices($tokens, $title, $body, $data);
+        
+        if (!$result['success']) {
+            error_log("NotificationHelper::notifyNewJobPosted - Failed: " . $result['message']);
+        } else {
+            error_log("NotificationHelper::notifyNewJobPosted - Success: " . ($result['success_count'] ?? 0) . " sent, " . ($result['fail_count'] ?? 0) . " failed");
+        }
+        
+        return $result;
     }
     
     /**

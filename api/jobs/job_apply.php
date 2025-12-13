@@ -34,7 +34,7 @@ if ($job_id <= 0) {
 // ✅ Get cover_letter (optional field)
 $cover_letter = isset($input['cover_letter']) && !empty(trim($input['cover_letter'])) 
     ? trim($input['cover_letter']) 
-    : null;
+    : '';
 
 // ✅ Get student_profile_id using user_id
 $user_id = $decoded['id'] ?? $decoded['user_id'] ?? null;
