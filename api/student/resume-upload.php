@@ -75,8 +75,8 @@ try {
         }
     }
 
-    // ✅ Upload to Cloudflare R2
-    $r2Path = "resumes/resume_{$user_id}." . $ext;
+    // ✅ Upload to Cloudflare R2 (Student Profile Resume)
+    $r2Path = "student_profile_resume/resume_{$user_id}." . $ext;
     $uploadResult = R2Uploader::uploadFile($tmpName, $r2Path);
 
     if (!$uploadResult['success']) {

@@ -162,7 +162,8 @@ class R2Uploader {
             CURLOPT_HTTPHEADER => $curlHeaders,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HEADER => true,
-            CURLOPT_SSL_VERIFYPEER => true
+            CURLOPT_SSL_VERIFYPEER => false, // Set to true in production with proper certificate bundle
+            CURLOPT_SSL_VERIFYHOST => false  // Set to 2 in production
         ]);
         
         $response = curl_exec($ch);
@@ -230,6 +231,16 @@ class R2Uploader {
             ];
         }
         
+        // Clean the path - remove leading/trailing slashes
+        $r2Path = trim($r2Path, '/');
+        
+        if (empty($r2Path)) {
+            return [
+                'success' => false,
+                'message' => 'R2 path is empty'
+            ];
+        }
+        
         $bucket = R2_BUCKET_NAME;
         $endpoint = R2_ENDPOINT_BASE;
         $host = parse_url($endpoint, PHP_URL_HOST);
@@ -244,6 +255,9 @@ class R2Uploader {
         }
         // Build full URL with encoded path
         $url = "{$endpoint}/{$bucket}" . $encodedPath;
+        
+        // Debug logging
+        error_log("R2 Delete - Path: {$r2Path}, URL: {$url}");
         
         $date = gmdate('Ymd\THis\Z');
         $dateShort = gmdate('Ymd');
@@ -308,12 +322,21 @@ class R2Uploader {
             CURLOPT_CUSTOMREQUEST => 'DELETE',
             CURLOPT_HTTPHEADER => $curlHeaders,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_SSL_VERIFYPEER => true
+            CURLOPT_SSL_VERIFYPEER => false, // Set to true in production with proper certificate bundle
+            CURLOPT_SSL_VERIFYHOST => false   // Set to 2 in production
         ]);
         
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
         curl_close($ch);
+        
+        if (!empty($error)) {
+            return [
+                'success' => false,
+                'message' => 'cURL error: ' . $error
+            ];
+        }
         
         if ($httpCode >= 200 && $httpCode < 300) {
             return [
@@ -321,9 +344,16 @@ class R2Uploader {
                 'message' => 'File deleted successfully from R2'
             ];
         } else {
+            // 404 means file doesn't exist, which is fine for delete operation
+            if ($httpCode == 404) {
+                return [
+                    'success' => true,
+                    'message' => 'File not found in R2 (already deleted or never existed)'
+                ];
+            }
             return [
                 'success' => false,
-                'message' => 'Delete failed. HTTP Code: ' . $httpCode
+                'message' => 'Delete failed. HTTP Code: ' . $httpCode . ($response ? '. Response: ' . substr($response, 0, 200) : '')
             ];
         }
     }

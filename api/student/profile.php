@@ -27,6 +27,7 @@ if ($user_role === 'admin') {
                 sp.education, 
                 sp.resume, 
                 sp.certificates,
+                sp.profile_image,
                 sp.socials,
                 sp.dob, 
                 sp.gender, 
@@ -62,6 +63,7 @@ if ($user_role === 'admin') {
                 sp.education, 
                 sp.resume, 
                 sp.certificates,
+                sp.profile_image,
                 sp.socials,
                 sp.dob, 
                 sp.gender, 
@@ -246,7 +248,8 @@ if ($result && mysqli_num_rows($result) > 0) {
                 "gender" => $student['gender'],
                 "location" => $student['location'],
                 "latitude" => $student['latitude'] ? floatval($student['latitude']) : null,
-                "longitude" => $student['longitude'] ? floatval($student['longitude']) : null
+                "longitude" => $student['longitude'] ? floatval($student['longitude']) : null,
+                "profile_image" => $student['profile_image'] ?? null
             ],
             "contact_info" => [
                 "contact_email" => $student['contact_email'] ?? null,
@@ -264,6 +267,7 @@ if ($result && mysqli_num_rows($result) > 0) {
             "documents" => [
                 "resume" => $student['resume'],
                 "certificates" => $student['certificates'],
+                "profile_image" => $student['profile_image'] ?? null,
                 "aadhar_number" => $student['aadhar_number']
             ],
             "social_links" => $socialLinksData,  // ✅ Array of social link objects
