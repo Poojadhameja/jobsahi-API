@@ -23,17 +23,50 @@ function getEnvValue($key, $default = '') {
 }
 
 // Cloudflare R2 Configuration
-define('R2_ACCOUNT_ID', getEnvValue('R2_ACCOUNT_ID', ''));
-define('R2_ACCESS_KEY_ID', getEnvValue('R2_ACCESS_KEY_ID', ''));
-define('R2_SECRET_ACCESS_KEY', getEnvValue('R2_SECRET_ACCESS_KEY', ''));
-define('R2_BUCKET_NAME', getEnvValue('R2_BUCKET_NAME', 'jobsahi-media'));
-define('R2_ENDPOINT', getEnvValue('R2_ENDPOINT', ''));
-define('R2_PUBLIC_URL', getEnvValue('R2_PUBLIC_URL', '')); // Public dev URL for accessing files
+// Try .env file first, then fallback to direct values (for shared hosting)
+
+// Get values from .env file
+$r2_account_id = getEnvValue('R2_ACCOUNT_ID', '');
+$r2_access_key = getEnvValue('R2_ACCESS_KEY_ID', '');
+$r2_secret_key = getEnvValue('R2_SECRET_ACCESS_KEY', '');
+$r2_bucket = getEnvValue('R2_BUCKET_NAME', 'jobsahi-media');
+$r2_endpoint = getEnvValue('R2_ENDPOINT', '');
+$r2_public_url = getEnvValue('R2_PUBLIC_URL', '');
+
+// ⚠️ FALLBACK: If .env file is not loading on shared hosting, 
+// fill these values directly below (REQUIRED for Hostinger)
+// Replace the empty strings with your actual R2 credentials
+if (empty($r2_account_id)) {
+    $r2_account_id = ''; // ⚠️ PUT YOUR R2 ACCOUNT ID HERE
+}
+if (empty($r2_access_key)) {
+    $r2_access_key = ''; // ⚠️ PUT YOUR R2 ACCESS KEY ID HERE
+}
+if (empty($r2_secret_key)) {
+    $r2_secret_key = ''; // ⚠️ PUT YOUR R2 SECRET ACCESS KEY HERE
+}
+if (empty($r2_bucket)) {
+    $r2_bucket = 'jobsahi-media'; // Default bucket name
+}
+if (empty($r2_endpoint)) {
+    $r2_endpoint = ''; // ⚠️ PUT YOUR R2 ENDPOINT HERE (e.g., https://account-id.r2.cloudflarestorage.com)
+}
+if (empty($r2_public_url)) {
+    $r2_public_url = ''; // ⚠️ PUT YOUR R2 PUBLIC DOMAIN HERE (e.g., https://your-domain.r2.dev)
+}
+
+// Define constants
+define('R2_ACCOUNT_ID', $r2_account_id);
+define('R2_ACCESS_KEY_ID', $r2_access_key);
+define('R2_SECRET_ACCESS_KEY', $r2_secret_key);
+define('R2_BUCKET_NAME', $r2_bucket);
+define('R2_ENDPOINT', $r2_endpoint);
+define('R2_PUBLIC_URL', $r2_public_url);
 
 // R2 S3-Compatible Endpoint (without bucket name in URL)
 // Format: https://{account_id}.r2.cloudflarestorage.com
-$r2_endpoint_base = getEnvValue('R2_ENDPOINT', '');
-$bucket_name = getEnvValue('R2_BUCKET_NAME', 'jobsahi-media');
+$r2_endpoint_base = R2_ENDPOINT;
+$bucket_name = R2_BUCKET_NAME;
 
 if (!empty($r2_endpoint_base)) {
     // Remove bucket name if present in endpoint
@@ -43,7 +76,7 @@ if (!empty($r2_endpoint_base)) {
 
 if (empty($r2_endpoint_base)) {
     // Auto-generate from account ID if not provided
-    $account_id = getEnvValue('R2_ACCOUNT_ID', '');
+    $account_id = R2_ACCOUNT_ID;
     if (!empty($account_id)) {
         $r2_endpoint_base = "https://{$account_id}.r2.cloudflarestorage.com";
     }

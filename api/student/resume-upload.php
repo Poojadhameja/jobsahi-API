@@ -99,7 +99,7 @@ try {
     // ✅ Final structured response
     echo json_encode([
         "success" => true,
-        "message" => "Resume uploaded successfully to R2",
+        "message" => "Resume uploaded successfully",
         "data" => [
             "student_id" => $student_id,
             "user_id" => $user_id,

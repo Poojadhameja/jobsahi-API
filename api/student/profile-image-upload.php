@@ -47,8 +47,22 @@ try {
         exit;
     }
 
-    // ✅ Get student profile ID
-    $stmt = $conn->prepare("SELECT id, profile_image FROM student_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
+    // ✅ Check if profile_image column exists
+    $check_column_sql = "SELECT COUNT(*) as count 
+                         FROM information_schema.COLUMNS 
+                         WHERE TABLE_SCHEMA = DATABASE() 
+                         AND TABLE_NAME = 'student_profiles' 
+                         AND COLUMN_NAME = 'profile_image'";
+    $column_check_result = mysqli_query($conn, $check_column_sql);
+    $column_row = mysqli_fetch_assoc($column_check_result);
+    $has_profile_image_column = ($column_row['count'] > 0);
+    
+    // ✅ Get student profile ID (conditionally include profile_image)
+    if ($has_profile_image_column) {
+        $stmt = $conn->prepare("SELECT id, profile_image FROM student_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
+    } else {
+        $stmt = $conn->prepare("SELECT id FROM student_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
+    }
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
     $res = $stmt->get_result();
@@ -61,7 +75,7 @@ try {
     }
 
     $student_id = intval($student['id']);
-    $old_profile_image = $student['profile_image'] ?? null;
+    $old_profile_image = ($has_profile_image_column) ? ($student['profile_image'] ?? null) : null;
 
     // ✅ Delete old profile image from R2 if exists
     if (!empty($old_profile_image)) {

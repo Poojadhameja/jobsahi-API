@@ -13,10 +13,18 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-// ✅ Build SQL based on role
-if ($user_role === 'admin') {
-    $sql = "SELECT 
-                sp.id, 
+// ✅ Check if profile_image column exists
+$check_column_sql = "SELECT COUNT(*) as count 
+                     FROM information_schema.COLUMNS 
+                     WHERE TABLE_SCHEMA = DATABASE() 
+                     AND TABLE_NAME = 'student_profiles' 
+                     AND COLUMN_NAME = 'profile_image'";
+$column_check_result = mysqli_query($conn, $check_column_sql);
+$column_row = mysqli_fetch_assoc($column_check_result);
+$has_profile_image_column = ($column_row['count'] > 0);
+
+// ✅ Build SELECT fields dynamically based on column existence
+$select_fields = "sp.id, 
                 sp.user_id, 
                 u.email,
                 u.user_name,
@@ -26,9 +34,13 @@ if ($user_role === 'admin') {
                 sp.skills, 
                 sp.education, 
                 sp.resume, 
-                sp.certificates,
-                sp.profile_image,
-                sp.socials,
+                sp.certificates";
+                
+if ($has_profile_image_column) {
+    $select_fields .= ", sp.profile_image";
+}
+
+$select_fields .= ", sp.socials,
                 sp.dob, 
                 sp.gender, 
                 sp.job_type, 
@@ -45,43 +57,19 @@ if ($user_role === 'admin') {
                 sp.cgpa,
                 sp.created_at, 
                 sp.updated_at, 
-                sp.deleted_at
+                sp.deleted_at";
+
+// ✅ Build SQL based on role
+if ($user_role === 'admin') {
+    $sql = "SELECT 
+                $select_fields
             FROM student_profiles sp
             INNER JOIN users u ON sp.user_id = u.id
             WHERE sp.deleted_at IS NULL 
             ORDER BY sp.created_at DESC";
 } else {
     $sql = "SELECT 
-                sp.id, 
-                sp.user_id, 
-                u.email,
-                u.user_name,
-                u.phone_number,
-                sp.contact_email,
-                sp.contact_phone,
-                sp.skills, 
-                sp.education, 
-                sp.resume, 
-                sp.certificates,
-                sp.profile_image,
-                sp.socials,
-                sp.dob, 
-                sp.gender, 
-                sp.job_type, 
-                sp.trade, 
-                sp.location, 
-                sp.latitude,
-                sp.longitude,
-                sp.bio,
-                sp.experience,
-                sp.projects,
-                sp.languages,
-                sp.aadhar_number,
-                sp.graduation_year,
-                sp.cgpa,
-                sp.created_at, 
-                sp.updated_at, 
-                sp.deleted_at
+                $select_fields
             FROM student_profiles sp
             INNER JOIN users u ON sp.user_id = u.id
             WHERE sp.deleted_at IS NULL 
@@ -101,6 +89,10 @@ if ($result && mysqli_num_rows($result) > 0) {
     $cert_base   = '/jobsahi-API/api/uploads/student_certificate/';
 
     while ($student = mysqli_fetch_assoc($result)) {
+
+        // ✅ Debug: Log raw database values (remove after debugging)
+        // error_log("DEBUG Profile - Resume: " . ($student['resume'] ?? 'NULL'));
+        // error_log("DEBUG Profile - Certificates: " . ($student['certificates'] ?? 'NULL'));
 
         // ✅ Decode Experience - Multiple experiences array
         $experienceData = [];
@@ -226,9 +218,133 @@ if ($result && mysqli_num_rows($result) > 0) {
             }
         }
 
-        // ✅ Normalize empty/null fields
+        // ✅ Process Resume - Handle R2 URLs and local paths
+        $resumeUrl = null;
+        $resumeRaw = $student['resume'] ?? null;
+        // Debug logging
+        error_log("DEBUG Profile - Resume Raw: " . ($resumeRaw ?? 'NULL'));
+        if (!empty($resumeRaw) && $resumeRaw !== null && trim($resumeRaw) !== '') {
+            $resumeValue = trim($resumeRaw);
+            // Check if it's already an R2 URL or external URL (http/https)
+            if (strpos($resumeValue, 'http://') === 0 || strpos($resumeValue, 'https://') === 0) {
+                // It's already a full URL (R2 or external) - use as is
+                $resumeUrl = $resumeValue;
+            } elseif (strpos($resumeValue, 'r2.dev') !== false || 
+                      strpos($resumeValue, 'r2.cloudflarestorage.com') !== false ||
+                      strpos($resumeValue, 'cloudflarestorage.com') !== false) {
+                // R2 URL without http/https prefix (shouldn't happen but handle it)
+                $resumeUrl = (strpos($resumeValue, 'http') === 0 ? '' : 'https://') . $resumeValue;
+            } else {
+                // Check if it's a local file path
+                $clean_resume = str_replace(["\\", "/uploads/resume/", "./", "../"], "", $resumeValue);
+                $resume_local = __DIR__ . '/../uploads/resume/' . $clean_resume;
+                if (file_exists($resume_local)) {
+                    // Local file exists - build full URL
+                    $resumeUrl = $protocol . $host . $resume_base . $clean_resume;
+                } else {
+                    // Not a local file - assume it's an R2 URL (might be missing http/https)
+                    // Try to construct proper URL
+                    if (strpos($resumeValue, '/') === 0) {
+                        // Absolute path - might be R2 path
+                        $resumeUrl = 'https://' . $resumeValue;
+                    } else {
+                        // Relative path or R2 path - return as is (frontend will handle)
+                        $resumeUrl = $resumeValue;
+                    }
+                }
+            }
+        }
+
+        // ✅ Process Certificates - Handle R2 URLs and convert to array format
+        $certificatesData = [];
+        $certRaw = $student['certificates'] ?? null;
+        // Debug logging
+        error_log("DEBUG Profile - Certificates Raw: " . ($certRaw ?? 'NULL'));
+        if (!empty($certRaw) && $certRaw !== null && trim($certRaw) !== '') {
+            $certValue = trim($certRaw);
+            // Check if it's JSON array
+            $decodedCerts = json_decode($certValue, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decodedCerts)) {
+                // Already JSON array format
+                foreach ($decodedCerts as $cert) {
+                    if (is_string($cert)) {
+                        // Single URL string in array - use as is (already R2 URL)
+                        $certificatesData[] = [
+                            "url" => $cert,
+                            "name" => basename($cert),
+                            "uploadedAt" => date('Y-m-d H:i:s') // Default timestamp
+                        ];
+                    } elseif (is_array($cert) && isset($cert['url'])) {
+                        // Already in object format - ensure all required fields
+                        $certificatesData[] = [
+                            "url" => $cert['url'],
+                            "name" => $cert['name'] ?? basename($cert['url']),
+                            "uploadedAt" => $cert['uploadedAt'] ?? date('Y-m-d H:i:s')
+                        ];
+                    }
+                }
+            } else {
+                // Single URL string - convert to array
+                // Check if it's R2 URL or external URL (http/https)
+                if (strpos($certValue, 'http://') === 0 || strpos($certValue, 'https://') === 0) {
+                    // It's already a full URL (R2 or external) - use as is
+                    $certificatesData[] = [
+                        "url" => $certValue,
+                        "name" => basename($certValue),
+                        "uploadedAt" => date('Y-m-d H:i:s')
+                    ];
+                } elseif (strpos($certValue, 'r2.dev') !== false || 
+                          strpos($certValue, 'r2.cloudflarestorage.com') !== false ||
+                          strpos($certValue, 'cloudflarestorage.com') !== false) {
+                    // R2 URL without http/https prefix
+                    $certUrl = (strpos($certValue, 'http') === 0 ? '' : 'https://') . $certValue;
+                    $certificatesData[] = [
+                        "url" => $certUrl,
+                        "name" => basename($certValue),
+                        "uploadedAt" => date('Y-m-d H:i:s')
+                    ];
+                } else {
+                    // Check if it's a local file path
+                    $clean_cert = str_replace(["\\", "/uploads/student_certificate/", "./", "../"], "", $certValue);
+                    $cert_local = __DIR__ . '/../uploads/student_certificate/' . $clean_cert;
+                    if (file_exists($cert_local)) {
+                        // Local file exists - build full URL
+                        $certUrl = $protocol . $host . $cert_base . $clean_cert;
+                        $certificatesData[] = [
+                            "url" => $certUrl,
+                            "name" => basename($clean_cert),
+                            "uploadedAt" => date('Y-m-d H:i:s')
+                        ];
+                    } else {
+                        // Not a local file - assume it's an R2 URL (might be missing http/https)
+                        // Try to construct proper URL
+                        if (strpos($certValue, '/') === 0) {
+                            // Absolute path - might be R2 path
+                            $certUrl = 'https://' . $certValue;
+                        } else {
+                            // Relative path or R2 path - return as is (frontend will handle)
+                            $certUrl = $certValue;
+                        }
+                        $certificatesData[] = [
+                            "url" => $certUrl,
+                            "name" => basename($certValue),
+                            "uploadedAt" => date('Y-m-d H:i:s')
+                        ];
+                    }
+                }
+            }
+        }
+        
+        // Debug logging for processed values
+        error_log("DEBUG Profile - Resume URL: " . ($resumeUrl ?? 'NULL'));
+        error_log("DEBUG Profile - Certificates Count: " . count($certificatesData));
+        if (!empty($certificatesData)) {
+            error_log("DEBUG Profile - First Certificate URL: " . ($certificatesData[0]['url'] ?? 'NULL'));
+        }
+
+        // ✅ Normalize empty/null fields (excluding resume and certificates - already processed)
         foreach ([
-            'resume', 'certificates', 'dob', 'gender', 'job_type', 'trade', 'location',
+            'dob', 'gender', 'job_type', 'trade', 'location',
             'bio', 'aadhar_number'
         ] as $field) {
             if (!isset($student[$field]) || $student[$field] === null) {
@@ -265,8 +381,8 @@ if ($result && mysqli_num_rows($result) > 0) {
                 "languages" => $languagesData  // ✅ Array format: ["Hindi", "English", "Gujarati"]
             ],
             "documents" => [
-                "resume" => $student['resume'],
-                "certificates" => $student['certificates'],
+                "resume" => $resumeUrl,  // ✅ Processed resume URL (R2 or local)
+                "certificates" => $certificatesData,  // ✅ Array of certificate objects
                 "profile_image" => $student['profile_image'] ?? null,
                 "aadhar_number" => $student['aadhar_number']
             ],

@@ -15,6 +15,24 @@ try {
         exit;
     }
 
+    // ✅ Check if profile_image column exists
+    $check_column_sql = "SELECT COUNT(*) as count 
+                         FROM information_schema.COLUMNS 
+                         WHERE TABLE_SCHEMA = DATABASE() 
+                         AND TABLE_NAME = 'student_profiles' 
+                         AND COLUMN_NAME = 'profile_image'";
+    $column_check_result = mysqli_query($conn, $check_column_sql);
+    $column_row = mysqli_fetch_assoc($column_check_result);
+    $has_profile_image_column = ($column_row['count'] > 0);
+    
+    if (!$has_profile_image_column) {
+        echo json_encode([
+            "success" => false,
+            "message" => "Profile image column does not exist. Please run migration script first: /api/add_profile_image_column.php"
+        ]);
+        exit;
+    }
+    
     // ✅ Get student profile ID
     $stmt = $conn->prepare("SELECT id, profile_image FROM student_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
     $stmt->bind_param("i", $user_id);
