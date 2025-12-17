@@ -28,7 +28,53 @@ try {
 
     // Load institute_id fresh each time
     $institute_id = 0;
-    if ($role === 'institute') {
+    if ($role === 'admin') {
+        // Admin impersonation: Get institute_id from request parameters
+        $provided_id = 0;
+        if (isset($_GET['institute_id']) && !empty($_GET['institute_id'])) {
+            $provided_id = intval($_GET['institute_id']);
+        } elseif (isset($_GET['user_id']) && !empty($_GET['user_id'])) {
+            $provided_id = intval($_GET['user_id']);
+        } elseif (isset($_GET['uid']) && !empty($_GET['uid'])) {
+            $provided_id = intval($_GET['uid']);
+        } elseif (isset($_GET['instituteId']) && !empty($_GET['instituteId'])) {
+            $provided_id = intval($_GET['instituteId']);
+        }
+
+        if ($provided_id <= 0) {
+            echo json_encode(["status" => false, "message" => "Institute ID required for admin access"]);
+            exit;
+        }
+
+        // Try to find institute_id - first check if it's already an institute_profiles.id
+        $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE id = ? LIMIT 1");
+        $stmt->bind_param("i", $provided_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $inst = $res->fetch_assoc();
+        $stmt->close();
+
+        if ($inst) {
+            // Found by institute_profiles.id
+            $institute_id = intval($inst['id']);
+        } else {
+            // Not found by id, try to find by user_id (convert user_id to institute_id)
+            $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
+            $stmt->bind_param("i", $provided_id);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            $inst = $res->fetch_assoc();
+            $stmt->close();
+
+            if ($inst) {
+                // Found by user_id
+                $institute_id = intval($inst['id']);
+            } else {
+                echo json_encode(["status" => false, "message" => "Institute not found"]);
+                exit;
+            }
+        }
+    } elseif ($role === 'institute') {
         $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
         $stmt->bind_param("i", $user_id);
         $stmt->execute();
@@ -105,12 +151,12 @@ try {
 
         WHERE sp.deleted_at IS NULL 
           AND u.status = 'active'
-          " . ($role === 'institute' ? "AND c.institute_id = ?" : "") . "
+          " . (($role === 'institute' || ($role === 'admin' && $institute_id > 0)) ? "AND c.institute_id = ?" : "") . "
 
         ORDER BY u.user_name ASC, c.title ASC
     ";
 
-    if ($role === 'institute') {
+    if ($role === 'institute' || ($role === 'admin' && $institute_id > 0)) {
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("i", $institute_id);
     } else {
@@ -127,8 +173,8 @@ try {
 
     while ($row = $result->fetch_assoc()) {
 
-        // For institute role: Skip students not enrolled in their courses
-        if ($role === 'institute') {
+        // For institute/admin role: Skip students not enrolled in their courses
+        if ($role === 'institute' || ($role === 'admin' && $institute_id > 0)) {
             // Skip if course_id is null or institute_id doesn't match
             if ($row['course_id'] === null || $row['institute_id'] != $institute_id) {
                 continue;
@@ -170,7 +216,7 @@ try {
     // ---------------------------------------------------------
     // 🔢 Count total courses
     // ---------------------------------------------------------
-    if ($role === 'institute') {
+    if ($role === 'institute' || ($role === 'admin' && $institute_id > 0)) {
         $stmtC = $conn->prepare("
             SELECT COUNT(*) AS total_courses 
             FROM courses 

@@ -36,13 +36,73 @@ try {
         LEFT JOIN faculty_users f ON b.instructor_id = f.id
     ";
 
+    // Get institute_id for filtering (admin impersonation support)
+    $institute_id = 0;
+    if ($role === 'admin') {
+        // Admin impersonation: Get institute_id from request parameters
+        $provided_id = 0;
+        if (isset($_GET['institute_id']) && !empty($_GET['institute_id'])) {
+            $provided_id = intval($_GET['institute_id']);
+        } elseif (isset($_GET['user_id']) && !empty($_GET['user_id'])) {
+            $provided_id = intval($_GET['user_id']);
+        } elseif (isset($_GET['uid']) && !empty($_GET['uid'])) {
+            $provided_id = intval($_GET['uid']);
+        } elseif (isset($_GET['instituteId']) && !empty($_GET['instituteId'])) {
+            $provided_id = intval($_GET['instituteId']);
+        }
+
+        if ($provided_id > 0) {
+            // Try to find institute_id - first check if it's already an institute_profiles.id
+            $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE id = ? LIMIT 1");
+            $stmt->bind_param("i", $provided_id);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            $inst = $res->fetch_assoc();
+            $stmt->close();
+
+            if ($inst) {
+                // Found by institute_profiles.id
+                $institute_id = intval($inst['id']);
+            } else {
+                // Not found by id, try to find by user_id (convert user_id to institute_id)
+                $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
+                $stmt->bind_param("i", $provided_id);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $inst = $res->fetch_assoc();
+                $stmt->close();
+
+                if ($inst) {
+                    // Found by user_id
+                    $institute_id = intval($inst['id']);
+                }
+                // If not found, $institute_id remains 0 (admin can see all batches)
+            }
+        }
+    } elseif ($role === 'institute') {
+        // Get institute_id from logged-in user
+        $user_id = intval($decoded['user_id'] ?? ($decoded['id'] ?? 0));
+        $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        if ($row = $res->fetch_assoc()) {
+            $institute_id = intval($row['id']);
+        }
+        $stmt->close();
+    }
+
     // Conditions
     $where = [];
 
     if ($batch_id > 0) {
         $where[] = "b.id = ?";
+    } elseif ($role === 'institute' || ($role === 'admin' && $institute_id > 0)) {
+        // Institute or admin with institute_id: filter by institute and approved batches
+        $where[] = "c.institute_id = ?";
+        $where[] = "b.admin_action = 'approved'";
     } elseif ($role === 'institute') {
-        // institute ko sirf approved batches
+        // institute ko sirf approved batches (fallback)
         $where[] = "b.admin_action = 'approved'";
     }
 
@@ -54,8 +114,11 @@ try {
 
     $stmt = $conn->prepare($sql);
 
+    // Bind parameters
     if ($batch_id > 0) {
         $stmt->bind_param("i", $batch_id);
+    } elseif (($role === 'institute' || ($role === 'admin' && $institute_id > 0)) && $institute_id > 0) {
+        $stmt->bind_param("i", $institute_id);
     }
 
     $stmt->execute();

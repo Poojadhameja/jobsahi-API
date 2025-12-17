@@ -5,12 +5,12 @@ require_once '../db.php';
 
 header('Content-Type: application/json');
 
-// ✅ Authenticate JWT (only institute)
-$decoded   = authenticateJWT(['institute']);
+// ✅ Authenticate JWT (allow institute and admin)
+$decoded   = authenticateJWT(['institute','admin']);
 $user_id   = intval($decoded['user_id'] ?? 0);
 $user_role = strtolower($decoded['role'] ?? '');
 
-if ($user_id <= 0 || $user_role !== 'institute') {
+if ($user_id <= 0 || !in_array($user_role, ['institute', 'admin'])) {
     echo json_encode([
         "status"  => false,
         "message" => "Unauthorized access"
@@ -22,23 +22,79 @@ try {
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
     // ------------------------------------------------------------------
-    // 1️⃣ Get institute_id for this logged-in institute user
+    // 1️⃣ Get institute_id based on role
     // ------------------------------------------------------------------
-    $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $inst = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
+    $institute_id = 0;
 
-    if (!$inst) {
-        echo json_encode([
-            "status"  => false,
-            "message" => "Institute profile not found for this user"
-        ]);
-        exit;
+    if ($user_role === 'admin') {
+        // Admin impersonation: Get institute_id from request parameters
+        // Check multiple possible parameter names
+        $provided_id = 0;
+        if (isset($_GET['institute_id']) && !empty($_GET['institute_id'])) {
+            $provided_id = intval($_GET['institute_id']);
+        } elseif (isset($_GET['user_id']) && !empty($_GET['user_id'])) {
+            $provided_id = intval($_GET['user_id']);
+        } elseif (isset($_GET['uid']) && !empty($_GET['uid'])) {
+            $provided_id = intval($_GET['uid']);
+        } elseif (isset($_GET['instituteId']) && !empty($_GET['instituteId'])) {
+            $provided_id = intval($_GET['instituteId']);
+        }
+
+        if ($provided_id <= 0) {
+            echo json_encode([
+                "status"  => false,
+                "message" => "Institute ID required for admin access. Please provide institute_id parameter."
+            ]);
+            exit;
+        }
+
+        // Try to find institute_id - first check if it's already an institute_profiles.id
+        $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE id = ? LIMIT 1");
+        $stmt->bind_param("i", $provided_id);
+        $stmt->execute();
+        $inst = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if ($inst) {
+            // Found by institute_profiles.id
+            $institute_id = intval($inst['id']);
+        } else {
+            // Not found by id, try to find by user_id (convert user_id to institute_id)
+            $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
+            $stmt->bind_param("i", $provided_id);
+            $stmt->execute();
+            $inst = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+
+            if ($inst) {
+                // Found by user_id
+                $institute_id = intval($inst['id']);
+            } else {
+                echo json_encode([
+                    "status"  => false,
+                    "message" => "Institute not found. Please check if the institute profile exists."
+                ]);
+                exit;
+            }
+        }
+    } else {
+        // Institute role: Get institute_id from logged-in user
+        $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $inst = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$inst) {
+            echo json_encode([
+                "status"  => false,
+                "message" => "Institute profile not found for this user"
+            ]);
+            exit;
+        }
+
+        $institute_id = intval($inst['id']);
     }
-
-    $institute_id = intval($inst['id']);
 
     // ------------------------------------------------------------------
     // 2️⃣ Summary Cards

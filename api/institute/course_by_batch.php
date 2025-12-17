@@ -10,11 +10,57 @@ try {
     $decoded = authenticateJWT(['admin', 'institute']);
     $role = strtolower($decoded['role'] ?? '');
 
-    // Get institute_id for institute role
+    // Get institute_id based on role
     $user_id = intval($decoded['user_id'] ?? ($decoded['id'] ?? 0));
     $institute_id = 0;
 
-    if ($role === 'institute') {
+    if ($role === 'admin') {
+        // Admin impersonation: Get institute_id from request parameters
+        $provided_id = 0;
+        if (isset($_GET['institute_id']) && !empty($_GET['institute_id'])) {
+            $provided_id = intval($_GET['institute_id']);
+        } elseif (isset($_GET['user_id']) && !empty($_GET['user_id'])) {
+            $provided_id = intval($_GET['user_id']);
+        } elseif (isset($_GET['uid']) && !empty($_GET['uid'])) {
+            $provided_id = intval($_GET['uid']);
+        } elseif (isset($_GET['instituteId']) && !empty($_GET['instituteId'])) {
+            $provided_id = intval($_GET['instituteId']);
+        }
+
+        if ($provided_id <= 0) {
+            // Admin can view all courses if no institute_id provided
+            $institute_id = 0;
+        } else {
+            // Try to find institute_id - first check if it's already an institute_profiles.id
+            $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE id = ? LIMIT 1");
+            $stmt->bind_param("i", $provided_id);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            $inst = $res->fetch_assoc();
+            $stmt->close();
+
+            if ($inst) {
+                // Found by institute_profiles.id
+                $institute_id = intval($inst['id']);
+            } else {
+                // Not found by id, try to find by user_id (convert user_id to institute_id)
+                $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
+                $stmt->bind_param("i", $provided_id);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $inst = $res->fetch_assoc();
+                $stmt->close();
+
+                if ($inst) {
+                    // Found by user_id
+                    $institute_id = intval($inst['id']);
+                } else {
+                    echo json_encode(["status" => false, "message" => "Institute not found"]);
+                    exit;
+                }
+            }
+        }
+    } elseif ($role === 'institute') {
         $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
         $stmt->bind_param("i", $user_id);
         $stmt->execute();
@@ -23,11 +69,11 @@ try {
             $institute_id = intval($row['id']);
         }
         $stmt->close();
-    }
 
-    if ($role === 'institute' && $institute_id <= 0) {
-        echo json_encode(["status" => false, "message" => "Institute ID missing or invalid in token"]);
-        exit;
+        if ($institute_id <= 0) {
+            echo json_encode(["status" => false, "message" => "Institute ID missing or invalid in token"]);
+            exit;
+        }
     }
 
     // Detect Overview or Details view
@@ -41,10 +87,10 @@ try {
     // ======================================================
     if ($course_id === 0) {
 
-        // ✅ Role-based filtering: Institute sees ALL their courses, Admin sees all approved courses
-        if ($role === 'institute') {
+        // ✅ Role-based filtering: Institute sees ALL their courses, Admin sees all approved courses (or specific institute if institute_id provided)
+        if ($role === 'institute' || ($role === 'admin' && $institute_id > 0)) {
             $courseQuery = "
-                SELECT id AS course_id, title AS course_title, instructor_name, duration, fee, admin_action, certification_allowed
+                SELECT id AS course_id, title AS course_title, instructor_name, duration, fee, admin_action, certification_allowed, batch_limit
                 FROM courses
                 WHERE institute_id = ?
                 ORDER BY created_at DESC
@@ -52,9 +98,9 @@ try {
             $courseStmt = $conn->prepare($courseQuery);
             $courseStmt->bind_param("i", $institute_id);
         } else {
-            // Admin sees all approved courses
+            // Admin sees all approved courses (when no institute_id provided)
             $courseQuery = "
-                SELECT id AS course_id, title AS course_title, instructor_name, duration, fee, admin_action, certification_allowed
+                SELECT id AS course_id, title AS course_title, instructor_name, duration, fee, admin_action, certification_allowed, batch_limit
                 FROM courses
                 WHERE admin_action = 'approved'
                 ORDER BY created_at DESC
@@ -131,7 +177,8 @@ try {
                 "overall_progress" => $overall_progress,
                 "total_students"   => $total_students,
                 "admin_action"     => $course['admin_action'],
-                "certification_allowed" => (intval($course['certification_allowed']) === 1) ? "yes" : "no"
+                "certification_allowed" => (intval($course['certification_allowed']) === 1) ? "yes" : "no",
+                "batch_limit"      => isset($course['batch_limit']) ? intval($course['batch_limit']) : null
             ];
             
             $batchStmt->close(); // Close batch statement after processing each course
@@ -158,7 +205,7 @@ try {
         if ($role === 'institute') {
             $courseQuery = "
                 SELECT id AS course_id, title AS course_title, instructor_name,
-                       duration, description, fee, admin_action, certification_allowed
+                       duration, description, fee, admin_action, certification_allowed, batch_limit
                 FROM courses
                 WHERE id = ? AND institute_id = ?
                 LIMIT 1
@@ -169,7 +216,7 @@ try {
             // Admin sees only approved courses
             $courseQuery = "
                 SELECT id AS course_id, title AS course_title, instructor_name,
-                       duration, description, fee, admin_action, certification_allowed
+                       duration, description, fee, admin_action, certification_allowed, batch_limit
                 FROM courses
                 WHERE id = ? AND admin_action = 'approved'
                 LIMIT 1
@@ -204,11 +251,13 @@ try {
                 b.end_date,
                 b.instructor_id,
                 b.admin_action,
-                COUNT(DISTINCT sb.student_id) AS enrolled_students
+                COUNT(DISTINCT sb.student_id) AS enrolled_students,
+                COALESCE(c.batch_limit, NULL) AS batch_limit
             FROM batches b
             LEFT JOIN student_batches sb ON b.id = sb.batch_id
+            LEFT JOIN courses c ON b.course_id = c.id
             WHERE b.course_id = ?
-            GROUP BY b.id
+            GROUP BY b.id, b.name, b.batch_time_slot, b.start_date, b.end_date, b.instructor_id, b.admin_action, c.batch_limit
             ORDER BY b.start_date DESC
         ";
 
@@ -305,6 +354,7 @@ try {
                 "end_date"          => $batch['end_date'],
                 "status"            => ucfirst($batch['admin_action']),
                 "enrolled_students" => intval($batch['enrolled_students']),
+                "batch_limit"       => isset($batch['batch_limit']) ? intval($batch['batch_limit']) : null,
                 "assigned_instructor" => $assigned_instructor,
                 "students"          => $students
             ];

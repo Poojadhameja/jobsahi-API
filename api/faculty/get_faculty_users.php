@@ -15,9 +15,48 @@ $user_role = strtolower($decoded['role']);
 $institute_id = null;
 
 if ($user_role === 'admin') {
-
+    // Admin impersonation: Get institute_id from request parameters
+    // Check multiple possible parameter names
+    $provided_id = 0;
     if (isset($_GET['institute_id']) && !empty($_GET['institute_id'])) {
-        $institute_id = intval($_GET['institute_id']);
+        $provided_id = intval($_GET['institute_id']);
+    } elseif (isset($_GET['user_id']) && !empty($_GET['user_id'])) {
+        $provided_id = intval($_GET['user_id']);
+    } elseif (isset($_GET['uid']) && !empty($_GET['uid'])) {
+        $provided_id = intval($_GET['uid']);
+    } elseif (isset($_GET['instituteId']) && !empty($_GET['instituteId'])) {
+        $provided_id = intval($_GET['instituteId']);
+    }
+
+    if ($provided_id > 0) {
+        // Try to find institute_id - first check if it's already an institute_profiles.id
+        $check_sql = "SELECT id FROM institute_profiles WHERE id = ? LIMIT 1";
+        $check_stmt = mysqli_prepare($conn, $check_sql);
+        mysqli_stmt_bind_param($check_stmt, "i", $provided_id);
+        mysqli_stmt_execute($check_stmt);
+        $check_result = mysqli_stmt_get_result($check_stmt);
+        $check_row = mysqli_fetch_assoc($check_result);
+        mysqli_stmt_close($check_stmt);
+
+        if ($check_row) {
+            // Found by institute_profiles.id
+            $institute_id = intval($check_row['id']);
+        } else {
+            // Not found by id, try to find by user_id (convert user_id to institute_id)
+            $fetch_sql = "SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1";
+            $fetch_stmt = mysqli_prepare($conn, $fetch_sql);
+            mysqli_stmt_bind_param($fetch_stmt, "i", $provided_id);
+            mysqli_stmt_execute($fetch_stmt);
+            $fetch_result = mysqli_stmt_get_result($fetch_stmt);
+
+            if ($row = mysqli_fetch_assoc($fetch_result)) {
+                // Found by user_id
+                $institute_id = intval($row['id']);
+            } else {
+                $institute_id = null;
+            }
+            mysqli_stmt_close($fetch_stmt);
+        }
     } else {
         // Optional: try to fetch institute_id from users table
         $fetch_institute_sql = "SELECT institute_id FROM users WHERE id = ?";

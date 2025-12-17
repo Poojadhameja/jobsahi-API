@@ -20,10 +20,52 @@ try {
         exit;
     }
 
-    // Admin can filter by ?institute_id=
-    $institute_id = isset($_GET['institute_id']) ? intval($_GET['institute_id']) : 0;
+    // Admin can filter by ?institute_id=, ?user_id=, ?uid=, or ?instituteId=
+    $provided_id = 0;
+    if (isset($_GET['institute_id']) && !empty($_GET['institute_id'])) {
+        $provided_id = intval($_GET['institute_id']);
+    } elseif (isset($_GET['user_id']) && !empty($_GET['user_id'])) {
+        $provided_id = intval($_GET['user_id']);
+    } elseif (isset($_GET['uid']) && !empty($_GET['uid'])) {
+        $provided_id = intval($_GET['uid']);
+    } elseif (isset($_GET['instituteId']) && !empty($_GET['instituteId'])) {
+        $provided_id = intval($_GET['instituteId']);
+    }
 
-    if ($user_role === 'admin' && $institute_id > 0) {
+    if ($user_role === 'admin' && $provided_id > 0) {
+        // Try to find institute_id - first check if it's already an institute_profiles.id
+        $check_stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE id = ? LIMIT 1");
+        $check_stmt->bind_param("i", $provided_id);
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
+        $check_row = $check_result->fetch_assoc();
+        $check_stmt->close();
+
+        if ($check_row) {
+            // Found by institute_profiles.id
+            $institute_id = intval($check_row['id']);
+        } else {
+            // Not found by id, try to find by user_id (convert user_id to institute_id)
+            $check_stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
+            $check_stmt->bind_param("i", $provided_id);
+            $check_stmt->execute();
+            $check_result = $check_stmt->get_result();
+            $check_row = $check_result->fetch_assoc();
+            $check_stmt->close();
+
+            if ($check_row) {
+                // Found by user_id
+                $institute_id = intval($check_row['id']);
+            } else {
+                // Not found - return empty
+                echo json_encode([
+                    "success" => false,
+                    "message" => "Institute not found"
+                ]);
+                exit;
+            }
+        }
+
         // Admin fetch specific institute
         $sql = "SELECT p.*, u.email, u.user_name, u.phone_number 
                 FROM institute_profiles p
