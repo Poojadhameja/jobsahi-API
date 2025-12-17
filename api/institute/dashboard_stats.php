@@ -20,10 +20,6 @@ if ($user_id <= 0 || !in_array($user_role, ['institute', 'admin'])) {
 
 try {
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
-
-    // ------------------------------------------------------------------
-    // 1️⃣ Get institute_id based on role
-    // ------------------------------------------------------------------
     $institute_id = 0;
 
     if ($user_role === 'admin') {

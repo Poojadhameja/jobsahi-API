@@ -89,6 +89,7 @@ if ($job_id > 0) {
             j.category_id,
             jc.category_name,
             rp.company_name,
+            rp.company_logo,
             ci.person_name,
             ci.phone,
             ci.additional_contact,
@@ -129,6 +130,33 @@ if ($job_id > 0) {
     }
 
     $job = $result->fetch_assoc();
+
+    // ✅ Handle company_logo URL conversion (R2 support + local files)
+    $company_logo = $job['company_logo'] ?? "";
+    if (!empty($company_logo)) {
+        // Check if it's already an R2 URL
+        if (strpos($company_logo, 'http') === 0 && 
+            (strpos($company_logo, 'r2.dev') !== false || 
+             strpos($company_logo, 'r2.cloudflarestorage.com') !== false)) {
+            // Already R2 URL - use directly
+            $job['company_logo'] = $company_logo;
+        } else {
+            // Local file path - convert to full URL
+            $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+            $host = $_SERVER['HTTP_HOST'];
+            $logo_base = '/jobsahi-API/api/uploads/recruiter_logo/';
+            $clean_logo = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $company_logo);
+            $local_logo_path = __DIR__ . '/../uploads/recruiter_logo/' . $clean_logo;
+            if (file_exists($local_logo_path)) {
+                $job['company_logo'] = $protocol . $host . $logo_base . $clean_logo;
+            } else {
+                // File doesn't exist locally, keep original or set to empty
+                $job['company_logo'] = $company_logo;
+            }
+        }
+    } else {
+        $job['company_logo'] = "";
+    }
 
     // Check saved/applied for student
     if ($userRole === 'student' && $student_profile_id) {
@@ -238,6 +266,7 @@ $sql = "
         j.category_id,
         jc.category_name,
         rp.company_name,
+        rp.company_logo,
         (SELECT COUNT(*) FROM job_views v WHERE v.job_id = j.id) AS views,
 
         (
@@ -305,8 +334,37 @@ if (!empty($params)) {
 $stmt->execute();
 $result = $stmt->get_result();
 
+// ✅ Setup base URL for company logos
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+$host = $_SERVER['HTTP_HOST'];
+$logo_base = '/jobsahi-API/api/uploads/recruiter_logo/';
+
 $jobs = [];
 while ($row = $result->fetch_assoc()) {
+    // ✅ Handle company_logo URL conversion (R2 support + local files)
+    $company_logo = $row['company_logo'] ?? "";
+    if (!empty($company_logo)) {
+        // Check if it's already an R2 URL
+        if (strpos($company_logo, 'http') === 0 && 
+            (strpos($company_logo, 'r2.dev') !== false || 
+             strpos($company_logo, 'r2.cloudflarestorage.com') !== false)) {
+            // Already R2 URL - use directly
+            $row['company_logo'] = $company_logo;
+        } else {
+            // Local file path - convert to full URL
+            $clean_logo = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $company_logo);
+            $local_logo_path = __DIR__ . '/../uploads/recruiter_logo/' . $clean_logo;
+            if (file_exists($local_logo_path)) {
+                $row['company_logo'] = $protocol . $host . $logo_base . $clean_logo;
+            } else {
+                // File doesn't exist locally, keep original or set to empty
+                $row['company_logo'] = $company_logo;
+            }
+        }
+    } else {
+        $row['company_logo'] = "";
+    }
+    
     $jobs[] = $row;
 }
 

@@ -77,7 +77,8 @@ $sql = "SELECT
             j.salary_min,
             j.salary_max,
             a.applied_at,
-            rp.company_name
+            rp.company_name,
+            rp.company_logo
         FROM interviews i
         INNER JOIN applications a ON i.application_id = a.id
         INNER JOIN jobs j ON a.job_id = j.id
@@ -128,10 +129,39 @@ $stmt->bind_param($types, ...$params);
 $stmt->execute();
 $result = $stmt->get_result();
 
+// ✅ Setup base URL for company logos
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+$host = $_SERVER['HTTP_HOST'];
+$logo_base = '/jobsahi-API/api/uploads/recruiter_logo/';
+
 // ---- Fetch Results - Minimal data for card display ----
 // Interview-specific fields in separate object to avoid confusion
 $interviews = [];
 while ($row = $result->fetch_assoc()) {
+    // ✅ Handle company_logo URL conversion (R2 support + local files)
+    $company_logo = $row['company_logo'] ?? "";
+    if (!empty($company_logo)) {
+        // Check if it's already an R2 URL
+        if (strpos($company_logo, 'http') === 0 && 
+            (strpos($company_logo, 'r2.dev') !== false || 
+             strpos($company_logo, 'r2.cloudflarestorage.com') !== false)) {
+            // Already R2 URL - use directly
+            $row['company_logo'] = $company_logo;
+        } else {
+            // Local file path - convert to full URL
+            $clean_logo = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $company_logo);
+            $local_logo_path = __DIR__ . '/../uploads/recruiter_logo/' . $clean_logo;
+            if (file_exists($local_logo_path)) {
+                $row['company_logo'] = $protocol . $host . $logo_base . $clean_logo;
+            } else {
+                // File doesn't exist locally, keep original or set to empty
+                $row['company_logo'] = $company_logo;
+            }
+        }
+    } else {
+        $row['company_logo'] = "";
+    }
+    
     $interview = [
         "interview" => [
             "id" => (int)$row['interview_id'],
@@ -150,7 +180,8 @@ while ($row = $result->fetch_assoc()) {
             "salary_max" => $row['salary_max'] ? floatval($row['salary_max']) : null,
             "applied_at" => $row['applied_at']
         ],
-        "company_name" => $row['company_name']
+        "company_name" => $row['company_name'],
+        "company_logo" => $row['company_logo']
     ];
     
     $interviews[] = $interview;

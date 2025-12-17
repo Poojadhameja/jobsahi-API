@@ -3,7 +3,7 @@ require_once '../cors.php';
 require_once '../db.php';
 
 // ✅ Authenticate recruiter
-$decoded = authenticateJWT(['recruiter', 'admin']);
+$decoded = authenticateJWT(['recruiter','admin']);
 $role = strtolower($decoded['role'] ?? '');
 $user_id = $decoded['user_id'] ?? null;
 
@@ -12,9 +12,23 @@ if (!$user_id) {
     echo json_encode(["message" => "Unauthorized", "status" => false]);
     exit;
 }
+if ($role === 'admin') {
+    // Admin impersonation - GET params se recruiter_id lo
+    $impersonated_user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : 
+                           (isset($_GET['recruiter_id']) ? intval($_GET['recruiter_id']) : 
+                           (isset($_GET['uid']) ? intval($_GET['uid']) : null));
+    
+    if ($impersonated_user_id) {
+        $user_id = $impersonated_user_id; // Admin ke liye recruiter ka user_id use karo
+    } else {
+        http_response_code(400);
+        echo json_encode(["message" => "Recruiter ID required for admin impersonation", "status" => false]);
+        exit;
+    }
+}
 
 try {
-    if ($role !== 'recruiter') {
+    if ($role !== 'recruiter' && $role !== 'admin') {
         http_response_code(403);
         echo json_encode(["message" => "Access denied", "status" => false]);
         exit;

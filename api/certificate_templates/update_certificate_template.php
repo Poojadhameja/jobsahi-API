@@ -40,12 +40,72 @@ if ($user_role === 'institute') {
     $stmt->close();
 
 } elseif ($user_role === 'admin') {
+    // Admin impersonation: Get institute_id from request parameters
+    // For PUT requests, check both JSON body and FormData
+    $provided_id = 0;
+    
+    // Try to get from JSON body first (for JSON PUT requests)
     $raw = file_get_contents("php://input");
     $json = json_decode($raw, true);
+    
+    if (json_last_error() === JSON_ERROR_NONE && !empty($json)) {
+        // JSON body exists
+        if (isset($json['institute_id']) && !empty($json['institute_id'])) {
+            $provided_id = intval($json['institute_id']);
+        } elseif (isset($json['user_id']) && !empty($json['user_id'])) {
+            $provided_id = intval($json['user_id']);
+        } elseif (isset($json['uid']) && !empty($json['uid'])) {
+            $provided_id = intval($json['uid']);
+        } elseif (isset($json['instituteId']) && !empty($json['instituteId'])) {
+            $provided_id = intval($json['instituteId']);
+        }
+    }
+    
+    // If not found in JSON, try FormData (for multipart PUT requests)
+    if ($provided_id <= 0) {
+        if (isset($_POST['institute_id']) && !empty($_POST['institute_id'])) {
+            $provided_id = intval($_POST['institute_id']);
+        } elseif (isset($_POST['user_id']) && !empty($_POST['user_id'])) {
+            $provided_id = intval($_POST['user_id']);
+        } elseif (isset($_POST['uid']) && !empty($_POST['uid'])) {
+            $provided_id = intval($_POST['uid']);
+        } elseif (isset($_POST['instituteId']) && !empty($_POST['instituteId'])) {
+            $provided_id = intval($_POST['instituteId']);
+        }
+    }
 
-    if (json_last_error() !== JSON_ERROR_NONE || empty($json['institute_id'])) {
-        echo json_encode(["status" => false, "message" => "Admin must send institute_id in PUT body"]);
+    if ($provided_id <= 0) {
+        echo json_encode(["status" => false, "message" => "Institute ID required"]);
         exit;
+    }
+
+    // Try to find institute_id - first check if it's already an institute_profiles.id
+    $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE id = ? LIMIT 1");
+    $stmt->bind_param("i", $provided_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $inst = $res->fetch_assoc();
+    $stmt->close();
+
+    if ($inst) {
+        // Found by institute_profiles.id
+        $institute_id = intval($inst['id']);
+    } else {
+        // Not found by id, try to find by user_id (convert user_id to institute_id)
+        $stmt = $conn->prepare("SELECT id FROM institute_profiles WHERE user_id = ? LIMIT 1");
+        $stmt->bind_param("i", $provided_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $inst = $res->fetch_assoc();
+        $stmt->close();
+
+        if ($inst) {
+            // Found by user_id
+            $institute_id = intval($inst['id']);
+        } else {
+            echo json_encode(["status" => false, "message" => "Institute not found"]);
+            exit;
+        }
     }
 
     $institute_id = intval($json['institute_id']);

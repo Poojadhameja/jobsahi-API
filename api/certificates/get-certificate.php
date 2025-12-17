@@ -14,6 +14,35 @@ $role    = strtolower($decoded['role']);
 // Optional filter ?id=
 $certificate_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
+// Helper function to get media URL (handles both R2 URLs and local paths)
+function getMediaURL($file) {
+    if (empty($file)) return null;
+    
+    // If it's already a full URL (R2 or external), return as-is
+    if (filter_var($file, FILTER_VALIDATE_URL)) {
+        return $file;
+    }
+    
+    // Clean local path
+    $clean = str_replace([
+        "../", "./", 
+        "/uploads/institute_certificate_templates/",
+        "\\"
+    ], "", $file);
+    
+    $localPath = __DIR__ . '/../uploads/institute_certificate_templates/' . $clean;
+    
+    // If file exists locally, return local URL
+    if (file_exists($localPath)) {
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+        $host = $_SERVER['HTTP_HOST'];
+        return $protocol . $host . "/jobsahi-API/api/uploads/institute_certificate_templates/" . $clean;
+    }
+    
+    // Return null if file doesn't exist
+    return null;
+}
+
 $sql = "
     SELECT 
         c.id AS certificate_id,
@@ -21,13 +50,18 @@ $sql = "
         c.issue_date,
         c.admin_action,
         c.created_at,
+        c.certificate_template_id,
         u.user_name AS student_name,
         u.email,
-        co.title AS course_title
+        co.title AS course_title,
+        ct.logo AS template_logo,
+        ct.seal AS template_seal,
+        ct.signature AS template_signature
     FROM certificates c
     JOIN student_profiles s ON c.student_id = s.id
     JOIN users u ON s.user_id = u.id
     JOIN courses co ON co.id = c.course_id
+    LEFT JOIN certificate_templates ct ON ct.id = c.certificate_template_id
     WHERE c.admin_action = 'approved'
 ";
 
@@ -55,6 +89,11 @@ while ($row = $res->fetch_assoc()) {
         ],
         "course"         => [
             "title" => $row['course_title']
+        ],
+        "template"       => [
+            "logo"      => getMediaURL($row['template_logo']),
+            "seal"      => getMediaURL($row['template_seal']),
+            "signature" => getMediaURL($row['template_signature'])
         ]
     ];
 }
