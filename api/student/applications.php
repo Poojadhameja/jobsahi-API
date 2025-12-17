@@ -61,7 +61,8 @@ $sql = "SELECT
             j.job_type,
             j.salary_min,
             j.salary_max,
-            rp.company_name
+            rp.company_name,
+            rp.company_logo
         FROM applications a
         JOIN jobs j ON a.job_id = j.id
         LEFT JOIN recruiter_profiles rp ON j.recruiter_id = rp.id
@@ -120,9 +121,38 @@ if (!empty($params)) mysqli_stmt_bind_param($stmt, $types, ...$params);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 
+// ✅ Setup base URL for company logos
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+$host = $_SERVER['HTTP_HOST'];
+$logo_base = '/jobsahi-API/api/uploads/recruiter_logo/';
+
 // ---- Collect ----
 $applications = [];
 while ($row = mysqli_fetch_assoc($result)) {
+    // ✅ Handle company_logo URL conversion (R2 support + local files)
+    $company_logo = $row['company_logo'] ?? "";
+    if (!empty($company_logo)) {
+        // Check if it's already an R2 URL
+        if (strpos($company_logo, 'http') === 0 && 
+            (strpos($company_logo, 'r2.dev') !== false || 
+             strpos($company_logo, 'r2.cloudflarestorage.com') !== false)) {
+            // Already R2 URL - use directly
+            $row['company_logo'] = $company_logo;
+        } else {
+            // Local file path - convert to full URL
+            $clean_logo = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $company_logo);
+            $local_logo_path = __DIR__ . '/../uploads/recruiter_logo/' . $clean_logo;
+            if (file_exists($local_logo_path)) {
+                $row['company_logo'] = $protocol . $host . $logo_base . $clean_logo;
+            } else {
+                // File doesn't exist locally, keep original or set to empty
+                $row['company_logo'] = $company_logo;
+            }
+        }
+    } else {
+        $row['company_logo'] = "";
+    }
+    
     $applications[] = $row;
 }
 
