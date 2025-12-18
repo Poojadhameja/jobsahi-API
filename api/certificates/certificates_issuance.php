@@ -37,22 +37,12 @@ $certificateId = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 
 // ------------------------------------------------------------
-// MEDIA HELPERS (same structure as template API)
+// MEDIA HELPERS (R2 only - no local handling)
 // ------------------------------------------------------------
-$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
-$host = $_SERVER['HTTP_HOST'];
-$basePath = '/jobsahi-API/api/uploads/institute_certificate_templates/';
-
 function getMediaUrl($fileName) {
-    global $protocol, $host, $basePath;
     if (empty($fileName)) return null;
-
-    $clean = str_replace(["\\","/uploads/institute_certificate_templates/","./","../"], "", $fileName);
-    $local = __DIR__ . '/../uploads/institute_certificate_templates/' . $clean;
-
-    return file_exists($local)
-        ? $protocol . $host . $basePath . $clean
-        : null;
+    // Return R2 URL as-is (already stored in database)
+    return $fileName;
 }
 
 

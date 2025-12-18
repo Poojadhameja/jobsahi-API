@@ -53,24 +53,13 @@ $baseSelect = "
 ";
 
 // ----------------------------------------------
-// 🌐 Helper to generate media URL
+// 🌐 Helper to return media URL (R2 only - no local handling)
 // ----------------------------------------------
 function mediaURL($file) {
-    if (!$file) return null;
-
-    $file = str_replace([
-        "../", "./", 
-        "/uploads/institute_certificate_templates/"
-    ], "", $file);
-
-    $fullPath = __DIR__ . '/../uploads/institute_certificate_templates/' . $file;
-
-    if (!file_exists($fullPath)) return null;
-
-    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
-    $host     = $_SERVER['HTTP_HOST'];
-
-    return $protocol . $host . "/jobsahi-API/api/uploads/institute_certificate_templates/" . $file;
+    if (empty($file)) return null;
+    
+    // Return R2 URL as-is (already stored in database)
+    return $file;
 }
 
 // ----------------------------------------------

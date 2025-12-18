@@ -14,33 +14,12 @@ $role    = strtolower($decoded['role']);
 // Optional filter ?id=
 $certificate_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
-// Helper function to get media URL (handles both R2 URLs and local paths)
+// Helper function to get media URL (R2 only - no local handling)
 function getMediaURL($file) {
     if (empty($file)) return null;
     
-    // If it's already a full URL (R2 or external), return as-is
-    if (filter_var($file, FILTER_VALIDATE_URL)) {
-        return $file;
-    }
-    
-    // Clean local path
-    $clean = str_replace([
-        "../", "./", 
-        "/uploads/institute_certificate_templates/",
-        "\\"
-    ], "", $file);
-    
-    $localPath = __DIR__ . '/../uploads/institute_certificate_templates/' . $clean;
-    
-    // If file exists locally, return local URL
-    if (file_exists($localPath)) {
-        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
-        $host = $_SERVER['HTTP_HOST'];
-        return $protocol . $host . "/jobsahi-API/api/uploads/institute_certificate_templates/" . $clean;
-    }
-    
-    // Return null if file doesn't exist
-    return null;
+    // Return R2 URL as-is (already stored in database)
+    return $file;
 }
 
 $sql = "

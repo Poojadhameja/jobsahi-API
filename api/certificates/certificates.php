@@ -71,23 +71,31 @@ if(!$template){
     exit;
 }
 
-// media patch
-$protocol=(!empty($_SERVER['HTTPS'])?"https://":"http://");
-$host=$_SERVER['HTTP_HOST'];
-$basePathTemplates="/jobsahi-API/api/uploads/institute_certificate_templates/";
-
-function getMedia($file,$protocol,$host,$base){
-    if(empty($file))return["url"=>null,"local"=>null];
-    $clean=str_replace(["\\","/uploads/institute_certificate_templates/","../","./"],"",$file);
-    $local=__DIR__."/../uploads/institute_certificate_templates/".$clean;
-    $url=file_exists($local)?$protocol.$host.$base.$clean:null;
-    return["url"=>$url,"local"=>$local];
+// R2 media URLs - download temporarily for PDF generation
+function getMedia($file) {
+    if(empty($file)) return ["url"=>null,"local"=>null];
+    
+    // If it's a URL (R2), download temporarily for PDF generation
+    if(filter_var($file, FILTER_VALIDATE_URL)) {
+        $tempFile = tempnam(sys_get_temp_dir(), 'cert_img_');
+        $imageData = @file_get_contents($file);
+        
+        if($imageData !== false && file_put_contents($tempFile, $imageData)) {
+            return ["url"=>$file,"local"=>$tempFile];
+        } else {
+            @unlink($tempFile);
+            return ["url"=>$file,"local"=>null];
+        }
+    }
+    
+    // Return as-is (shouldn't happen if all files are in R2)
+    return ["url"=>$file,"local"=>null];
 }
 
-// images
-$logo=getMedia($template['logo'],$protocol,$host,$basePathTemplates);
-$seal=getMedia($template['seal'],$protocol,$host,$basePathTemplates);
-$sign=getMedia($template['signature'],$protocol,$host,$basePathTemplates);
+// images (R2 URLs - downloaded temporarily for PDF)
+$logo=getMedia($template['logo']);
+$seal=getMedia($template['seal']);
+$sign=getMedia($template['signature']);
 
 // student, course details
 $info=$conn->prepare("
@@ -331,10 +339,10 @@ endobj
     return "";
 }
 
-// Process images
-$logoObj = makeImg($logo['local'], 6);
-$sealObj = makeImg($seal['local'], 7);
-$signObj = makeImg($sign['local'], 8);
+// Process images (from R2 URLs downloaded temporarily)
+$logoObj = !empty($logo['local']) ? makeImg($logo['local'], 6) : "";
+$sealObj = !empty($seal['local']) ? makeImg($seal['local'], 7) : "";
+$signObj = !empty($sign['local']) ? makeImg($sign['local'], 8) : "";
 
 $im1 = !empty($logoObj);
 $im2 = !empty($sealObj);
@@ -428,8 +436,21 @@ $xref
 
 file_put_contents($file_path,$pdf);
 
-// PUBLIC URL
-$public_url=$protocol.$host."/jobsahi-API/api/uploads/institute_certificate/".$file_name;
+// Cleanup temporary downloaded R2 images
+if(!empty($logo['local']) && strpos($logo['local'], sys_get_temp_dir()) === 0) {
+    @unlink($logo['local']);
+}
+if(!empty($seal['local']) && strpos($seal['local'], sys_get_temp_dir()) === 0) {
+    @unlink($seal['local']);
+}
+if(!empty($sign['local']) && strpos($sign['local'], sys_get_temp_dir()) === 0) {
+    @unlink($sign['local']);
+}
+
+// PUBLIC URL - Build protocol and host properly
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$public_url = $protocol . $host . "/jobsahi-API/api/uploads/institute_certificate/" . $file_name;
 
 // SAVE DB RECORD
 $stmt=$conn->prepare("

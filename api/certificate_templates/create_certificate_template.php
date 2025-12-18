@@ -155,15 +155,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 // --------------------------------------------
-// 📂 Upload folder setup
+// 📂 File validation (R2 only - no local directory)
 // --------------------------------------------
-$upload_dir    = __DIR__ . '/../uploads/institute_certificate_templates/';
-$relative_path = '/uploads/institute_certificate_templates/';
-
-if (!is_dir($upload_dir)) {
-    mkdir($upload_dir, 0777, true);
-}
-
 $allowed_extensions = ['jpg', 'jpeg', 'png', 'webp'];
 
 // --------------------------------------------
