@@ -9,7 +9,7 @@ header('Content-Type: application/json');
 
 // Allow specific prod origins
 $strictAllowed = [
-  'https://beige-jaguar-560051.hostingersite.com',
+  'https://mediumvioletred-hippopotamus-394642.hostingersite.com',
 ];
 $strictAllowed[] = 'http://localhost';
 $strictAllowed[] = 'http://127.0.0.1';

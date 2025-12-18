@@ -434,7 +434,8 @@ startxref
 $xref
 %%EOF";
 
-file_put_contents($file_path,$pdf);
+// Save PDF locally first (temporary)
+file_put_contents($file_path, $pdf);
 
 // Cleanup temporary downloaded R2 images
 if(!empty($logo['local']) && strpos($logo['local'], sys_get_temp_dir()) === 0) {
@@ -447,10 +448,28 @@ if(!empty($sign['local']) && strpos($sign['local'], sys_get_temp_dir()) === 0) {
     @unlink($sign['local']);
 }
 
-// PUBLIC URL - Build protocol and host properly
-$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
-$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$public_url = $protocol . $host . "/jobsahi-API/api/uploads/institute_certificate/" . $file_name;
+// ✅ UPLOAD TO R2 CLOUDFLARE
+require_once __DIR__ . '/../helpers/r2_uploader.php';
+
+// R2 path: certificates/certificate_{user_id}_{timestamp}.pdf
+$r2_path = "certificates/certificate_{$user_id}_" . time() . ".pdf";
+
+// Upload PDF to R2
+$upload_result = R2Uploader::uploadFile($file_path, $r2_path, 'application/pdf');
+
+if ($upload_result['success']) {
+    // Use R2 public URL
+    $public_url = $upload_result['url'];
+    
+    // Delete local file after successful upload
+    @unlink($file_path);
+} else {
+    // Fallback: If R2 upload fails, use local URL (for backward compatibility)
+    error_log("R2 Upload failed: " . $upload_result['message']);
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $public_url = $protocol . $host . "/jobsahi-API/api/uploads/institute_certificate/" . $file_name;
+}
 
 // SAVE DB RECORD
 $stmt=$conn->prepare("

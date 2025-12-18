@@ -13,6 +13,7 @@ $certificate_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 $file_path = isset($_GET['file']) ? $_GET['file'] : '';
 
 // If certificate_id provided, fetch file_url from database
+$file_url = '';
 if ($certificate_id > 0) {
     $stmt = $conn->prepare("SELECT file_url FROM certificates WHERE id = ? AND admin_action = 'approved' LIMIT 1");
     $stmt->bind_param("i", $certificate_id);
@@ -22,16 +23,39 @@ if ($certificate_id > 0) {
     if ($result->num_rows > 0) {
         $row = $result->fetch_assoc();
         $file_url = $row['file_url'];
-        
-        // Extract filename from URL
-        // URL format: http://host/jobsahi-API/api/uploads/institute_certificate/certificate_X.pdf
-        $parsed_url = parse_url($file_url);
-        $url_path = $parsed_url['path'] ?? '';
-        
-        // Extract just the filename (e.g., certificate_3.pdf)
-        $file_path = basename($url_path);
     }
     $stmt->close();
+}
+
+// ✅ CHECK IF FILE IS IN R2 (Cloudflare R2 URL)
+require_once __DIR__ . '/../config/r2_config.php';
+$is_r2_url = false;
+if (!empty($file_url)) {
+    // Check if URL is from R2 (contains r2.dev or R2_PUBLIC_URL)
+    $r2_public_url = defined('R2_PUBLIC_URL') ? R2_PUBLIC_URL : '';
+    if (!empty($r2_public_url) && strpos($file_url, $r2_public_url) === 0) {
+        $is_r2_url = true;
+    } elseif (strpos($file_url, 'r2.dev') !== false || strpos($file_url, 'r2.cloudflarestorage.com') !== false) {
+        $is_r2_url = true;
+    }
+}
+
+// If R2 URL, redirect to it (R2 URLs are public and CDN-optimized)
+if ($is_r2_url && !empty($file_url)) {
+    // Redirect to R2 URL (301 permanent redirect for better caching)
+    header('Location: ' . $file_url, true, 301);
+    exit;
+}
+
+// ✅ FALLBACK: Handle local file storage (for backward compatibility)
+if (!empty($file_url)) {
+    // Extract filename from URL
+    // URL format: http://host/jobsahi-API/api/uploads/institute_certificate/certificate_X.pdf
+    $parsed_url = parse_url($file_url);
+    $url_path = $parsed_url['path'] ?? '';
+    
+    // Extract just the filename (e.g., certificate_3.pdf)
+    $file_path = basename($url_path);
 }
 
 // If file_path provided directly, use it (extract just filename)
@@ -49,24 +73,55 @@ if (empty($file_path)) {
 
 // Build full file path
 $base_dir = __DIR__ . '/../uploads/institute_certificate/';
-$full_path = $base_dir . $file_path;
+// Normalize base directory path
+$base_dir = rtrim($base_dir, '/\\') . DIRECTORY_SEPARATOR;
+// Build full path safely
+$full_path = $base_dir . ltrim($file_path, '/\\');
 
 // Security: Ensure file is within allowed directory
 $real_base = realpath($base_dir);
 $real_file = realpath($full_path);
 
-if (!$real_file || strpos($real_file, $real_base) !== 0) {
-    http_response_code(403);
+// Check if base directory exists
+if (!$real_base || !is_dir($real_base)) {
+    http_response_code(500);
     header('Content-Type: application/json');
-    echo json_encode(["status" => false, "message" => "Access denied"]);
+    echo json_encode([
+        "status" => false, 
+        "message" => "Server configuration error: uploads directory not found"
+    ]);
     exit;
 }
 
-// Check if file exists
-if (!file_exists($real_file) || !is_file($real_file)) {
+// Check if file exists first (before security check)
+if (!$real_file || !file_exists($real_file) || !is_file($real_file)) {
+    // File doesn't exist - return 404
     http_response_code(404);
     header('Content-Type: application/json');
-    echo json_encode(["status" => false, "message" => "Certificate file not found"]);
+    echo json_encode([
+        "status" => false, 
+        "message" => "Certificate file not found",
+        "debug_info" => [
+            "certificate_id" => $certificate_id,
+            "file_path_param" => $file_path,
+            "full_path" => $full_path,
+            "base_dir" => $base_dir
+        ]
+    ]);
+    exit;
+}
+
+// Security check: ensure file is within base directory (normalize paths for comparison)
+$normalized_base = str_replace('\\', '/', $real_base);
+$normalized_file = str_replace('\\', '/', $real_file);
+
+if (strpos($normalized_file, $normalized_base) !== 0) {
+    http_response_code(403);
+    header('Content-Type: application/json');
+    echo json_encode([
+        "status" => false, 
+        "message" => "Access denied: Invalid file path"
+    ]);
     exit;
 }
 
