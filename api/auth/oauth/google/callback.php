@@ -10,26 +10,47 @@ require_once '../../../helpers/oauth_helper.php';
 // Get parameters from Google OAuth
 $code = isset($_GET['code']) ? urldecode($_GET['code']) : null;
 $idToken = isset($_GET['id_token']) ? $_GET['id_token'] : null;
-$accessToken = isset($_GET['access_token']) ? $_GET['access_token'] : null; // For Flutter Web
+$accessToken = isset($_GET['access_token']) ? $_GET['access_token'] : null; // For Flutter Android/iOS
 $error = isset($_GET['error']) ? $_GET['error'] : null;
 $state = isset($_GET['state']) ? $_GET['state'] : null;
 
+// Log all received parameters for debugging (remove sensitive data in production)
+error_log("Google OAuth Callback - Received parameters: " . json_encode([
+    'has_code' => !empty($code),
+    'has_id_token' => !empty($idToken),
+    'has_access_token' => !empty($accessToken),
+    'access_token_length' => $accessToken ? strlen($accessToken) : 0,
+    'access_token_preview' => $accessToken ? substr($accessToken, 0, 20) . '...' : null,
+    'error' => $error,
+    'state' => $state,
+    'request_method' => $_SERVER['REQUEST_METHOD'],
+    'query_string' => $_SERVER['QUERY_STRING'] ?? ''
+]));
+
 // Handle error from Google
 if ($error) {
+    error_log("Google OAuth Error: " . $error);
     http_response_code(400);
     echo json_encode([
         "status" => false,
-        "message" => "Google OAuth error: " . $error
+        "message" => "Google OAuth error: " . $error,
+        "error_code" => $error
     ]);
     exit;
 }
 
 // Check if any valid parameter is present
 if (!$code && !$idToken && !$accessToken) {
+    error_log("Google OAuth Callback - No valid parameter received");
     http_response_code(400);
     echo json_encode([
         "status" => false,
-        "message" => "Authorization code, ID token, or access token not received"
+        "message" => "Authorization code, ID token, or access token not received",
+        "debug_info" => [
+            "received_params" => array_keys($_GET),
+            "request_uri" => $_SERVER['REQUEST_URI'] ?? '',
+            "query_string" => $_SERVER['QUERY_STRING'] ?? ''
+        ]
     ]);
     exit;
 }
@@ -37,15 +58,42 @@ if (!$code && !$idToken && !$accessToken) {
 try {
     // Get user info from Google based on provided parameter
     if ($accessToken) {
-        // Flutter Web sends access_token directly
+        // Flutter Android/iOS sends access_token directly
+        error_log("Processing Google OAuth with access_token");
+        
+        // Validate access token format (should start with ya29. or 1// for Google tokens)
+        if (strlen($accessToken) < 50) {
+            error_log("Invalid access token format - too short: " . strlen($accessToken));
+            http_response_code(400);
+            echo json_encode([
+                "status" => false,
+                "message" => "Invalid access token format",
+                "token_length" => strlen($accessToken)
+            ]);
+            exit;
+        }
+        
         $userInfo = OAuthHelper::getGoogleUserInfoFromAccessToken($accessToken);
+        
+        // Log the result
+        if (isset($userInfo['error'])) {
+            error_log("Failed to get user info from access token: " . json_encode($userInfo));
+        } else {
+            error_log("Successfully retrieved user info from access token for: " . ($userInfo['email'] ?? 'unknown'));
+        }
     } elseif ($code) {
         // Standard OAuth flow with authorization code
+        error_log("Processing Google OAuth with authorization code");
         $userInfo = OAuthHelper::getGoogleUserInfo($code);
+        
+        if (isset($userInfo['error'])) {
+            error_log("Failed to exchange code for token: " . json_encode($userInfo));
+        }
     } elseif ($idToken) {
         // ID token flow (if implemented)
         // For now, decode ID token or use access token flow
         // You can implement ID token verification here if needed
+        error_log("ID token flow requested but not implemented");
         http_response_code(400);
         echo json_encode([
             "status" => false,
@@ -55,27 +103,36 @@ try {
     }
     
     if (isset($userInfo['error'])) {
+        error_log("Google OAuth Error Details: " . json_encode($userInfo));
         http_response_code(400);
         echo json_encode([
             "status" => false,
-            "message" => "Failed to get user info from Google",
+            "message" => "Failed to get user info from Google: " . ($userInfo['error'] ?? 'Unknown error'),
             "error" => $userInfo['error'],
+            "last_error" => $userInfo['last_error'] ?? null,
+            "http_code" => $userInfo['http_code'] ?? null,
             "details" => isset($userInfo['response']) ? $userInfo['response'] : null,
-            "full_error" => $userInfo,
             "debug_info" => [
-                "code_received" => substr($code, 0, 20) . "...",
+                "has_code" => !empty($code),
+                "has_access_token" => !empty($accessToken),
                 "redirect_uri" => GOOGLE_REDIRECT_URI,
-                "client_id" => substr(GOOGLE_CLIENT_ID, 0, 30) . "..."
+                "client_id_preview" => substr(GOOGLE_CLIENT_ID, 0, 30) . "..."
             ]
         ], JSON_PRETTY_PRINT);
         exit;
     }
     
     if (!$userInfo['success'] || !$userInfo['email']) {
+        error_log("Invalid user data from Google: " . json_encode($userInfo));
         http_response_code(400);
         echo json_encode([
             "status" => false,
-            "message" => "Invalid user data from Google"
+            "message" => "Invalid user data from Google",
+            "debug_info" => [
+                "has_success" => isset($userInfo['success']),
+                "has_email" => isset($userInfo['email']),
+                "user_info_keys" => array_keys($userInfo)
+            ]
         ]);
         exit;
     }

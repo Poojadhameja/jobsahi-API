@@ -132,9 +132,20 @@ class OAuthHelper {
     }
     
     /**
-     * Get Google user info directly from access token (for Flutter Web)
+     * Get Google user info directly from access token (for Flutter Android/iOS)
      */
     public static function getGoogleUserInfoFromAccessToken($accessToken) {
+        // Validate access token
+        if (empty($accessToken)) {
+            return [
+                'error' => 'Access token is empty',
+                'http_code' => null
+            ];
+        }
+        
+        // Log access token preview for debugging (first 20 chars only)
+        error_log("Google OAuth: Attempting to get user info with access token: " . substr($accessToken, 0, 20) . "...");
+        
         // Get user info using access token directly
         $userinfoUrls = [
             'https://openidconnect.googleapis.com/v1/userinfo',
@@ -143,43 +154,85 @@ class OAuthHelper {
         
         $userInfo = null;
         $lastError = null;
+        $lastResponse = null;
+        $lastHttpCode = null;
         
         foreach ($userinfoUrls as $userinfoUrl) {
+            error_log("Google OAuth: Trying userinfo endpoint: " . $userinfoUrl);
+            
             $ch = curl_init($userinfoUrl);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $accessToken
+                'Authorization: Bearer ' . $accessToken,
+                'Accept: application/json'
             ]);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For local development
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true); // Use SSL verification in production
             curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
             
             $userResponse = curl_exec($ch);
             $userHttpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $userCurlError = curl_error($ch);
+            $curlErrno = curl_errno($ch);
             curl_close($ch);
             
             if ($userCurlError) {
-                $lastError = 'CURL Error getting user info from ' . $userinfoUrl . ': ' . $userCurlError;
+                $lastError = 'CURL Error getting user info from ' . $userinfoUrl . ' (Error ' . $curlErrno . '): ' . $userCurlError;
+                error_log("Google OAuth CURL Error: " . $lastError);
                 continue;
             }
             
+            $lastResponse = $userResponse;
+            $lastHttpCode = $userHttpCode;
+            
             if ($userHttpCode === 200 && !empty($userResponse)) {
                 $userInfo = json_decode($userResponse, true);
+                
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    $lastError = 'Invalid JSON response from ' . $userinfoUrl . ': ' . json_last_error_msg();
+                    error_log("Google OAuth JSON Error: " . $lastError);
+                    continue;
+                }
+                
                 if ($userInfo && isset($userInfo['email'])) {
+                    error_log("Google OAuth: Successfully retrieved user info for: " . $userInfo['email']);
                     break; // Success, exit loop
+                } else {
+                    $lastError = 'User info response missing email field';
+                    error_log("Google OAuth: Response missing email - " . json_encode($userInfo));
                 }
             } else {
                 $errorResponse = json_decode($userResponse, true);
-                $lastError = 'Failed to get user info from ' . $userinfoUrl . ' (HTTP ' . $userHttpCode . '): ' . ($errorResponse['error'] ?? $userResponse);
+                $errorMessage = 'Failed to get user info from ' . $userinfoUrl . ' (HTTP ' . $userHttpCode . ')';
+                
+                if ($errorResponse && isset($errorResponse['error'])) {
+                    $errorMessage .= ': ' . $errorResponse['error'];
+                    if (isset($errorResponse['error_description'])) {
+                        $errorMessage .= ' - ' . $errorResponse['error_description'];
+                    }
+                } else {
+                    $errorMessage .= ': ' . substr($userResponse, 0, 200);
+                }
+                
+                $lastError = $errorMessage;
+                error_log("Google OAuth API Error: " . $lastError);
+                
+                // If we get 401 (Unauthorized), the token is invalid/expired
+                if ($userHttpCode === 401) {
+                    error_log("Google OAuth: Access token is invalid or expired");
+                    break; // Don't try other endpoints if token is invalid
+                }
             }
         }
         
         if (!$userInfo || !isset($userInfo['email'])) {
+            error_log("Google OAuth: Failed to get user info from all endpoints. Last error: " . $lastError);
             return [
                 'error' => 'Failed to get user info from all endpoints',
                 'last_error' => $lastError,
-                'response' => $userResponse ?? null,
-                'http_code' => $userHttpCode ?? null
+                'response' => $lastResponse,
+                'http_code' => $lastHttpCode,
+                'access_token_preview' => substr($accessToken, 0, 20) . '...'
             ];
         }
         
