@@ -51,4 +51,36 @@ function getCurrentUser() {
     }
     return null;
 }
+
+// Optional authentication - returns user data if token is valid, null otherwise (doesn't exit)
+function authenticateJWTOptional($allowed_roles = null) {
+    $jwt = JWTHelper::getJWTFromHeader();
+    
+    if (!$jwt) {
+        return null; // No token provided - allow public access
+    }
+    
+    // Check if token is blacklisted
+    if (JWTHelper::isTokenBlacklisted($jwt)) {
+        return null; // Token revoked - treat as public
+    }
+    
+    $payload = JWTHelper::validateJWT($jwt, JWT_SECRET);
+    
+    if (!$payload) {
+        return null; // Invalid token - allow public access
+    }
+    
+    // Check role(s) if specified
+    if ($allowed_roles) {
+        $userRole = $payload['role'] ?? null;
+        $allowedRoles = is_array($allowed_roles) ? $allowed_roles : [$allowed_roles];
+        
+        if (!in_array($userRole, $allowedRoles)) {
+            return null; // Role not allowed - treat as public
+        }
+    }
+    
+    return $payload; // Return user data from token
+}
 ?>

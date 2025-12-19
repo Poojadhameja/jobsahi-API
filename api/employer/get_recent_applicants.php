@@ -2,6 +2,11 @@
 require_once '../cors.php';
 require_once '../db.php';
 
+// ✅ Prevent caching for instant updates
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
+
 try {
     // --------------------------------------------
     // 🔐 AUTHENTICATION

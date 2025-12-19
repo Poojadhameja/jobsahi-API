@@ -1,12 +1,13 @@
 <?php
 require_once '../cors.php';
+require_once '../auth/auth_middleware.php';
 
 // ------------------------------------------
-// 🔐 AUTHENTICATE (student / recruiter / admin)
+// 🔐 OPTIONAL AUTHENTICATION (allows public access)
 // ------------------------------------------
-$decodedToken = authenticateJWT(['student', 'recruiter', 'admin']);
-$user_role = strtolower($decodedToken['role']);
-$user_id = intval($decodedToken['user_id'] ?? $decodedToken['id'] ?? 0);
+$decodedToken = authenticateJWTOptional(['student', 'recruiter', 'admin']);
+$user_role = $decodedToken ? strtolower($decodedToken['role']) : null;
+$user_id = $decodedToken ? intval($decodedToken['user_id'] ?? $decodedToken['id'] ?? 0) : 0;
 
 // DB connection
 require_once '../db.php';
@@ -53,8 +54,8 @@ if ($job_id <= 0) {
 // Admin → can see ALL jobs (no admin_action logic needed)
 $visibilityCondition = "1=1";
 
-// Student → can see ONLY approved jobs
-if ($user_role === 'student') {
+// Public/Student → can see ONLY approved jobs
+if ($user_role === 'student' || !$user_role) {
     $visibilityCondition = "j.admin_action = 'approved'";
 }
 
@@ -106,17 +107,25 @@ if ($res->num_rows === 0) {
 $job = $res->fetch_assoc();
 
 // ------------------------------------------
-// 🖼 Fix company logo URL
+// 🖼 Fix company logo URL (R2 support + local files)
 // ------------------------------------------
-$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
-$host = $_SERVER['HTTP_HOST'];
-$logoBase = "/jobsahi-API/api/uploads/recruiter_logo/";
-
 if (!empty($job['company_logo'])) {
-    $file = basename($job['company_logo']);
-    $local = __DIR__ . "/../uploads/recruiter_logo/$file";
-    if (file_exists($local)) {
-        $job['company_logo'] = $protocol . $host . $logoBase . $file;
+    // Check if it's already an R2 URL
+    if (strpos($job['company_logo'], 'http') === 0 && 
+        (strpos($job['company_logo'], 'r2.dev') !== false || 
+         strpos($job['company_logo'], 'r2.cloudflarestorage.com') !== false)) {
+        // Already R2 URL - use directly
+        // No change needed
+    } else {
+        // Local file path - convert to full URL
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+        $host = $_SERVER['HTTP_HOST'];
+        $logoBase = "/jobsahi-API/api/uploads/recruiter_logo/";
+        $clean_logo = str_replace(["\\", "/uploads/recruiter_logo/", "./", "../"], "", $job['company_logo']);
+        $local_logo_path = __DIR__ . "/../uploads/recruiter_logo/" . $clean_logo;
+        if (file_exists($local_logo_path)) {
+            $job['company_logo'] = $protocol . $host . $logoBase . $clean_logo;
+        }
     }
 }
 

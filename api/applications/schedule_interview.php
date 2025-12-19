@@ -3,7 +3,11 @@
 require_once '../cors.php';
 require_once '../db.php';
 
+// ✅ Prevent caching for instant updates
 header("Content-Type: application/json");
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
 
 // ✅ Authenticate (Admin / Recruiter)
 $decoded = authenticateJWT(['admin', 'recruiter']);

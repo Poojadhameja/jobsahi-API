@@ -1,16 +1,12 @@
 <?php
-// jobs.php - Job Listings API (New logic using job_flags table)
+// jobs.php - Job Listings API (Public access with optional authentication)
 require_once '../cors.php';
 require_once '../db.php';
+require_once '../auth/auth_middleware.php';
 
-// Authenticate all roles
-$decoded = authenticateJWT(['student', 'admin', 'recruiter', 'institute']);
+// Optional authentication - allows public access
+$decoded = authenticateJWTOptional(['student', 'admin', 'recruiter', 'institute']);
 $userRole = $decoded['role'] ?? null;
-
-if (!$userRole) {
-    echo json_encode(["message" => "Unauthorized: Role not found", "status" => false]);
-    exit;
-}
 
 // ------------------------------------------------------------------
 //  STUDENT PROFILE DETECTION
@@ -114,8 +110,8 @@ if ($job_id > 0) {
         WHERE j.id = ?
     ";
     
-    // ✅ Student filter: Only show approved jobs
-    if ($userRole === 'student') {
+    // ✅ Public/Student filter: Only show approved jobs (for public and students)
+    if ($userRole === 'student' || !$userRole) {
         $sql = str_replace("WHERE j.id = ?", "WHERE j.id = ? AND j.admin_action = 'approved'", $sql);
     }
 
@@ -318,10 +314,10 @@ if ($userRole === 'recruiter' && $recruiter_profile_id) {
     $sql .= " AND j.recruiter_id = $recruiter_profile_id";
 }
 
-// ✅ Student filter: Only show approved jobs
-if ($userRole === 'student') {
-    $sql .= " AND j.admin_action = 'approved'";
-}
+    // ✅ Public/Student filter: Only show approved jobs (for public and students)
+    if ($userRole === 'student' || !$userRole) {
+        $sql .= " AND j.admin_action = 'approved'";
+    }
 
 $sql .= " ORDER BY j.created_at DESC";
 

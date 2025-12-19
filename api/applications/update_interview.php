@@ -3,7 +3,11 @@
 require_once '../cors.php';
 require_once '../db.php';
 
+// ✅ Prevent caching for instant updates
 header("Content-Type: application/json");
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
 
 // ✅ Authenticate JWT (Admin / Recruiter)
 $decoded = authenticateJWT(['admin', 'recruiter']);
@@ -144,11 +148,23 @@ try {
         echo json_encode(["status" => false, "message" => "Failed to update interview", "error" => $stmt->error]);
         exit();
     }
+    
+    // ✅ Flush output immediately for instant response
+    if (function_exists('fastcgi_finish_request')) {
+        // For FastCGI servers - response sent immediately
+    } else {
+        // For other servers - flush output buffer
+        if (ob_get_level() > 0) {
+            ob_end_flush();
+        }
+        flush();
+    }
 
-    // ✅ Step 4: Fetch updated record
+    // ✅ Step 4: Fetch updated record (optimized - single query with all needed data)
     $get_sql = "
         SELECT 
             i.id AS interview_id,
+            i.application_id,
             i.scheduled_at,
             i.status,
             i.mode,
@@ -157,6 +173,8 @@ try {
             i.interview_link,
             i.interview_info,
             u.user_name AS candidateName,
+            u.id AS candidateId,
+            sp.id AS student_profile_id,
             rp.company_name AS scheduledBy,
             i.created_at
         FROM interviews i
@@ -173,13 +191,16 @@ try {
     $get_stmt->execute();
     $updated = $get_stmt->get_result()->fetch_assoc();
 
-    // ✅ Step 5: Response
+    // ✅ Step 5: Response (complete data for instant frontend update)
     $response = [
         "interviewId"   => intval($updated['interview_id']),
+        "application_id" => intval($updated['application_id']),
         "candidateName" => $updated['candidateName'],
+        "candidateId"   => intval($updated['candidateId']),
         "date"          => date('Y-m-d', strtotime($updated['scheduled_at'])),
         "timeSlot"      => date('H:i', strtotime($updated['scheduled_at'])),
-        "status"        => ucfirst($updated['status']),
+        "status"        => strtolower($updated['status']), // Keep lowercase for consistency
+        "interviewMode" => ucfirst($updated['mode']),
         "mode"          => $updated['mode'],
         "location"      => $updated['mode'] === 'offline' ? $updated['location'] : null,
         "platform_name" => $updated['mode'] === 'online' ? $updated['platform_name'] : null,

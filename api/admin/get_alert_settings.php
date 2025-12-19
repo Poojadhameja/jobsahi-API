@@ -17,6 +17,25 @@ if (!$type) {
 }
 
 try {
+    // CHECK IF TABLE EXISTS, CREATE IF NOT
+    $table_check = $conn->query("SHOW TABLES LIKE 'alert_settings'");
+    if ($table_check->num_rows == 0) {
+        // CREATE TABLE IF NOT EXISTS
+        $create_table_sql = "CREATE TABLE IF NOT EXISTS `alert_settings` (
+            `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+            `type` varchar(50) NOT NULL COMMENT 'Type of alert: expiry, autoflag, course_deadlines, resume_feedback',
+            `settings_json` text NOT NULL COMMENT 'JSON string containing alert settings',
+            `created_at` datetime DEFAULT current_timestamp(),
+            `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `unique_type` (`type`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_nopad_ci COMMENT='Stores admin alert automation settings'";
+        
+        if (!$conn->query($create_table_sql)) {
+            throw new Exception("Failed to create alert_settings table: " . $conn->error);
+        }
+    }
+
     // FETCH
     $stmt = $conn->prepare("SELECT settings_json FROM alert_settings WHERE type = ? LIMIT 1");
     $stmt->bind_param("s", $type);

@@ -2,6 +2,11 @@
 // get_recruiter_jobs_.php - List jobs/applications based on admin_action and user role with dashboard stats
 require_once '../cors.php';
 
+// ✅ Prevent caching for instant updates
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
+
 // ✅ Authenticate JWT and allow all roles
 $decoded = authenticateJWT(['admin', 'recruiter']); // returns array
 $role = strtolower($decoded['role'] ?? '');

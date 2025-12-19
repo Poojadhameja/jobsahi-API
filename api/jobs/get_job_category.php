@@ -1,14 +1,15 @@
 <?php
-// get_job_category.php - Fetch all or single job category
+// get_job_category.php - Fetch all or single job category (Public access with optional auth)
 require_once '../cors.php';
 require_once '../db.php';
+require_once '../auth/auth_middleware.php';
 
 try {
 
-    // ✅ Authenticate JWT (Admin, Recruiter allowed)
-    $decoded = authenticateJWT(['admin', 'recruiter', 'student']);
-    $user_id = intval($decoded['user_id']);
-    $user_role = strtolower($decoded['role']);
+    // ✅ Optional authentication (allows public access)
+    $decoded = authenticateJWTOptional(['admin', 'recruiter', 'student']);
+    $user_id = $decoded ? intval($decoded['user_id']) : 0;
+    $user_role = $decoded ? strtolower($decoded['role']) : null;
 
     // -------------------------------------------------------
     // 🔍 STEP 1: Get recruiter_profile_id (required for filter)
@@ -49,16 +50,16 @@ try {
 
             $stmt->bind_param("ii", $category_id, $recruiter_profile_id);
 
-        } else {
+    } else {
 
-            // Admin → no filter
-            $stmt = $conn->prepare("
-                SELECT id, category_name, created_at 
-                FROM job_category 
-                WHERE id = ?
-            ");
-            $stmt->bind_param("i", $category_id);
-        }
+        // Admin/Public → no filter (show all categories)
+        $stmt = $conn->prepare("
+            SELECT id, category_name, created_at 
+            FROM job_category 
+            WHERE id = ?
+        ");
+        $stmt->bind_param("i", $category_id);
+    }
 
         $stmt->execute();
         $result = $stmt->get_result();
@@ -97,7 +98,7 @@ try {
 
     } else {
 
-        // Admin → show all
+        // Admin/Public → show all categories
         $sql = "
             SELECT id, category_name, created_at 
             FROM job_category 
