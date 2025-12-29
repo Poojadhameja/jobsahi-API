@@ -20,10 +20,25 @@ function authenticateJWT($required_role = null) {
     }
     
     // Check role if specified
-    if ($required_role && isset($payload['role']) && $payload['role'] !== $required_role) {
-        http_response_code(403);
-        echo json_encode(array("message" => "Insufficient permissions", "status" => false));
-        exit;
+    if ($required_role) {
+        $user_role = $payload['role'] ?? null;
+        
+        // Handle both array and string role requirements
+        if (is_array($required_role)) {
+            // If required_role is an array, check if user's role is in the array
+            if (!in_array($user_role, $required_role)) {
+                http_response_code(403);
+                echo json_encode(array("message" => "Insufficient permissions. Required role: " . implode(', ', $required_role), "status" => false));
+                exit;
+            }
+        } else {
+            // If required_role is a string, check exact match
+            if ($user_role !== $required_role) {
+                http_response_code(403);
+                echo json_encode(array("message" => "Insufficient permissions. Required role: $required_role", "status" => false));
+                exit;
+            }
+        }
     }
     
     return $payload; // Return user data from token

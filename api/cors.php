@@ -15,26 +15,42 @@ $strictAllowed[] = 'http://localhost';
 $strictAllowed[] = 'http://127.0.0.1';
 $strictAllowed[] = 'https://localhost';
 $strictAllowed[] = 'https://127.0.0.1';
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$origin = $_SERVER['HTTP_ORIGIN'] ?? $_SERVER['HTTP_REFERER'] ?? '';
 $allow = false;
 
 // Allow any localhost / 127.0.0.1 (any port) for dev
-if (preg_match('#^http://localhost(:\d+)?$#', $origin)) {
+// More flexible regex to match localhost with any port (including Flutter Web ports)
+if (preg_match('#^https?://localhost(:\d+)?#', $origin)) {
   $allow = true;
-} elseif (preg_match('#^http://127\.0\.0\.1(:\d+)?$#', $origin)) {
-  $allow = true;
-} elseif (preg_match('#^https://localhost(:\d+)?$#', $origin)) {
-  $allow = true;
-} elseif (preg_match('#^https://127\.0\.0\.1(:\d+)?$#', $origin)) {
+} elseif (preg_match('#^https?://127\.0\.0\.1(:\d+)?#', $origin)) {
   $allow = true;
 } elseif (in_array($origin, $strictAllowed, true)) {
   $allow = true;
 }
 
+// Additional check: if origin contains localhost or 127.0.0.1, allow it (for development)
+// This catches any localhost variations including ports like :54017, :5173, etc.
+if (!$allow && (stripos($origin, 'localhost') !== false || stripos($origin, '127.0.0.1') !== false)) {
+  $allow = true;
+}
+
+// For development: if no origin header, allow (some browsers/clients don't send it)
+if (!$allow && empty($origin)) {
+  $allow = true;
+  $origin = '*'; // Use wildcard if no origin
+}
+
+// Set CORS headers
 if ($allow) {
-  header("Access-Control-Allow-Origin: $origin");
-  header("Vary: Origin");
+  if ($origin === '*') {
+    header("Access-Control-Allow-Origin: *");
+  } else {
+    header("Access-Control-Allow-Origin: $origin");
+    header("Vary: Origin");
+  }
 } else {
+  // For development, allow all origins (comment out in production)
+  header("Access-Control-Allow-Origin: *");
   // Uncomment to hard-block unknown origins in prod
   // http_response_code(403);
   // echo json_encode(["status"=>false,"message"=>"Origin not allowed"]);
@@ -53,6 +69,7 @@ header("X-Content-Type-Options: nosniff");
 header("X-Frame-Options: DENY");
 header("X-XSS-Protection: 1; mode=block");
 
+// Handle CORS preflight (OPTIONS) requests FIRST, before any other processing
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
@@ -72,11 +89,11 @@ if (!isset($_SERVER['HTTP_AUTHORIZATION']) && function_exists('getallheaders')) 
     }
 }
 
-if (!in_array($_SERVER['REQUEST_METHOD'], ['POST','GET', 'PUT'])) {
+if (!in_array($_SERVER['REQUEST_METHOD'], ['POST','GET', 'PUT', 'OPTIONS'])) {
   http_response_code(405);
   echo json_encode([
     "status"  => false,
-    "message" => "Only POST/GET/PUT requests allowed",
+    "message" => "Only POST/GET/PUT/OPTIONS requests allowed",
     "code"    => "METHOD_NOT_ALLOWED"
   ]);
   exit;

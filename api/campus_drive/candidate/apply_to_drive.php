@@ -1,40 +1,132 @@
 <?php
+error_reporting(E_ALL);
+ini_set('display_errors', 0); // Don't display errors, return as JSON
+ini_set('log_errors', 1);
+
 require_once '../../cors.php';
 require_once '../../db.php';
 
-// Candidate/Student authentication
-$decoded = authenticateJWT(['student']);
-
-// Get request data
-$input = json_decode(file_get_contents('php://input'), true);
-
-// Validate required fields
-if (empty($input['drive_id'])) {
-    http_response_code(400);
-    echo json_encode([
-        "status" => false,
-        "message" => "Missing required field: drive_id"
-    ]);
-    exit;
-}
-
-// Validate preferences - exactly 6 required
-if (empty($input['preferences']) || !is_array($input['preferences']) || count($input['preferences']) !== 6) {
-    http_response_code(400);
-    echo json_encode([
-        "status" => false,
-        "message" => "Exactly 6 company preferences are required"
-    ]);
-    exit;
-}
-
-$drive_id = intval($input['drive_id']);
-$student_id = $decoded['user_id'];
-$preferences = $input['preferences'];
-
 try {
-    // Check if drive exists and is LIVE
-    $drive_check = $conn->query("SELECT id, status, capacity_per_day FROM campus_drives WHERE id = $drive_id");
+    // Candidate/Student authentication
+    $decoded = authenticateJWT(['student']);
+    
+    if (!$decoded || !isset($decoded['user_id'])) {
+        http_response_code(401);
+        echo json_encode([
+            "status" => false,
+            "message" => "Authentication failed: Invalid token or user ID missing"
+        ]);
+        exit;
+    }
+
+    // Get request data
+    $raw_input = file_get_contents('php://input');
+    $input = json_decode($raw_input, true);
+    
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        http_response_code(400);
+        echo json_encode([
+            "status" => false,
+            "message" => "Invalid JSON in request body",
+            "error" => json_last_error_msg()
+        ]);
+        exit;
+    }
+
+    // Validate required fields
+    if (empty($input['drive_id'])) {
+        http_response_code(400);
+        echo json_encode([
+            "status" => false,
+            "message" => "Missing required field: drive_id"
+        ]);
+        exit;
+    }
+
+    // Validate preferences - exactly 6 required
+    if (empty($input['preferences']) || !is_array($input['preferences']) || count($input['preferences']) !== 6) {
+        http_response_code(400);
+        echo json_encode([
+            "status" => false,
+            "message" => "Exactly 6 company preferences are required",
+            "received_count" => is_array($input['preferences']) ? count($input['preferences']) : 0
+        ]);
+        exit;
+    }
+
+    $drive_id = intval($input['drive_id']);
+    $user_id = intval($decoded['user_id']);
+    $preferences = $input['preferences'];
+    
+    if ($drive_id <= 0) {
+        http_response_code(400);
+        echo json_encode([
+            "status" => false,
+            "message" => "Invalid drive_id"
+        ]);
+        exit;
+    }
+    
+    if ($user_id <= 0) {
+        http_response_code(401);
+        echo json_encode([
+            "status" => false,
+            "message" => "Invalid user_id"
+        ]);
+        exit;
+    }
+    
+    // Get student_profile.id from user_id (foreign key constraint requires student_profiles.id, not users.id)
+    $stmt_student = $conn->prepare("SELECT id FROM student_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
+    if (!$stmt_student) {
+        http_response_code(500);
+        echo json_encode([
+            "status" => false,
+            "message" => "Database error while fetching student profile",
+            "error" => mysqli_error($conn)
+        ]);
+        exit;
+    }
+    
+    $stmt_student->bind_param("i", $user_id);
+    $stmt_student->execute();
+    $result_student = $stmt_student->get_result();
+    
+    if ($result_student->num_rows === 0) {
+        http_response_code(404);
+        echo json_encode([
+            "status" => false,
+            "message" => "Student profile not found. Please complete your profile first."
+        ]);
+        $stmt_student->close();
+        exit;
+    }
+    
+    $student_profile = $result_student->fetch_assoc();
+    $student_id = intval($student_profile['id']); // This is the actual student_id for foreign key
+    $stmt_student->close();
+    
+    if ($student_id <= 0) {
+        http_response_code(500);
+        echo json_encode([
+            "status" => false,
+            "message" => "Invalid student profile ID"
+        ]);
+        exit;
+    }
+
+    // Check if drive exists and is LIVE - include start_date and end_date
+    $drive_check = $conn->query("SELECT id, status, capacity_per_day, start_date, end_date FROM campus_drives WHERE id = $drive_id");
+    if (!$drive_check) {
+        http_response_code(500);
+        echo json_encode([
+            "status" => false,
+            "message" => "Database error while checking drive",
+            "error" => mysqli_error($conn)
+        ]);
+        exit;
+    }
+    
     if ($drive_check->num_rows === 0) {
         http_response_code(404);
         echo json_encode([
@@ -45,17 +137,37 @@ try {
     }
     
     $drive = $drive_check->fetch_assoc();
+    if (!$drive || empty($drive['start_date']) || empty($drive['end_date'])) {
+        http_response_code(500);
+        echo json_encode([
+            "status" => false,
+            "message" => "Drive data incomplete: missing dates"
+        ]);
+        exit;
+    }
+    
     if ($drive['status'] !== 'live') {
         http_response_code(400);
         echo json_encode([
             "status" => false,
-            "message" => "Campus drive is not accepting applications"
+            "message" => "Campus drive is not accepting applications",
+            "current_status" => $drive['status']
         ]);
         exit;
     }
 
     // Check if student has already applied
     $existing = $conn->query("SELECT id FROM campus_applications WHERE drive_id = $drive_id AND student_id = $student_id");
+    if (!$existing) {
+        http_response_code(500);
+        echo json_encode([
+            "status" => false,
+            "message" => "Database error while checking existing application",
+            "error" => mysqli_error($conn)
+        ]);
+        exit;
+    }
+    
     if ($existing->num_rows > 0) {
         http_response_code(400);
         echo json_encode([
@@ -86,11 +198,23 @@ try {
             WHERE id = $company_drive_id AND drive_id = $drive_id
         ");
         
+        if (!$company_check) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => false,
+                "message" => "Database error while validating company preference at position " . ($index + 1),
+                "error" => mysqli_error($conn)
+            ]);
+            exit;
+        }
+        
         if ($company_check->num_rows === 0) {
             http_response_code(400);
             echo json_encode([
                 "status" => false,
-                "message" => "Invalid preference at position " . ($index + 1) . ": Company not part of this drive"
+                "message" => "Invalid preference at position " . ($index + 1) . ": Company not part of this drive",
+                "company_id" => $company_drive_id,
+                "drive_id" => $drive_id
             ]);
             exit;
         }
@@ -137,11 +261,15 @@ try {
                 $day_number = $day_data['day_number'];
                 
                 // Increment filled_count
-                $conn->query("
+                $update_result = $conn->query("
                     UPDATE campus_drive_days 
                     SET filled_count = filled_count + 1 
                     WHERE id = $day_id
                 ");
+                
+                if (!$update_result) {
+                    throw new Exception("Failed to update day filled_count: " . mysqli_error($conn));
+                }
             } else {
                 // Create new day
                 $day_number = $day_data['day_number'] + 1;
@@ -244,12 +372,35 @@ try {
     }
 
 } catch (Exception $e) {
+    // Rollback transaction if it was started
+    if (isset($conn) && mysqli_get_server_info($conn)) {
+        @mysqli_rollback($conn);
+    }
+    
     http_response_code(500);
     echo json_encode([
         "status" => false,
         "message" => "Error submitting application",
-        "error" => $e->getMessage()
+        "error" => $e->getMessage(),
+        "file" => $e->getFile(),
+        "line" => $e->getLine()
     ]);
+    error_log("Apply to Drive Error: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
+} catch (Error $e) {
+    // Catch PHP 7+ errors
+    if (isset($conn) && mysqli_get_server_info($conn)) {
+        @mysqli_rollback($conn);
+    }
+    
+    http_response_code(500);
+    echo json_encode([
+        "status" => false,
+        "message" => "Fatal error submitting application",
+        "error" => $e->getMessage(),
+        "file" => $e->getFile(),
+        "line" => $e->getLine()
+    ]);
+    error_log("Apply to Drive Fatal Error: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
 }
 ?>
 
