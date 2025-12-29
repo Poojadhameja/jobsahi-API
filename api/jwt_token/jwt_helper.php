@@ -56,16 +56,81 @@ class JWTHelper {
     }
     
     public static function getJWTFromHeader() {
-        $headers = getallheaders();
-        if (!$headers || !isset($headers['Authorization'])) {
+        $authHeader = null;
+        
+        // Method 1: Try getallheaders() first (works on most servers)
+        if (function_exists('getallheaders')) {
+            $headers = getallheaders();
+            if ($headers && isset($headers['Authorization'])) {
+                $authHeader = $headers['Authorization'];
+            } elseif ($headers && isset($headers['authorization'])) {
+                // Case-insensitive check
+                $authHeader = $headers['authorization'];
+            }
+        }
+        
+        // Method 2: Try $_SERVER['HTTP_AUTHORIZATION'] (for Apache/FastCGI)
+        if (!$authHeader && isset($_SERVER['HTTP_AUTHORIZATION'])) {
+            $authHeader = $_SERVER['HTTP_AUTHORIZATION'];
+        }
+        
+        // Method 3: Try REDIRECT_HTTP_AUTHORIZATION (for Apache with mod_rewrite)
+        if (!$authHeader && isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+            $authHeader = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+        }
+        
+        // Method 4: Try apache_request_headers() if available
+        if (!$authHeader && function_exists('apache_request_headers')) {
+            $apacheHeaders = apache_request_headers();
+            if ($apacheHeaders) {
+                foreach ($apacheHeaders as $key => $value) {
+                    if (strtolower($key) === 'authorization') {
+                        $authHeader = $value;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Method 5: Try reading from php://input headers (last resort)
+        if (!$authHeader) {
+            // Check all $_SERVER keys for Authorization
+            foreach ($_SERVER as $key => $value) {
+                if (strtoupper($key) === 'HTTP_AUTHORIZATION' || 
+                    strtoupper($key) === 'REDIRECT_HTTP_AUTHORIZATION') {
+                    $authHeader = $value;
+                    break;
+                }
+            }
+        }
+        
+        // Debug logging (remove in production if needed)
+        if (!$authHeader) {
+            error_log("JWT Helper: No Authorization header found. Available headers: " . json_encode(array_keys($_SERVER)));
+        }
+        
+        if (!$authHeader) {
             return null;
         }
         
-        $authHeader = $headers['Authorization'];
+        // Extract Bearer token
         if (preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
-            return $matches[1];
+            $token = trim($matches[1]);
+            if (empty($token)) {
+                error_log("JWT Helper: Bearer token found but empty");
+                return null;
+            }
+            return $token;
         }
         
+        // If no Bearer prefix, try to use the header value directly (some clients send token without Bearer)
+        $token = trim($authHeader);
+        if (!empty($token) && strlen($token) > 20) { // Basic validation - JWT tokens are usually long
+            error_log("JWT Helper: Using token without Bearer prefix");
+            return $token;
+        }
+        
+        error_log("JWT Helper: Could not extract token from header: " . substr($authHeader, 0, 50));
         return null;
     }
     

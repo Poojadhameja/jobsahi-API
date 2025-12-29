@@ -31,20 +31,30 @@ try {
     
     $drive = $drive_result->fetch_assoc();
     
-    // Get companies
-    $companies_result = $conn->query("
-        SELECT 
-            cdc.*,
-            rp.company_name,
-            rp.company_logo as logo
-        FROM campus_drive_companies cdc
-        LEFT JOIN recruiter_profiles rp ON cdc.company_id = rp.id
-        WHERE cdc.drive_id = $drive_id
-        ORDER BY cdc.id ASC
-    ");
+       // Get companies
+       $companies_result = $conn->query("
+           SELECT 
+               cdc.*,
+               rp.company_name,
+               rp.company_logo as logo,
+               rp.location as company_location
+           FROM campus_drive_companies cdc
+           LEFT JOIN recruiter_profiles rp ON cdc.company_id = rp.id
+           WHERE cdc.drive_id = $drive_id
+           ORDER BY cdc.id ASC
+       ");
     
     $companies = [];
     while ($row = $companies_result->fetch_assoc()) {
+        // Check if this is a manual entry (has manual_company_name in criteria)
+        $criteria_data = json_decode($row['criteria'], true) ?: [];
+        if (isset($criteria_data['manual_company_name'])) {
+            // Override with manual company details
+            $row['company_name'] = $criteria_data['manual_company_name'];
+            if (isset($criteria_data['manual_company_location'])) {
+                $row['company_location'] = $criteria_data['manual_company_location'];
+            }
+        }
         $companies[] = $row;
     }
     
