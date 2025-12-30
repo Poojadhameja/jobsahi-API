@@ -58,6 +58,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
+// Fix for Apache not passing Authorization header to PHP
+// Some Apache configurations strip the Authorization header
+if (!isset($_SERVER['HTTP_AUTHORIZATION']) && isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+    $_SERVER['HTTP_AUTHORIZATION'] = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+}
+
+// Alternative: Try to get from getallheaders if available
+if (!isset($_SERVER['HTTP_AUTHORIZATION']) && function_exists('getallheaders')) {
+    $headers = getallheaders();
+    if ($headers && isset($headers['Authorization'])) {
+        $_SERVER['HTTP_AUTHORIZATION'] = $headers['Authorization'];
+    }
+}
+
 if (!in_array($_SERVER['REQUEST_METHOD'], ['POST','GET', 'PUT'])) {
   http_response_code(405);
   echo json_encode([
