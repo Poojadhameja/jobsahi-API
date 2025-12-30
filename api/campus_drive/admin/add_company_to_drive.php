@@ -101,7 +101,10 @@ try {
     $vacancies = isset($input['vacancies']) ? intval($input['vacancies']) : 0;
 
     // Check if drive exists
-    $drive_check = $conn->query("SELECT id FROM campus_drives WHERE id = $drive_id");
+    $drive_check_stmt = mysqli_prepare($conn, "SELECT id FROM campus_drives WHERE id = ?");
+    mysqli_stmt_bind_param($drive_check_stmt, "i", $drive_id);
+    mysqli_stmt_execute($drive_check_stmt);
+    $drive_check = mysqli_stmt_get_result($drive_check_stmt);
     if ($drive_check->num_rows === 0) {
         http_response_code(404);
         echo json_encode([
@@ -111,38 +114,57 @@ try {
         exit;
     }
 
-    // Handle manual company entry - SIMPLE APPROACH
+    // Handle manual company entry - Create unique company_id for each manual entry
     // Manual entry = company_name hai but company_id nahi hai
     if ($company_name && !$company_id) {
-        // Step 1: Get system manual company ID (create if doesn't exist - only once)
-        $sys_company_query = "SELECT id FROM recruiter_profiles WHERE user_id IS NULL AND company_name = 'Manual Company (System)' LIMIT 1";
-        $sys_result = $conn->query($sys_company_query);
+        // Step 1: Check if this exact manual company name already exists in this drive
+        // We need to check all companies in this drive to see if any have this manual_company_name
+        $check_manual_stmt = mysqli_prepare($conn, "SELECT id, criteria FROM campus_drive_companies WHERE drive_id = ?");
+        mysqli_stmt_bind_param($check_manual_stmt, "i", $drive_id);
+        mysqli_stmt_execute($check_manual_stmt);
+        $check_manual_result = mysqli_stmt_get_result($check_manual_stmt);
         
-        if ($sys_result && $sys_result->num_rows > 0) {
-            $sys_row = $sys_result->fetch_assoc();
-            $company_id = intval($sys_row['id']);
-        } else {
-            // Create system entry (only first time)
-            $create_sys = "INSERT INTO recruiter_profiles (user_id, company_name, location) VALUES (NULL, 'Manual Company (System)', 'N/A')";
-            if ($conn->query($create_sys)) {
-                $company_id = mysqli_insert_id($conn);
-            } else {
-                throw new Exception("System error: " . mysqli_error($conn));
-            }
-        }
-        
-        // Step 2: Check duplicate - same name in same drive?
-        $dup_check = $conn->query("SELECT id, criteria FROM campus_drive_companies WHERE drive_id = $drive_id AND company_id = $company_id");
-        if ($dup_check) {
-            while ($dup_row = $dup_check->fetch_assoc()) {
-                $dup_criteria = json_decode($dup_row['criteria'], true);
-                if (isset($dup_criteria['manual_company_name']) && 
-                    strtolower(trim($dup_criteria['manual_company_name'])) === strtolower(trim($company_name))) {
+        if ($check_manual_result) {
+            while ($check_row = $check_manual_result->fetch_assoc()) {
+                $check_criteria = json_decode($check_row['criteria'], true);
+                if (isset($check_criteria['manual_company_name']) && 
+                    strtolower(trim($check_criteria['manual_company_name'])) === strtolower(trim($company_name))) {
+                    mysqli_stmt_close($check_manual_stmt);
                     http_response_code(400);
-                    echo json_encode(["status" => false, "message" => "Company already added"]);
+                    echo json_encode([
+                        "status" => false, 
+                        "message" => "Company '" . htmlspecialchars($company_name) . "' is already added to this drive"
+                    ]);
                     exit;
                 }
             }
+        }
+        mysqli_stmt_close($check_manual_stmt);
+        
+        // Step 2: Create a unique company entry for this manual company
+        // Each manual entry gets its own recruiter_profile entry
+        $manual_company_name_db = 'Manual Entry: ' . mysqli_real_escape_string($conn, $company_name);
+        $manual_location_db = $company_location ? mysqli_real_escape_string($conn, $company_location) : 'N/A';
+        
+        $create_manual_stmt = mysqli_prepare($conn, "INSERT INTO recruiter_profiles (user_id, company_name, location) VALUES (NULL, ?, ?)");
+        mysqli_stmt_bind_param($create_manual_stmt, "ss", $manual_company_name_db, $manual_location_db);
+        
+        if (mysqli_stmt_execute($create_manual_stmt)) {
+            $company_id = mysqli_insert_id($conn);
+            mysqli_stmt_close($create_manual_stmt);
+            
+            if (!$company_id || $company_id <= 0) {
+                throw new Exception("Failed to create manual company entry");
+            }
+        } else {
+            $error = mysqli_stmt_error($create_manual_stmt);
+            mysqli_stmt_close($create_manual_stmt);
+            throw new Exception("Failed to create manual company entry: " . $error);
+        }
+        
+        // Validate that company_id is set
+        if (!$company_id || $company_id <= 0) {
+            throw new Exception("Invalid manual company ID: " . $company_id);
         }
         
         // Step 3: Add manual company details to criteria
@@ -158,7 +180,10 @@ try {
         
     } else if ($company_id) {
         // Check if company exists (existing recruiter profile)
-        $company_check = $conn->query("SELECT id, company_name FROM recruiter_profiles WHERE id = $company_id");
+        $company_check_stmt = mysqli_prepare($conn, "SELECT id, company_name FROM recruiter_profiles WHERE id = ?");
+        mysqli_stmt_bind_param($company_check_stmt, "i", $company_id);
+        mysqli_stmt_execute($company_check_stmt);
+        $company_check = mysqli_stmt_get_result($company_check_stmt);
         if ($company_check->num_rows === 0) {
             http_response_code(404);
             echo json_encode([
@@ -172,7 +197,10 @@ try {
     // Check if company already added to this drive (for regular entries only, manual entries checked above)
     if ($company_id && !$company_name) {
         // Regular entry - check by company_id
-        $existing_check = $conn->query("SELECT id FROM campus_drive_companies WHERE drive_id = $drive_id AND company_id = $company_id");
+        $existing_check_stmt = mysqli_prepare($conn, "SELECT id FROM campus_drive_companies WHERE drive_id = ? AND company_id = ?");
+        mysqli_stmt_bind_param($existing_check_stmt, "ii", $drive_id, $company_id);
+        mysqli_stmt_execute($existing_check_stmt);
+        $existing_check = mysqli_stmt_get_result($existing_check_stmt);
         if ($existing_check && $existing_check->num_rows > 0) {
             http_response_code(400);
             echo json_encode([
@@ -183,19 +211,43 @@ try {
         }
     }
 
+    // Final validation: company_id must be set and valid
+    if (!$company_id || $company_id <= 0) {
+        http_response_code(400);
+        echo json_encode([
+            "status" => false,
+            "message" => "Invalid company ID. Cannot proceed with insertion.",
+            "debug" => [
+                "company_id" => $company_id,
+                "company_name" => $company_name,
+                "has_company_id" => isset($input['company_id']),
+                "has_company_name" => isset($input['company_name'])
+            ]
+        ]);
+        exit;
+    }
+
     // Insert company to drive
     $sql = "INSERT INTO campus_drive_companies (drive_id, company_id, job_roles, criteria, vacancies) 
             VALUES (?, ?, ?, ?, ?)";
     
     $stmt = mysqli_prepare($conn, $sql);
+    if (!$stmt) {
+        throw new Exception("Failed to prepare statement: " . mysqli_error($conn));
+    }
+    
     mysqli_stmt_bind_param($stmt, "iissi", $drive_id, $company_id, $job_roles, $criteria, $vacancies);
     
     if (mysqli_stmt_execute($stmt)) {
         $id = mysqli_insert_id($conn);
         mysqli_stmt_close($stmt);
         
+        if (!$id || $id <= 0) {
+            throw new Exception("Failed to get inserted record ID");
+        }
+        
         // Fetch created record with company details
-        $result = $conn->query("
+        $fetch_stmt = mysqli_prepare($conn, "
             SELECT 
                 cdc.*,
                 rp.company_name,
@@ -203,9 +255,21 @@ try {
                 rp.location as company_location
             FROM campus_drive_companies cdc
             LEFT JOIN recruiter_profiles rp ON cdc.company_id = rp.id
-            WHERE cdc.id = $id
+            WHERE cdc.id = ?
         ");
+        mysqli_stmt_bind_param($fetch_stmt, "i", $id);
+        mysqli_stmt_execute($fetch_stmt);
+        $result = mysqli_stmt_get_result($fetch_stmt);
+        
+        if (!$result) {
+            throw new Exception("Failed to fetch created record: " . mysqli_error($conn));
+        }
+        
         $company = $result->fetch_assoc();
+        
+        if (!$company) {
+            throw new Exception("Created record not found");
+        }
         
         // Manual entry: Use name and location from criteria (not from recruiter profile)
         if ($company_name && !isset($input['company_id'])) {
@@ -227,8 +291,22 @@ try {
             "data" => $company
         ]);
     } else {
+        $error_msg = mysqli_stmt_error($stmt);
+        $mysql_error = mysqli_error($conn);
         mysqli_stmt_close($stmt);
-        throw new Exception("Failed to add company: " . mysqli_error($conn));
+        
+        // Check for duplicate entry error
+        if (strpos($mysql_error, "Duplicate entry") !== false && strpos($mysql_error, "unique_drive_company") !== false) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => false,
+                "message" => "This company is already added to this drive. Please check the company list.",
+                "error" => "Duplicate entry detected"
+            ]);
+            exit;
+        }
+        
+        throw new Exception("Failed to execute statement: " . $error_msg . " | MySQL Error: " . $mysql_error);
     }
 
 } catch (Exception $e) {

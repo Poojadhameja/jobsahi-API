@@ -106,7 +106,16 @@ class JWTHelper {
         
         // Debug logging (remove in production if needed)
         if (!$authHeader) {
-            error_log("JWT Helper: No Authorization header found. Available headers: " . json_encode(array_keys($_SERVER)));
+            $allHeaders = [];
+            if (function_exists('getallheaders')) {
+                $allHeaders = getallheaders();
+            }
+            error_log("JWT Helper: No Authorization header found.");
+            error_log("JWT Helper: Request Method: " . ($_SERVER['REQUEST_METHOD'] ?? 'unknown'));
+            error_log("JWT Helper: Available SERVER keys: " . implode(', ', array_keys($_SERVER)));
+            if ($allHeaders) {
+                error_log("JWT Helper: Available headers: " . json_encode(array_keys($allHeaders)));
+            }
         }
         
         if (!$authHeader) {
