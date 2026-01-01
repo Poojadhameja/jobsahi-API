@@ -143,7 +143,7 @@ try {
         
         // Step 2: Create a unique company entry for this manual company
         // Each manual entry gets its own recruiter_profile entry
-        $manual_company_name_db = 'Manual Entry: ' . mysqli_real_escape_string($conn, $company_name);
+$manual_company_name_db = mysqli_real_escape_string($conn, $company_name);
         $manual_location_db = $company_location ? mysqli_real_escape_string($conn, $company_location) : 'N/A';
         
         $create_manual_stmt = mysqli_prepare($conn, "INSERT INTO recruiter_profiles (user_id, company_name, location) VALUES (NULL, ?, ?)");
@@ -171,7 +171,6 @@ try {
         $criteria_obj = json_decode($criteria, true);
         if (!is_array($criteria_obj)) $criteria_obj = [];
         
-        $criteria_obj['manual_company_name'] = $company_name;
         if ($company_location) {
             $criteria_obj['manual_company_location'] = $company_location;
         }
