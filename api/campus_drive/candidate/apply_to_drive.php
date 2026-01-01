@@ -9,7 +9,7 @@ require_once '../../db.php';
 try {
     // Candidate/Student authentication
     $decoded = authenticateJWT(['student']);
-    
+
     if (!$decoded || !isset($decoded['user_id'])) {
         http_response_code(401);
         echo json_encode([
@@ -22,7 +22,7 @@ try {
     // Get request data
     $raw_input = file_get_contents('php://input');
     $input = json_decode($raw_input, true);
-    
+
     if (json_last_error() !== JSON_ERROR_NONE) {
         http_response_code(400);
         echo json_encode([
@@ -44,20 +44,21 @@ try {
     }
 
     // Validate preferences - exactly 6 required
-    if (empty($input['preferences']) || !is_array($input['preferences']) || count($input['preferences']) !== 6) {
+    if (empty($input['preferences']) || !is_array($input['preferences']) || count($input['preferences']) < 1 || count($input['preferences']) > 6) {
         http_response_code(400);
         echo json_encode([
             "status" => false,
-            "message" => "Exactly 6 company preferences are required",
+            "message" => "Minimum 1 and maximum 6 company preferences are allowed",
             "received_count" => is_array($input['preferences']) ? count($input['preferences']) : 0
         ]);
         exit;
     }
 
+
     $drive_id = intval($input['drive_id']);
     $user_id = intval($decoded['user_id']);
     $preferences = $input['preferences'];
-    
+
     if ($drive_id <= 0) {
         http_response_code(400);
         echo json_encode([
@@ -66,7 +67,7 @@ try {
         ]);
         exit;
     }
-    
+
     if ($user_id <= 0) {
         http_response_code(401);
         echo json_encode([
@@ -75,7 +76,7 @@ try {
         ]);
         exit;
     }
-    
+
     // Get student_profile.id from user_id (foreign key constraint requires student_profiles.id, not users.id)
     $stmt_student = $conn->prepare("SELECT id FROM student_profiles WHERE user_id = ? AND deleted_at IS NULL LIMIT 1");
     if (!$stmt_student) {
@@ -87,11 +88,11 @@ try {
         ]);
         exit;
     }
-    
+
     $stmt_student->bind_param("i", $user_id);
     $stmt_student->execute();
     $result_student = $stmt_student->get_result();
-    
+
     if ($result_student->num_rows === 0) {
         http_response_code(404);
         echo json_encode([
@@ -101,11 +102,11 @@ try {
         $stmt_student->close();
         exit;
     }
-    
+
     $student_profile = $result_student->fetch_assoc();
     $student_id = intval($student_profile['id']); // This is the actual student_id for foreign key
     $stmt_student->close();
-    
+
     if ($student_id <= 0) {
         http_response_code(500);
         echo json_encode([
@@ -126,7 +127,7 @@ try {
         ]);
         exit;
     }
-    
+
     if ($drive_check->num_rows === 0) {
         http_response_code(404);
         echo json_encode([
@@ -135,7 +136,7 @@ try {
         ]);
         exit;
     }
-    
+
     $drive = $drive_check->fetch_assoc();
     if (!$drive || empty($drive['start_date']) || empty($drive['end_date'])) {
         http_response_code(500);
@@ -145,7 +146,7 @@ try {
         ]);
         exit;
     }
-    
+
     if ($drive['status'] !== 'live') {
         http_response_code(400);
         echo json_encode([
@@ -167,15 +168,17 @@ try {
         ]);
         exit;
     }
-    
     if ($existing->num_rows > 0) {
-        http_response_code(400);
+        http_response_code(200);
         echo json_encode([
-            "status" => false,
-            "message" => "You have already applied to this campus drive"
+            "status" => true,
+            "message" => "You have already applied to this campus drive",
+            "already_applied" => true
         ]);
-        exit;
+        exit;   // ✅ yeh add karo
     }
+
+
 
     // Validate all preferences are valid company IDs for this drive
     // Note: company_id in request refers to campus_drive_companies.id (not recruiter_profiles.id)
@@ -189,15 +192,15 @@ try {
             ]);
             exit;
         }
-        
+
         $company_drive_id = intval($pref['company_id']); // This is campus_drive_companies.id
-        
+
         // Check if this company is part of this drive
         $company_check = $conn->query("
             SELECT id FROM campus_drive_companies 
             WHERE id = $company_drive_id AND drive_id = $drive_id
         ");
-        
+
         if (!$company_check) {
             http_response_code(500);
             echo json_encode([
@@ -207,7 +210,7 @@ try {
             ]);
             exit;
         }
-        
+
         if ($company_check->num_rows === 0) {
             http_response_code(400);
             echo json_encode([
@@ -218,7 +221,7 @@ try {
             ]);
             exit;
         }
-        
+
         // Check for duplicates
         if (in_array($company_drive_id, $pref_ids)) {
             http_response_code(400);
@@ -228,9 +231,14 @@ try {
             ]);
             exit;
         }
-        
+
         $pref_ids[] = $company_drive_id;
     }
+    // Fill remaining preferences with NULL up to 6
+    while (count($pref_ids) < 6) {
+        $pref_ids[] = null;
+    }
+
 
     // Start transaction
     mysqli_begin_transaction($conn);
@@ -239,7 +247,7 @@ try {
         // Get or create day for assignment
         $capacity_per_day = intval($drive['capacity_per_day']);
         $today = date('Y-m-d');
-        
+
         // Find the latest day for this drive
         $latest_day = $conn->query("
             SELECT id, date, day_number, filled_count, capacity 
@@ -248,25 +256,25 @@ try {
             ORDER BY day_number DESC 
             LIMIT 1
         ");
-        
+
         $day_id = null;
         $day_number = 1;
-        
+
         if ($latest_day->num_rows > 0) {
             $day_data = $latest_day->fetch_assoc();
-            
+
             // Check if latest day has capacity
             if ($day_data['filled_count'] < $day_data['capacity']) {
                 $day_id = $day_data['id'];
                 $day_number = $day_data['day_number'];
-                
+
                 // Increment filled_count
                 $update_result = $conn->query("
                     UPDATE campus_drive_days 
                     SET filled_count = filled_count + 1 
                     WHERE id = $day_id
                 ");
-                
+
                 if (!$update_result) {
                     throw new Exception("Failed to update day filled_count: " . mysqli_error($conn));
                 }
@@ -274,12 +282,12 @@ try {
                 // Create new day
                 $day_number = $day_data['day_number'] + 1;
                 $new_date = date('Y-m-d', strtotime($drive['start_date'] . " + " . ($day_number - 1) . " days"));
-                
+
                 // Make sure date doesn't exceed end_date
                 if (strtotime($new_date) > strtotime($drive['end_date'])) {
                     throw new Exception("Drive capacity exceeded. All days are full.");
                 }
-                
+
                 $day_sql = "INSERT INTO campus_drive_days (drive_id, date, day_number, capacity, filled_count) 
                            VALUES (?, ?, ?, ?, 1)";
                 $day_stmt = mysqli_prepare($conn, $day_sql);
@@ -307,25 +315,32 @@ try {
                     pref4_company_id, pref5_company_id, pref6_company_id,
                     assigned_day_id, status
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')";
-        
+
         $stmt = mysqli_prepare($conn, $sql);
-        mysqli_stmt_bind_param($stmt, "iiiiiiiii", 
-            $student_id, $drive_id,
-            $pref_ids[0], $pref_ids[1], $pref_ids[2],
-            $pref_ids[3], $pref_ids[4], $pref_ids[5],
+        mysqli_stmt_bind_param(
+            $stmt,
+            "iiiiiiiii",
+            $student_id,
+            $drive_id,
+            $pref_ids[0],
+            $pref_ids[1],
+            $pref_ids[2],
+            $pref_ids[3],
+            $pref_ids[4],
+            $pref_ids[5],
             $day_id
         );
-        
+
         if (!mysqli_stmt_execute($stmt)) {
             throw new Exception("Failed to create application: " . mysqli_error($conn));
         }
-        
+
         $application_id = mysqli_insert_id($conn);
         mysqli_stmt_close($stmt);
-        
+
         // Commit transaction
         mysqli_commit($conn);
-        
+
         // Fetch created application with details
         $result = $conn->query("
             SELECT 
@@ -337,7 +352,7 @@ try {
             WHERE ca.id = $application_id
         ");
         $application = $result->fetch_assoc();
-        
+
         // Get preference company names
         $pref_companies = [];
         for ($i = 1; $i <= 6; $i++) {
@@ -355,28 +370,29 @@ try {
                 $pref_companies[] = $pref_result->fetch_assoc();
             }
         }
-        
+
         $application['assigned_day'] = "Day " . $application['day_number'];
         $application['preferences'] = $pref_companies;
-        
+
         http_response_code(201);
         echo json_encode([
             "status" => true,
             "message" => "Application submitted successfully",
             "data" => $application
         ]);
-        
+        exit;   // ✅ yeh add karo
+
+
     } catch (Exception $e) {
         mysqli_rollback($conn);
         throw $e;
     }
-
 } catch (Exception $e) {
     // Rollback transaction if it was started
     if (isset($conn) && mysqli_get_server_info($conn)) {
         @mysqli_rollback($conn);
     }
-    
+
     http_response_code(500);
     echo json_encode([
         "status" => false,
@@ -391,7 +407,7 @@ try {
     if (isset($conn) && mysqli_get_server_info($conn)) {
         @mysqli_rollback($conn);
     }
-    
+
     http_response_code(500);
     echo json_encode([
         "status" => false,
@@ -402,5 +418,3 @@ try {
     ]);
     error_log("Apply to Drive Fatal Error: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
 }
-?>
-
