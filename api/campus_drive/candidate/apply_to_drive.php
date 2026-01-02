@@ -6,6 +6,35 @@ ini_set('log_errors', 1);
 require_once '../../cors.php';
 require_once '../../db.php';
 
+// --- ROBUST SCHEMA FIX START ---
+// Automatically ensure the database allows NULL for preference columns
+function ensure_preferences_nullable($conn) {
+    try {
+        // Check if pref2_company_id is nullable
+        $check = $conn->query("SHOW COLUMNS FROM campus_applications LIKE 'pref2_company_id'");
+        if ($check && $check->num_rows > 0) {
+            $row = $check->fetch_assoc();
+            // If Null is 'NO', it means NOT NULL, so we need to fix it
+            if (isset($row['Null']) && strtoupper($row['Null']) === 'NO') {
+                error_log("Fixing schema: altering campus_applications to allow NULL preferences...");
+                // We use a single query to modify all at once
+                $conn->query("ALTER TABLE `campus_applications` 
+                    MODIFY `pref2_company_id` INT(11) NULL,
+                    MODIFY `pref3_company_id` INT(11) NULL,
+                    MODIFY `pref4_company_id` INT(11) NULL,
+                    MODIFY `pref5_company_id` INT(11) NULL,
+                    MODIFY `pref6_company_id` INT(11) NULL");
+            }
+        }
+    } catch (Exception $e) {
+        // Log but don't stop execution
+        error_log("Schema fix warning: " . $e->getMessage());
+    }
+}
+// Run the check once per request (overhead is minimal: 1 SHOW COLUMNS query)
+ensure_preferences_nullable($conn);
+// --- ROBUST SCHEMA FIX END ---
+
 try {
     // Candidate/Student authentication
     $decoded = authenticateJWT(['student']);
@@ -158,42 +187,58 @@ try {
     }
 
     // Check if student has already applied
-    $existing = $conn->query("SELECT id FROM campus_applications WHERE drive_id = $drive_id AND student_id = $student_id");
-    if (!$existing) {
-        http_response_code(500);
-        echo json_encode([
-            "status" => false,
-            "message" => "Database error while checking existing application",
-            "error" => mysqli_error($conn)
-        ]);
-        exit;
+    $existing = $conn->query("SELECT * FROM campus_applications WHERE drive_id = $drive_id AND student_id = $student_id");
+    
+    $existing_app_id = null;
+    $existing_prefs_set = [];
+    $next_slot_index = 1; // 1-based index for next available slot
+    
+    if ($existing && $existing->num_rows > 0) {
+        $row = $existing->fetch_assoc();
+        $existing_app_id = $row['id'];
+        
+        // Collect existing preferences
+        for ($i = 1; $i <= 6; $i++) {
+            if (!empty($row["pref{$i}_company_id"])) {
+                $existing_prefs_set[] = intval($row["pref{$i}_company_id"]);
+            }
+        }
+        
+        // Check if already full
+        if (count($existing_prefs_set) >= 6) {
+             http_response_code(200); // OK, but no action needed or client should have prevented this
+             echo json_encode([
+                 "status" => true,
+                 "message" => "You have already applied to the maximum number of companies (6).",
+                 "data" => $row,
+                 "limit_reached" => true
+             ]);
+             exit;
+        }
+        
+        $next_slot_index = count($existing_prefs_set) + 1;
     }
-    if ($existing->num_rows > 0) {
-        http_response_code(200);
-        echo json_encode([
-            "status" => true,
-            "message" => "You have already applied to this campus drive",
-            "already_applied" => true
-        ]);
-        exit;   // ✅ yeh add karo
-    }
-
-
 
     // Validate all preferences are valid company IDs for this drive
     // Note: company_id in request refers to campus_drive_companies.id (not recruiter_profiles.id)
-    $pref_ids = [];
+    $new_prefs_to_add = [];
+    
     foreach ($preferences as $index => $pref) {
         if (empty($pref['company_id'])) {
-            http_response_code(400);
-            echo json_encode([
-                "status" => false,
-                "message" => "Invalid preference at position " . ($index + 1) . ": company_id is required"
-            ]);
-            exit;
+            continue; // Skip empty
         }
 
-        $company_drive_id = intval($pref['company_id']); // This is campus_drive_companies.id
+        $company_drive_id = intval($pref['company_id']); 
+
+        // Check for duplicates in EXISTING application
+        if (in_array($company_drive_id, $existing_prefs_set)) {
+            continue; // Already applied, skip
+        }
+        
+        // Check for duplicates in NEW batch
+        if (in_array($company_drive_id, $new_prefs_to_add)) {
+            continue; // Duplicate in request, skip
+        }
 
         // Check if this company is part of this drive
         $company_check = $conn->query("
@@ -201,39 +246,107 @@ try {
             WHERE id = $company_drive_id AND drive_id = $drive_id
         ");
 
-        if (!$company_check) {
-            http_response_code(500);
-            echo json_encode([
+        if (!$company_check || $company_check->num_rows === 0) {
+             // Invalid company, maybe return error or just skip?
+             // Returning error is safer to alert user
+             http_response_code(400);
+             echo json_encode([
                 "status" => false,
-                "message" => "Database error while validating company preference at position " . ($index + 1),
-                "error" => mysqli_error($conn)
-            ]);
-            exit;
+                "message" => "Invalid company preference: Company ID $company_drive_id is not part of this drive"
+             ]);
+             exit;
         }
 
-        if ($company_check->num_rows === 0) {
-            http_response_code(400);
-            echo json_encode([
-                "status" => false,
-                "message" => "Invalid preference at position " . ($index + 1) . ": Company not part of this drive",
-                "company_id" => $company_drive_id,
-                "drive_id" => $drive_id
-            ]);
-            exit;
-        }
-
-        // Check for duplicates
-        if (in_array($company_drive_id, $pref_ids)) {
-            http_response_code(400);
-            echo json_encode([
-                "status" => false,
-                "message" => "Duplicate company preference at position " . ($index + 1)
-            ]);
-            exit;
-        }
-
-        $pref_ids[] = $company_drive_id;
+        $new_prefs_to_add[] = $company_drive_id;
     }
+
+    // Check capacity constraint
+    $total_after_add = count($existing_prefs_set) + count($new_prefs_to_add);
+    if ($total_after_add > 6) {
+        http_response_code(400);
+        echo json_encode([
+            "status" => false,
+            "message" => "You can select maximum 6 companies. You already have " . count($existing_prefs_set) . " and tried to add " . count($new_prefs_to_add) . "."
+        ]);
+        exit;
+    }
+    
+    if (empty($new_prefs_to_add) && $existing_app_id) {
+        // Nothing new to add
+        http_response_code(200);
+        echo json_encode([
+            "status" => true,
+            "message" => "No new companies selected.",
+            "data" => $row
+        ]);
+        exit;
+    }
+
+    // If we have an existing application, UPDATE it
+    if ($existing_app_id) {
+        // Construct UPDATE query
+        $update_clauses = [];
+        $current_slot = $next_slot_index;
+        
+        foreach ($new_prefs_to_add as $new_company_id) {
+            $update_clauses[] = "pref{$current_slot}_company_id = $new_company_id";
+            $current_slot++;
+        }
+        
+        if (!empty($update_clauses)) {
+            $sql = "UPDATE campus_applications SET " . implode(", ", $update_clauses) . " WHERE id = $existing_app_id";
+            if (!$conn->query($sql)) {
+                throw new Exception("Database error updating application: " . mysqli_error($conn));
+            }
+        }
+        
+        // Return updated application
+        $result = $conn->query("
+            SELECT 
+                ca.*,
+                cdd.date as assigned_date,
+                cdd.day_number
+            FROM campus_applications ca
+            LEFT JOIN campus_drive_days cdd ON ca.assigned_day_id = cdd.id
+            WHERE ca.id = $existing_app_id
+        ");
+        $application = $result->fetch_assoc();
+        
+         // Get preference company names (Duplicate logic, could be refactored)
+        $pref_companies = [];
+        for ($i = 1; $i <= 6; $i++) {
+            $pref_id = $application["pref{$i}_company_id"];
+            if ($pref_id) {
+                $pref_result = $conn->query("
+                    SELECT 
+                        cdc.id,
+                        cdc.company_id,
+                        rp.company_name
+                    FROM campus_drive_companies cdc
+                    LEFT JOIN recruiter_profiles rp ON cdc.company_id = rp.id
+                    WHERE cdc.id = $pref_id
+                ");
+                if ($pref_result->num_rows > 0) {
+                    $pref_companies[] = $pref_result->fetch_assoc();
+                }
+            }
+        }
+        $application['assigned_day'] = $application['day_number'] ? "Day " . $application['day_number'] : null;
+        $application['preferences'] = $pref_companies;
+
+        http_response_code(200);
+        echo json_encode([
+            "status" => true,
+            "message" => "Application updated successfully",
+            "data" => $application
+        ]);
+        exit;
+    }
+
+    // NEW APPLICATION LOGIC (Only if existing_app_id is null)
+    // Combine new prefs into the array structure expected by the original code
+    $pref_ids = $new_prefs_to_add;
+
     // Fill remaining preferences with NULL up to 6
     while (count($pref_ids) < 6) {
         $pref_ids[] = null;
@@ -357,17 +470,20 @@ try {
         $pref_companies = [];
         for ($i = 1; $i <= 6; $i++) {
             $pref_id = $application["pref{$i}_company_id"];
-            $pref_result = $conn->query("
-                SELECT 
-                    cdc.id,
-                    cdc.company_id,
-                    rp.company_name
-                FROM campus_drive_companies cdc
-                LEFT JOIN recruiter_profiles rp ON cdc.company_id = rp.id
-                WHERE cdc.id = $pref_id
-            ");
-            if ($pref_result->num_rows > 0) {
-                $pref_companies[] = $pref_result->fetch_assoc();
+            // Fix: Check if pref_id is not null before querying
+            if ($pref_id) {
+                $pref_result = $conn->query("
+                    SELECT 
+                        cdc.id,
+                        cdc.company_id,
+                        rp.company_name
+                    FROM campus_drive_companies cdc
+                    LEFT JOIN recruiter_profiles rp ON cdc.company_id = rp.id
+                    WHERE cdc.id = $pref_id
+                ");
+                if ($pref_result->num_rows > 0) {
+                    $pref_companies[] = $pref_result->fetch_assoc();
+                }
             }
         }
 
@@ -380,7 +496,7 @@ try {
             "message" => "Application submitted successfully",
             "data" => $application
         ]);
-        exit;   // ✅ yeh add karo
+        exit;
 
 
     } catch (Exception $e) {
