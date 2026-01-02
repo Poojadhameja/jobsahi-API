@@ -39,7 +39,8 @@ try {
             cdc.*,
             rp.company_name,
             rp.company_logo as logo,
-            rp.industry as company_description
+            rp.industry as company_description,
+            rp.location as company_location
         FROM campus_drive_companies cdc
         LEFT JOIN recruiter_profiles rp ON cdc.company_id = rp.id
         WHERE cdc.drive_id = $drive_id
@@ -50,7 +51,17 @@ try {
     while ($row = $companies_result->fetch_assoc()) {
         // Parse JSON fields
         $row['job_roles'] = json_decode($row['job_roles'], true);
-        $row['criteria'] = json_decode($row['criteria'], true);
+        $criteria = json_decode($row['criteria'], true);
+        $row['criteria'] = $criteria;
+
+        // Handle manual company details
+        if (isset($criteria['manual_company_name'])) {
+            $row['company_name'] = $criteria['manual_company_name'];
+        }
+        if (isset($criteria['manual_company_location'])) {
+            $row['company_location'] = $criteria['manual_company_location'];
+        }
+        
         $companies[] = $row;
     }
     
